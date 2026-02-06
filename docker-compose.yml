@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: spotify_mcp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spotify_mcp_network
+
+  api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/spotify_mcp
+      - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
+      - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
+      - SPOTIFY_REDIRECT_URI=${SPOTIFY_REDIRECT_URI:-http://localhost:8000/auth/callback}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
+      - ADMIN_AUTH_MODE=${ADMIN_AUTH_MODE:-token}
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - UPLOAD_DIR=/app/uploads
+    volumes:
+      - upload_data:/app/uploads
+      - ./services/api/src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - spotify_mcp_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  collector:
+    build:
+      context: ./services/collector
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/spotify_mcp
+      - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
+      - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
+      - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
+      - COLLECTOR_INTERVAL_SECONDS=${COLLECTOR_INTERVAL_SECONDS:-600}
+      - INITIAL_SYNC_ENABLED=${INITIAL_SYNC_ENABLED:-true}
+      - INITIAL_SYNC_MAX_DAYS=${INITIAL_SYNC_MAX_DAYS:-30}
+      - INITIAL_SYNC_MAX_REQUESTS=${INITIAL_SYNC_MAX_REQUESTS:-200}
+      - INITIAL_SYNC_CONCURRENCY=${INITIAL_SYNC_CONCURRENCY:-2}
+      - IMPORT_MAX_ZIP_SIZE_MB=${IMPORT_MAX_ZIP_SIZE_MB:-500}
+      - IMPORT_MAX_RECORDS=${IMPORT_MAX_RECORDS:-5000000}
+      - UPLOAD_DIR=/app/uploads
+    volumes:
+      - upload_data:/app/uploads
+      - ./services/collector/src:/app/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - spotify_mcp_network
+    restart: unless-stopped
+    command: ["python", "-m", "collector.main"]
+
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - API_BASE_URL=${API_BASE_URL:-http://api:8000}
+      - FRONTEND_AUTH_MODE=${FRONTEND_AUTH_MODE:-token}
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+    volumes:
+      - ./services/frontend/src:/app/src
+    depends_on:
+      - api
+    networks:
+      - spotify_mcp_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: ["uvicorn", "frontend.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+
+networks:
+  spotify_mcp_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  upload_data:
+    driver: local

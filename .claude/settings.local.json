@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker build:*)",
+      "Bash(docker run:*)",
+      "Bash(docker-compose exec postgres psql:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(curl:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
