@@ -1,0 +1,11 @@
+name: spotify-mcp
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.14
+  - pip
+  - pip-tools  # For managing requirements
+  - pip:
+    - -r requirements.txt
+    - -r requirements-dev.txt
