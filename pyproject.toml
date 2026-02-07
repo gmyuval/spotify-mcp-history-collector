@@ -1,31 +1,6 @@
-[project]
-name = "spotify-mcp-api"
-version = "0.1.0"
-description = "Spotify MCP API - OAuth, MCP tool endpoints, admin APIs"
-requires-python = ">=3.14"
-dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
-    "sqlalchemy>=2.0.35",
-    "asyncpg>=0.30.0",
-    "alembic>=1.14.0",
-    "httpx>=0.27.2",
-    "pydantic>=2.9.2",
-    "pydantic-settings>=2.6.1",
-    "cryptography>=44.0.0",
-    "python-multipart>=0.0.17",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3.4",
-    "pytest-asyncio>=0.24.0",
-    "pytest-cov>=6.0.0",
-    "mypy>=1.13.0",
-    "ruff>=0.8.4",
-    "respx>=0.21.1",
-    "types-python-dateutil",
-]
+# Root-level tool configuration for monorepo development.
+# Per-package pyproject.toml files remain the source of truth for package metadata
+# and dependencies. This file provides unified config for running tools from the repo root.
 
 [tool.ruff]
 line-length = 120
@@ -44,14 +19,23 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
 ]
-# UP042: safe on >=3.14 -- see root pyproject.toml for rationale
+# UP042 (str, Enum → StrEnum) is classified "unsafe" because StrEnum was added
+# in Python 3.11 and has subtle MRO differences. We require >=3.14, so the
+# migration is always correct. Promoting it to safe lets `ruff check --fix`
+# handle it automatically instead of requiring `--unsafe-fixes`.
 extend-safe-fixes = ["UP042"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "shared"]
+known-first-party = ["app", "shared", "collector", "frontend"]
 
 [tool.mypy]
 python_version = "3.14"
+mypy_path = [
+    "services/shared/src",
+    "services/api/src",
+    "services/collector/src",
+    "services/frontend/src",
+]
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -73,15 +57,12 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-testpaths = ["tests"]
+testpaths = [
+    "services/api/tests",
+    "services/collector/tests",
+    "services/frontend/tests",
+]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --strict-markers --tb=short"
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.build_meta"

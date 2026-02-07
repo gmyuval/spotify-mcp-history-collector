@@ -1,7 +1,5 @@
 """Main FastAPI application for Spotify MCP Admin Frontend."""
 
-from __future__ import annotations
-
 from fastapi import FastAPI
 
 app = FastAPI(

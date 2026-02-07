@@ -1,14 +1,26 @@
 """Main FastAPI application for Spotify MCP API."""
 
-from __future__ import annotations
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.dependencies import db_manager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    """Application lifespan: clean up database connections on shutdown."""
+    yield
+    await db_manager.dispose()
+
 
 app = FastAPI(
     title="Spotify MCP API",
     description="Spotify OAuth, MCP tool endpoints, and admin APIs",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Configure CORS

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -21,8 +19,8 @@ services:
 
   api:
     build:
-      context: ./services/api
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: api/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -37,6 +35,7 @@ services:
     volumes:
       - upload_data:/app/uploads
       - ./services/api/src:/app/src
+      - ./services/shared/src:/app/shared_src
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,8 +52,8 @@ services:
 
   collector:
     build:
-      context: ./services/collector
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: collector/Dockerfile
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/spotify_mcp
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
@@ -71,6 +70,7 @@ services:
     volumes:
       - upload_data:/app/uploads
       - ./services/collector/src:/app/src
+      - ./services/shared/src:/app/shared_src
     depends_on:
       postgres:
         condition: service_healthy

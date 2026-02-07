@@ -1,30 +1,13 @@
 [project]
-name = "spotify-mcp-api"
+name = "spotify-mcp-shared"
 version = "0.1.0"
-description = "Spotify MCP API - OAuth, MCP tool endpoints, admin APIs"
+description = "Shared database package for Spotify MCP services"
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.32.0",
     "sqlalchemy>=2.0.35",
     "asyncpg>=0.30.0",
-    "alembic>=1.14.0",
-    "httpx>=0.27.2",
     "pydantic>=2.9.2",
     "pydantic-settings>=2.6.1",
-    "cryptography>=44.0.0",
-    "python-multipart>=0.0.17",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3.4",
-    "pytest-asyncio>=0.24.0",
-    "pytest-cov>=6.0.0",
-    "mypy>=1.13.0",
-    "ruff>=0.8.4",
-    "respx>=0.21.1",
-    "types-python-dateutil",
 ]
 
 [tool.ruff]
@@ -48,7 +31,7 @@ ignore = [
 extend-safe-fixes = ["UP042"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "shared"]
+known-first-party = ["shared"]
 
 [tool.mypy]
 python_version = "3.14"
@@ -68,16 +51,6 @@ warn_unused_ignores = true
 warn_no_return = true
 follow_imports = "normal"
 ignore_missing_imports = false
-plugins = ["pydantic.mypy"]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --strict-markers --tb=short"
 
 [tool.setuptools.packages.find]
 where = ["src"]

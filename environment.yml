@@ -5,7 +5,12 @@ channels:
 dependencies:
   - python=3.14
   - pip
-  - pip-tools  # For managing requirements
+  - pip-tools
   - pip:
-    - -r requirements.txt
-    - -r requirements-dev.txt
+    - pre-commit
+    - -e services/shared
+    - -e services/api[dev]
+    - -e services/collector[dev]
+    - -e services/frontend[dev]
+
+  - sqlalchemy
