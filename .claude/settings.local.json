@@ -8,7 +8,27 @@
       "Bash(docker-compose exec postgres psql:*)",
       "Bash(docker-compose exec:*)",
       "Bash(curl:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(find:*)",
+      "Bash(pip-compile:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(pre-commit install:*)",
+      "Bash(del:*)",
+      "Bash(git status:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker pull:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(ruff:*)",
+      "Bash(where:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -Command:*)",
+      "Bash(cmd:*)"
     ]
   }
 }

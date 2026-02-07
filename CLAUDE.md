@@ -34,108 +34,102 @@ This is a containerized system that enables ChatGPT-style assistants to analyze 
 - Structured logs stored in `logs` table for UI browsing
 - Plays deduped via unique constraint: `(user_id, played_at, track_id)`
 
+## Workflow
+
+- **Always work on a feature branch** — never commit directly to main
+- **Present changes for review** before committing — list modified files with short explanations, wait for approval
+- **After approval**: commit, push to origin, create PR on GitHub via `gh pr create`
+- **Pre-commit hooks are active**: ruff (v0.15.0 lint+format) + mypy run on every commit; all must pass
+
 ## Commands
 
 ### Environment Setup
 ```bash
-# Create conda environment
+# Option A: Conda (recommended)
 conda env create -f environment.yml
 conda activate spotify-mcp
+pre-commit install
 
-# Install dependencies
-pip install -r requirements.txt -r requirements-dev.txt
+# Option B: venv + make
+python -m venv .venv && .venv\Scripts\activate  # Windows
+make setup
+```
+
+### Dependency Management (pip-tools)
+```bash
+# Regenerate pinned requirements.txt from pyproject.toml
+make compile-deps
+
+# Upgrade all pins
+make upgrade-deps
 ```
 
 ### Database
 ```bash
-# Run migrations (from services/api/ directory)
+# Run migrations (inside Docker)
+docker-compose exec api alembic upgrade head
+
+# Run migrations (locally, from services/api/)
 alembic upgrade head
 
 # Create new migration
-alembic revision --autogenerate -m "description"
-
-# Rollback migration
-alembic downgrade -1
+cd services/api && alembic revision --autogenerate -m "description"
 ```
 
 ### Development
 ```bash
-# Start all services
-docker-compose up
-
-# Start specific service
-docker-compose up api
-docker-compose up collector
-docker-compose up frontend
-
-# Run with rebuild
-docker-compose up --build
-
-# View logs
-docker-compose logs -f api
-docker-compose logs -f collector
+make docker-up       # docker-compose up --build -d
+make docker-down     # docker-compose down
+make lint            # ruff check + format --check
+make format          # ruff auto-fix + reformat
+make typecheck       # mypy across all packages
+make test            # pytest
+make test-cov        # pytest with HTML coverage
 ```
 
-### Testing
-```bash
-# Run all tests
-pytest
-
-# Run specific test file
-pytest tests/test_file.py
-
-# Run with coverage
-pytest --cov=src --cov-report=html
-
-# Run type checking
-mypy src/
-```
-
-### Linting
-```bash
-# Run linters (configuration in pyproject.toml)
-ruff check .
-ruff format .
-```
-
-## Repository Structure (Planned)
+## Repository Structure
 
 ```
 services/
-├── api/                    # spotify-mcp-api
-│   ├── src/app/
-│   │   ├── auth/          # Spotify OAuth flow
-│   │   ├── mcp/           # MCP tool catalog + dispatcher
-│   │   ├── admin/         # Admin API endpoints
-│   │   ├── history/       # History queries + analysis
-│   │   ├── spotify/       # Typed Spotify client wrapper
-│   │   ├── db/            # SQLAlchemy models + Alembic
-│   │   └── logging/       # DB log sink helpers
-│   └── tests/
-├── collector/              # spotify-history-collector
-│   ├── src/collector/
-│   │   ├── runloop.py     # Main collector loop
-│   │   ├── import_zip.py  # ZIP import processing
-│   │   ├── initial_sync.py # Best-effort API backfill
-│   │   ├── polling.py     # Incremental polling
-│   │   └── spotify_client.py # Spotify API client
-│   └── tests/
-└── frontend/               # admin-frontend
-    ├── src/frontend/
-    │   ├── templates/     # Jinja2 templates
-    │   └── static/        # CSS/JS
-    └── tests/
+├── shared/                    # Shared database package (used by api + collector)
+│   ├── pyproject.toml
+│   └── src/shared/
+│       ├── config/            # DatabaseSettings, DEFAULT_DATABASE_URL
+│       └── db/
+│           ├── base.py        # DeclarativeBase
+│           ├── enums.py       # 6 StrEnums
+│           ├── session.py     # DatabaseManager class
+│           └── models/        # user.py, music.py, operations.py, log.py
+├── api/                       # spotify-mcp-api (FastAPI)
+│   ├── Dockerfile
+│   ├── alembic/               # Database migrations
+│   └── src/app/
+│       ├── dependencies.py    # db_manager = DatabaseManager.from_env()
+│       ├── main.py            # FastAPI app with lifespan
+│       ├── auth/              # Spotify OAuth flow (stub)
+│       ├── mcp/               # MCP tool catalog + dispatcher (stub)
+│       ├── admin/             # Admin API endpoints (stub)
+│       ├── history/           # History queries + analysis (stub)
+│       ├── spotify/           # Typed Spotify client wrapper (stub)
+│       ├── db/                # Re-exports from shared
+│       └── logging/           # DB log sink helpers (stub)
+├── collector/                 # spotify-history-collector (worker)
+│   ├── Dockerfile
+│   └── src/collector/
+│       └── main.py            # Entry point (runloop placeholder)
+└── frontend/                  # admin-frontend (FastAPI + Jinja2)
+    ├── Dockerfile
+    └── src/frontend/
+        └── main.py
 ```
 
 ## Key Technical Decisions
 
 ### Type Safety
-- **Python 3.14** required (as specified in spec.md)
-- Complete type hints everywhere (`from __future__ import annotations`)
-- Strict mypy configuration:
-  - `disallow_untyped_defs = True`
-  - `warn_return_any = True`
-  - `no_implicit_optional = True`
+- **Python 3.14** required — PEP 649 lazy annotation evaluation is default; do NOT use `from __future__ import annotations`
+- Complete type hints everywhere, use `X | None` instead of `Optional[X]`
+- Use `enum.StrEnum` instead of `(str, enum.Enum)` — ruff UP042 promoted to safe fix
+- Strict mypy configuration (see root `pyproject.toml`), `mypy_path` covers all source dirs
 - Pydantic v2 for all request/response models
 
 ### Security
@@ -146,8 +140,10 @@ services/
 
 ### Database (PostgreSQL + SQLAlchemy 2.0)
 - Async operations with `asyncpg`
-- Session context manager pattern
-- Alembic for migrations
+- `DatabaseManager` class in `shared.db.session` — OOP session management with `from_env()`, `session()`, `dependency()`, `dispose()`
+- All models and enums live in `services/shared/src/shared/db/`
+- Alembic for migrations (`services/api/alembic/`, `prepend_sys_path = src:../shared/src`)
+- Docker images use `python:3.14-slim`
 
 ### Spotify API Client
 - `httpx.AsyncClient` for all HTTP calls
@@ -300,8 +296,31 @@ When ZIP imports lack Spotify URIs:
 
 ## Development Notes
 
-- **No package.json exists yet** - This is a Python-only project, TypeScript references in the /init command are not applicable
-- **Repository is at initial commit stage** - Directory structure from spec.md needs to be created
-- **Follow spec.md closely** - It's a comprehensive specification with detailed requirements
-- When implementing, create the `services/` directory structure as outlined in spec.md Section 9
+- **Python-only project** — no package.json, no TypeScript
+- **Follow spec.md closely** — comprehensive specification with detailed requirements
 - All services use FastAPI, even the frontend (server-rendered with Jinja2 + HTMX recommended)
+- Root `pyproject.toml` has unified tool config (ruff, mypy, pytest); per-package pyproject.toml has package metadata + deps
+- `environment.yml` uses editable installs (`-e services/shared`, etc.) — pip resolves deps from pyproject.toml automatically
+- Docker build context for api/collector is `./services` (so they can COPY the shared package)
+- Frontend has no DB dependency — does NOT copy shared package
+
+## Implementation Status
+
+### Completed
+- Database schema (all 11 tables, 6 enums, Alembic migration `001_initial_schema`)
+- Shared DB package (`services/shared/`) with DatabaseManager, split models, enums, config
+- FastAPI apps (api + frontend) with health endpoints and lifespan
+- Collector placeholder (infinite loop waiting for runloop)
+- Docker Compose with health checks, all services running on Python 3.14
+- Dev tooling: Makefile, pre-commit (ruff + mypy), pip-tools, README
+
+### Not Yet Implemented (stubs only)
+- `services/api/src/app/auth/` — Spotify OAuth flow
+- `services/api/src/app/mcp/` — MCP tool catalog + dispatcher
+- `services/api/src/app/admin/` — Admin API endpoints
+- `services/api/src/app/history/` — History queries + analysis
+- `services/api/src/app/spotify/` — Typed Spotify client wrapper
+- `services/api/src/app/logging/` — DB log sink helpers
+- Collector runloop, polling, initial sync, ZIP import
+- Frontend templates and static files
+- All tests (test directories exist but empty)
