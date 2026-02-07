@@ -1,8 +1,9 @@
 """Centralized constants for the API service."""
 
+from shared.spotify.constants import SPOTIFY_TOKEN_URL as SPOTIFY_TOKEN_URL  # re-export
+
 # Spotify OAuth URLs
 SPOTIFY_AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
-SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_ME_URL = "https://api.spotify.com/v1/me"
 
 # Spotify OAuth scopes required by this application

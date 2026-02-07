@@ -18,6 +18,7 @@ from shared.db.models import (
     TrackArtist,
     User,
 )
+from shared.db.operations import MusicRepository
 from shared.db.session import DatabaseManager
 
 __all__ = [
@@ -44,4 +45,6 @@ __all__ = [
     "User",
     # Session
     "DatabaseManager",
+    # Operations
+    "MusicRepository",
 ]
