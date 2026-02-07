@@ -40,6 +40,8 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
 ]
+# UP042: safe on >=3.14 -- see root pyproject.toml for rationale
+extend-safe-fixes = ["UP042"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["frontend"]
@@ -71,6 +73,9 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --strict-markers --tb=short"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [build-system]
 requires = ["setuptools>=68.0"]

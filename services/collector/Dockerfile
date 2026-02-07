@@ -1,5 +1,4 @@
-# Use Python 3.14 (when available, fall back to 3.13 for now)
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # Set working directory
 WORKDIR /app
@@ -9,17 +8,22 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt requirements-dev.txt ./
+# Copy and install shared package requirements first (better layer caching)
+COPY shared/requirements.txt ./shared_requirements.txt
+RUN pip install --no-cache-dir -r shared_requirements.txt
 
-# Install Python dependencies
+# Copy and install service requirements
+COPY collector/requirements.txt collector/requirements-dev.txt ./
 RUN pip install --no-cache-dir -r requirements-dev.txt
 
-# Copy application code
-COPY src/ ./src/
+# Copy shared package source
+COPY shared/src/ ./shared_src/
 
-# Set Python path
-ENV PYTHONPATH=/app/src
+# Copy application code
+COPY collector/src/ ./src/
+
+# Set Python path (shared_src first so shared is importable)
+ENV PYTHONPATH=/app/src:/app/shared_src
 
 # Default command (can be overridden in docker-compose.yml)
 CMD ["python", "-m", "collector.main"]

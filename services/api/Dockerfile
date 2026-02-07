@@ -1,5 +1,4 @@
-# Use Python 3.14 (when available, fall back to 3.13 for now)
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # Set working directory
 WORKDIR /app
@@ -9,19 +8,24 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt requirements-dev.txt ./
+# Copy and install shared package requirements first (better layer caching)
+COPY shared/requirements.txt ./shared_requirements.txt
+RUN pip install --no-cache-dir -r shared_requirements.txt
 
-# Install Python dependencies
+# Copy and install service requirements
+COPY api/requirements.txt api/requirements-dev.txt ./
 RUN pip install --no-cache-dir -r requirements-dev.txt
 
-# Copy application code
-COPY src/ ./src/
-COPY alembic/ ./alembic/
-COPY alembic.ini ./
+# Copy shared package source
+COPY shared/src/ ./shared_src/
 
-# Set Python path
-ENV PYTHONPATH=/app/src
+# Copy application code
+COPY api/src/ ./src/
+COPY api/alembic/ ./alembic/
+COPY api/alembic.ini ./
+
+# Set Python path (shared_src first so shared is importable)
+ENV PYTHONPATH=/app/src:/app/shared_src
 
 # Expose port
 EXPOSE 8000
