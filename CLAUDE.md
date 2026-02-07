@@ -307,6 +307,8 @@ When ZIP imports lack Spotify URIs:
 ## Implementation Status
 
 ### Completed
+
+#### Phase 1: Foundation
 - Database schema (all 11 tables, 6 enums, Alembic migration `001_initial_schema`)
 - Shared DB package (`services/shared/`) with DatabaseManager, split models, enums, config
 - FastAPI apps (api + frontend) with health endpoints and lifespan
@@ -314,13 +316,44 @@ When ZIP imports lack Spotify URIs:
 - Docker Compose with health checks, all services running on Python 3.14
 - Dev tooling: Makefile, pre-commit (ruff + mypy), pip-tools, README
 
+#### Phase 2: OAuth & Token Management
+- `services/api/src/app/auth/` — Full Spotify OAuth flow (login, callback, state validation)
+- `services/api/src/app/auth/crypto.py` — TokenEncryptor (Fernet encryption, now re-exports from `shared.crypto`)
+- `services/api/src/app/auth/tokens.py` — TokenManager (get/refresh access tokens)
+- `services/api/src/app/auth/state.py` — OAuthStateManager (HMAC-SHA256 signed CSRF state)
+- Tests: `api/tests/test_auth/` — crypto, state, tokens, router (21 tests)
+
+#### Phase 3: Spotify API Client & Basic Data Models
+- `services/shared/src/shared/spotify/` — Spotify client package:
+  - `client.py` — `SpotifyClient` with retry logic (429/5xx backoff, 401 token-refresh callback, semaphore concurrency). Methods: `get_recently_played()`, `get_tracks()`, `get_artists()`, `get_audio_features()`, `get_top_artists()`, `get_top_tracks()`, `search()`
+  - `models.py` — 20+ Pydantic models for all Spotify API responses (tracks, artists, albums, play history, search, audio features, top items, batch endpoints)
+  - `exceptions.py` — `SpotifyClientError`, `SpotifyAuthError`, `SpotifyRateLimitError`, `SpotifyServerError`, `SpotifyRequestError`
+  - `constants.py` — All Spotify API URLs and retry defaults
+- `services/shared/src/shared/crypto.py` — `TokenEncryptor` (moved from api, shared by both services)
+- `services/shared/src/shared/db/operations.py` — `MusicRepository` class: `upsert_track()`, `upsert_artist()`, `link_track_artists()`, `insert_play()`, `process_play_history_item()`, `batch_process_play_history()`
+- `services/collector/src/collector/settings.py` — `CollectorSettings` (all env vars with defaults)
+- `services/collector/src/collector/tokens.py` — `CollectorTokenManager` (get/refresh tokens for collector)
+- `services/collector/src/collector/polling.py` — `PollingService.poll_user()` end-to-end polling flow
+- `app/spotify/__init__.py` re-exports `SpotifyClient` from shared; `app/constants.py` re-exports `SPOTIFY_TOKEN_URL` from shared
+- Tests: `api/tests/test_spotify/` (29 tests), `api/tests/test_db/` (11 tests), `collector/tests/` (9 tests) — total 49 new tests
+
+### Next Up: Phase 4 — Initial Sync & Collector Run Loop
+The collector currently has a placeholder main loop (`collector/main.py`). Phase 4 should implement:
+1. **Initial sync service** (`collector/initial_sync.py`) — Page backwards through `/me/player/recently-played` using `before` cursor, with stop conditions (empty batch, no progress, max days, max requests, excessive 429s). Uses `SpotifyClient` + `MusicRepository`. Updates `SyncCheckpoint.initial_sync_*` fields
+2. **Collector run loop** (`collector/main.py` replacement) — Priority-based: ZIP imports first, then initial sync for incomplete users, then incremental polling for all active users. Respects `COLLECTOR_INTERVAL_SECONDS` between cycles
+3. **Job tracking** — Create `JobRun` records for each poll/sync cycle (status, records_fetched/inserted/skipped, timing)
+4. Consider structured DB logging via `Log` table
+
 ### Not Yet Implemented (stubs only)
-- `services/api/src/app/auth/` — Spotify OAuth flow
 - `services/api/src/app/mcp/` — MCP tool catalog + dispatcher
 - `services/api/src/app/admin/` — Admin API endpoints
 - `services/api/src/app/history/` — History queries + analysis
-- `services/api/src/app/spotify/` — Typed Spotify client wrapper
 - `services/api/src/app/logging/` — DB log sink helpers
-- Collector runloop, polling, initial sync, ZIP import
+- Collector run loop (main.py is placeholder), initial sync, ZIP import processing
 - Frontend templates and static files
-- All tests (test directories exist but empty)
+
+### Architecture Notes for Future Phases
+- **Shared code pattern**: Code needed by both api and collector goes in `services/shared/`. Both services import from it. Docker build context is `./services` so both can COPY shared.
+- **Token management duplication**: `app.auth.tokens.TokenManager` (for API) and `collector.tokens.CollectorTokenManager` (for collector) are intentionally separate to avoid coupling. They share `shared.crypto.TokenEncryptor`.
+- **DB datetime convention**: The DB schema uses naive datetimes (no timezone). When storing Pydantic datetimes (tz-aware from Spotify API), strip tzinfo with `.replace(tzinfo=None)` before writing to DB or comparing with DB values. See `polling.py` for example.
+- **Test isolation**: API and collector tests must be run separately (`pytest services/api/tests/` and `cd services/collector && pytest tests/`) due to conftest BigInteger-SQLite compilation conflicts when run together from root.
