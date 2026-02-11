@@ -63,6 +63,7 @@ class PollingService:
             if not response.items:
                 checkpoint.last_poll_completed_at = datetime.now(UTC).replace(tzinfo=None)
                 checkpoint.status = SyncStatus.IDLE
+                await session.flush()
                 await self._job_tracker.complete_job(job_run, fetched=0, inserted=0, skipped=0, session=session)
                 return 0, 0
 
