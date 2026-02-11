@@ -28,7 +28,13 @@
       "Bash(ruff:*)",
       "Bash(where:*)",
       "Bash(powershell -ExecutionPolicy Bypass -Command:*)",
-      "Bash(cmd:*)"
+      "Bash(cmd:*)",
+      "Bash(git pull:*)",
+      "Bash(mypy:*)",
+      "Bash(pytest:*)",
+      "Bash(docker builder prune:*)",
+      "Bash(git fetch:*)",
+      "Bash(git stash:*)"
     ]
   }
 }

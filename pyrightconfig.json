@@ -1,0 +1,12 @@
+{
+    "pythonVersion": "3.14",
+    "extraPaths": [
+        "services/shared/src",
+        "services/api/src",
+        "services/collector/src",
+        "services/frontend/src"
+    ],
+    "typeCheckingMode": "standard",
+    "reportMissingImports": true,
+    "reportMissingTypeStubs": false
+}
