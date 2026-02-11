@@ -149,29 +149,54 @@ class InitialSyncService:
                 # Advance cursor: before = oldest_played_at - 1ms
                 cursor = _datetime_to_unix_ms(batch_oldest) - 1
 
-            # Success: mark checkpoint completed
-            checkpoint.initial_sync_completed_at = datetime.now(UTC).replace(tzinfo=None)
-            checkpoint.status = SyncStatus.IDLE
-            checkpoint.error_message = None
-            await session.flush()
+            # Mark checkpoint based on stop reason
+            if stop_reason == "rate_limited":
+                # Rate-limited: leave sync incomplete so it retries on next cycle
+                checkpoint.status = SyncStatus.IDLE
+                checkpoint.error_message = None
+                await session.flush()
 
-            await self._job_tracker.complete_job(
-                job_run,
-                fetched=total_fetched,
-                inserted=total_inserted,
-                skipped=total_skipped,
-                session=session,
-            )
+                await self._job_tracker.complete_job(
+                    job_run,
+                    fetched=total_fetched,
+                    inserted=total_inserted,
+                    skipped=total_skipped,
+                    session=session,
+                )
 
-            logger.info(
-                "Initial sync completed for user %d: %d fetched, %d inserted, %d skipped, stop_reason=%s, requests=%d",
-                user_id,
-                total_fetched,
-                total_inserted,
-                total_skipped,
-                stop_reason,
-                request_count,
-            )
+                logger.warning(
+                    "Initial sync incomplete for user %d (rate limited): %d fetched, %d inserted, requests=%d. "
+                    "Will retry on next cycle.",
+                    user_id,
+                    total_fetched,
+                    total_inserted,
+                    request_count,
+                )
+            else:
+                # Normal stop: mark sync completed
+                checkpoint.initial_sync_completed_at = datetime.now(UTC).replace(tzinfo=None)
+                checkpoint.status = SyncStatus.IDLE
+                checkpoint.error_message = None
+                await session.flush()
+
+                await self._job_tracker.complete_job(
+                    job_run,
+                    fetched=total_fetched,
+                    inserted=total_inserted,
+                    skipped=total_skipped,
+                    session=session,
+                )
+
+                logger.info(
+                    "Initial sync completed for user %d: %d fetched, %d inserted, %d skipped, "
+                    "stop_reason=%s, requests=%d",
+                    user_id,
+                    total_fetched,
+                    total_inserted,
+                    total_skipped,
+                    stop_reason,
+                    request_count,
+                )
 
         except Exception as exc:
             checkpoint.status = SyncStatus.ERROR

@@ -10,19 +10,19 @@ Implement the initial sync service (backward paging with stop conditions), job t
 
 | # | File | Purpose |
 |---|------|---------|
-| 1 | `collector/src/collector/job_tracking.py` | `JobTracker` class — create/complete/fail `JobRun` records |
-| 2 | `collector/src/collector/initial_sync.py` | `InitialSyncService` — backward paging with 5 stop conditions |
-| 3 | `collector/src/collector/runloop.py` | `CollectorRunLoop` — priority-based cycle (imports → sync → poll) |
-| 4 | `collector/tests/test_initial_sync.py` | Tests for all stop conditions + checkpoint updates |
-| 5 | `collector/tests/test_job_tracking.py` | Tests for job lifecycle (start/complete/fail) |
-| 6 | `collector/tests/test_runloop.py` | Tests for priority ordering and pause/skip logic |
+| 1 | `services/collector/src/collector/job_tracking.py` | `JobTracker` class — create/complete/fail `JobRun` records |
+| 2 | `services/collector/src/collector/initial_sync.py` | `InitialSyncService` — backward paging with 5 stop conditions |
+| 3 | `services/collector/src/collector/runloop.py` | `CollectorRunLoop` — priority-based cycle (imports → sync → poll) |
+| 4 | `services/collector/tests/test_initial_sync.py` | Tests for all stop conditions + checkpoint updates |
+| 5 | `services/collector/tests/test_job_tracking.py` | Tests for job lifecycle (start/complete/fail) |
+| 6 | `services/collector/tests/test_runloop.py` | Tests for priority ordering and pause/skip logic |
 
 ## Modified Files
 
 | File | Change |
 |------|--------|
-| `collector/src/collector/main.py` | Replace placeholder with real entry point (settings, run loop, SIGTERM) |
-| `collector/src/collector/polling.py` | Integrate `JobTracker` — record poll results in `JobRun` |
+| `services/collector/src/collector/main.py` | Replace placeholder with real entry point (settings, run loop, SIGTERM) |
+| `services/collector/src/collector/polling.py` | Integrate `JobTracker` — record poll results in `JobRun` |
 
 ---
 

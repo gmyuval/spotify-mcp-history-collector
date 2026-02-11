@@ -263,8 +263,8 @@ async def test_stop_on_rate_limit(async_session: AsyncSession) -> None:
 
     result = await async_session.execute(select(SyncCheckpoint).where(SyncCheckpoint.user_id == user.id))
     cp = result.scalar_one()
-    # Still marked completed (graceful stop)
-    assert cp.initial_sync_completed_at is not None
+    # NOT marked completed — will retry on next cycle
+    assert cp.initial_sync_completed_at is None
 
 
 async def test_skip_already_completed(async_session: AsyncSession) -> None:

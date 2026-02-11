@@ -83,6 +83,8 @@ class PollingService:
             ):
                 checkpoint.last_poll_latest_played_at = latest_played_at
 
+            await session.flush()
+
             await self._job_tracker.complete_job(
                 job_run,
                 fetched=len(response.items),
