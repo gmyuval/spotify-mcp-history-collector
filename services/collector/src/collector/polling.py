@@ -36,14 +36,15 @@ class PollingService:
         Returns (inserted_count, skipped_count).
         """
         checkpoint = await self._get_or_create_checkpoint(user_id, session)
-        checkpoint.last_poll_started_at = datetime.now(UTC).replace(tzinfo=None)
-        checkpoint.status = SyncStatus.SYNCING
-        await session.flush()
 
         # Start job tracking
         job_run = await self._job_tracker.start_job(user_id, JobType.POLL, session)
 
         try:
+            checkpoint.last_poll_started_at = datetime.now(UTC).replace(tzinfo=None)
+            checkpoint.status = SyncStatus.SYNCING
+            await session.flush()
+
             # 1. Get valid token
             access_token = await self._token_manager.get_valid_token(user_id, session)
 
