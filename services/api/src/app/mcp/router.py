@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # Trigger tool registration by importing the tools package
 import app.mcp.tools  # noqa: F401
+from app.admin.auth import require_admin
 from app.dependencies import db_manager
 from app.mcp.registry import registry
 from app.mcp.schemas import MCPCallRequest, MCPCallResponse, MCPToolDefinition
@@ -23,7 +24,7 @@ async def list_tools() -> list[MCPToolDefinition]:
     return registry.get_catalog()
 
 
-@router.post("/call", response_model=MCPCallResponse)
+@router.post("/call", response_model=MCPCallResponse, dependencies=[Depends(require_admin)])
 async def call_tool(
     request: MCPCallRequest,
     session: Annotated[AsyncSession, Depends(db_manager.dependency)],

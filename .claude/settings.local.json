@@ -34,7 +34,24 @@
       "Bash(pytest:*)",
       "Bash(docker builder prune:*)",
       "Bash(git fetch:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh api:*)",
+      "Bash(git branch:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(git -C \"d:\\\\projects\\\\spotify-mcp-history-collector\" log --oneline -10)",
+      "Bash(git -C \"d:\\\\projects\\\\spotify-mcp-history-collector\" status -u)",
+      "Bash(git -C \"d:\\\\projects\\\\spotify-mcp-history-collector\" diff --stat)",
+      "Bash(git -C \"d:\\\\projects\\\\spotify-mcp-history-collector\" log --oneline -5)",
+      "Bash(git -C \"d:\\\\projects\\\\spotify-mcp-history-collector\" add .gitignore docker-compose.yml services/api/src/app/admin/__init__.py services/api/src/app/admin/router.py services/api/src/app/admin/schemas.py services/api/src/app/main.py services/api/src/app/settings.py services/api/tests/test_admin/__init__.py services/api/tests/test_admin/test_import_upload.py services/api/tests/test_db/test_import_operations.py services/api/tests/test_zip_import/__init__.py services/api/tests/test_zip_import/test_normalizers.py services/api/tests/test_zip_import/test_parser.py services/collector/src/collector/zip_import.py services/collector/src/collector/runloop.py services/collector/tests/test_zip_import_service.py services/shared/pyproject.toml services/shared/requirements.txt services/shared/src/shared/db/base.py services/shared/src/shared/db/models/log.py services/shared/src/shared/db/models/music.py services/shared/src/shared/db/models/operations.py services/shared/src/shared/db/models/user.py services/shared/src/shared/db/operations.py services/shared/src/shared/zip_import/__init__.py services/shared/src/shared/zip_import/constants.py services/shared/src/shared/zip_import/models.py services/shared/src/shared/zip_import/normalizers.py services/shared/src/shared/zip_import/parser.py docs/phase5_testing_guide.md docs/phase5_zip_import.md)",
+      "Bash(git -C \"d:\\\\projects\\\\spotify-mcp-history-collector\" diff --cached --stat)",
+      "Bash(git -C \"d:\\\\projects\\\\spotify-mcp-history-collector\" fetch origin)",
+      "Bash(git -C \"d:\\\\projects\\\\spotify-mcp-history-collector\" rebase origin/main)",
+      "Bash(git -C:*)",
+      "Bash(git worktree remove:*)",
+      "Bash(gh pr view:*)"
     ]
   }
 }
