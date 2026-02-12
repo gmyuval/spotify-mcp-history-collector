@@ -157,6 +157,23 @@ async def test_query_coverage(seeded_session: tuple[AsyncSession, int]) -> None:
     assert cov["latest_play"] is not None
 
 
+async def test_query_top_artists_cutoff(seeded_session: tuple[AsyncSession, int]) -> None:
+    """Plays outside the date window are excluded."""
+    session, user_id = seeded_session
+    # All seeded plays are from Jan 2026; querying with days=1 from "now" (Feb 2026)
+    # means the cutoff is ~Feb 10, so all Jan plays should be excluded.
+    rows = await query_top_artists(user_id, session, days=1, limit=10)
+    assert rows == []
+
+
+async def test_query_play_stats_cutoff(seeded_session: tuple[AsyncSession, int]) -> None:
+    """Play stats respect the date window."""
+    session, user_id = seeded_session
+    stats = await query_play_stats(user_id, session, days=1)
+    assert stats["total_plays"] == 0
+    assert stats["unique_tracks"] == 0
+
+
 async def test_query_top_artists_empty(async_session: AsyncSession) -> None:
     """No plays → empty result."""
     rows = await query_top_artists(999, async_session, days=90, limit=10)
