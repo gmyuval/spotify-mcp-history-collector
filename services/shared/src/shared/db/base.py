@@ -16,5 +16,5 @@ def enum_values(enum_cls: type[enum.StrEnum]) -> list[str]:
 
 
 def utc_now() -> datetime:
-    """Return current UTC time as a naive datetime (for DB columns)."""
-    return datetime.now(UTC).replace(tzinfo=None)
+    """Return current UTC time as a timezone-aware datetime."""
+    return datetime.now(UTC)

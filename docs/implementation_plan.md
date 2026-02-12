@@ -20,13 +20,32 @@ This is a greenfield implementation of a complete Spotify playback history colle
 - Long-term analysis (90+ days) requires continuous collection over time
 - Users need their complete listening history accessible to AI assistants
 
-**Current state:** Empty repository with only spec.md, environment.yml, and basic project files.
-
 **Goal:** Build a production-ready, fully-typed, containerized Python system following the detailed specification in spec.md.
 
 ---
 
-## Implementation Phases
+## Phase Completion Status
+
+| Phase | Description | Status | PR |
+|-------|-------------|--------|-----|
+| 1 | Project Bootstrap & Database Foundation | **DONE** | #1 |
+| 2 | Spotify OAuth & Token Management | **DONE** | #2 |
+| 3 | Spotify API Client & Basic Data Models | **DONE** | #3 |
+| 4 | Initial Sync & Collector Run Loop | **DONE** | #4 |
+| 5 | ZIP Import System | **DONE** | #5 |
+| 6 | MCP Tool Endpoints & History Queries + TIMESTAMPTZ | **DONE** | #6 |
+| 7 | Admin API & Authentication | **NOT STARTED** | — |
+| 8 | Admin Frontend | **NOT STARTED** | — |
+| 9 | Production Readiness & Documentation | **NOT STARTED** | — |
+
+**Note:** The original plan had 9 phases but the actual execution differed:
+- Original Phase 6 (Collector Worker) was absorbed into Phase 4 (run loop, main.py) and Phase 5 (ZIP import integration). However, the admin user-management endpoints planned in original Phase 6 were deferred.
+- Original Phase 7 (MCP Tools) was executed as our Phase 6, combined with a TIMESTAMPTZ migration.
+- Original Phases 8–9 remain. The scope has been reorganized below into 3 remaining phases (7–9).
+
+---
+
+## Implementation Phases (Completed)
 
 ### Phase 1: Project Bootstrap & Database Foundation
 
@@ -442,492 +461,146 @@ Can now backfill years of history from Spotify's data export feature
 
 ---
 
-### Phase 6: Collector Worker Service
+### Phase 7: Admin API & Authentication
 
-**Objective:** Implement autonomous collector run loop with job prioritization.
+**Objective:** Complete the admin REST API and add authentication to admin + MCP endpoints.
 
-**Tasks:**
-1. Implement main run loop in `services/collector/src/collector/runloop.py`:
-   - `run_collector()` main async function
-   - Priority order (spec.md Section 7B):
-     1. Pick pending `import_jobs` and process them
-     2. For each user: if initial sync enabled and incomplete, run initial sync
-     3. For each user: run incremental poll (unless paused)
-   - Respect `sync_checkpoints.status`:
-     - Skip if `paused`
-     - Skip initial sync if already completed
-   - Sleep between cycles: `COLLECTOR_INTERVAL_SECONDS` (default 600)
-2. Create collector entrypoint in `services/collector/src/collector/main.py`:
-   - Load settings from environment
-   - Initialize database connection
-   - Start run loop
-   - Graceful shutdown on SIGTERM
-3. Add concurrency control:
-   - Semaphore for concurrent user processing
-   - Semaphore for Spotify API calls
-   - Per-user locking to prevent concurrent syncs
-4. Implement pause/resume admin endpoints in `services/api/src/app/admin/users.py`:
-   - `POST /admin/users/{user_id}/pause` - Set status='paused'
-   - `POST /admin/users/{user_id}/resume` - Set status='idle'
-   - `POST /admin/users/{user_id}/initial-sync` - Trigger initial sync
-5. Add integration tests:
-   - Full collector cycle (import → initial sync → poll)
-   - Pause/resume functionality
-   - Concurrent user processing
-
-**Definition of Done:**
-- ✅ Collector runs autonomously in Docker container
-- ✅ Processes jobs in correct priority order
-- ✅ Respects pause/resume status from admin endpoints
-- ✅ Handles errors gracefully (logs to DB, continues with other users)
-- ✅ Graceful shutdown on container stop
-- ✅ Concurrency limits prevent API overload
-- ✅ All collector integration tests pass
-- ✅ `mypy` passes on all collector modules
-
-**Testing:**
-```bash
-# Start full stack
-docker-compose up -d
-
-# Authorize a user (via browser)
-open http://localhost:8000/auth/login
-
-# Upload ZIP (optional)
-curl -X POST http://localhost:8000/admin/users/{user_id}/imports/zip \
-  -F "file=@export.zip" -H "Authorization: Bearer {token}"
-
-# Watch collector logs
-docker-compose logs -f collector
-
-# Should see:
-# - Processing import job (if uploaded)
-# - Running initial sync for user
-# - Polling for new plays every 10 minutes
-
-# Test pause
-curl -X POST http://localhost:8000/admin/users/{user_id}/pause \
-  -H "Authorization: Bearer {token}"
-# Verify collector skips paused user
-
-# Test resume
-curl -X POST http://localhost:8000/admin/users/{user_id}/resume \
-  -H "Authorization: Bearer {token}"
-# Verify collector resumes processing
-
-# Check job_runs
-docker-compose exec postgres psql -U postgres -d spotify_mcp \
-  -c "SELECT job_type, status, started_at FROM job_runs ORDER BY started_at DESC LIMIT 10;"
-
-# Run integration tests
-docker-compose exec collector pytest tests/test_integration/
-```
-
-**Commit Message:**
-```
-feat: implement autonomous collector worker service
-
-- Add main run loop with job prioritization (imports → initial sync → polling)
-- Implement pause/resume functionality via admin endpoints
-- Add concurrency control with semaphores for API rate limiting
-- Create graceful shutdown handling for container lifecycle
-- Add comprehensive integration tests for full collector cycle
-
-Collector now runs autonomously, processing all users continuously
-```
-
----
-
-### Phase 7: MCP Tool Endpoints
-
-**Objective:** Implement all MCP tool endpoints for history analysis and Spotify live queries.
+**Context:** Currently only 2 admin endpoints exist (ZIP upload and import-job status). The `ADMIN_AUTH_MODE` and `ADMIN_TOKEN` env vars are defined but unused. MCP and admin endpoints have no authentication.
 
 **Tasks:**
-1. Create MCP tool catalog in `services/api/src/app/mcp/tools.py`:
-   - Tool registry with schemas
-   - `GET /mcp/tools` - Return all available tools with descriptions and parameters
-   - Tool definitions (spec.md Section 7A):
-     - History tools: `history.taste_summary`, `history.top_artists`, `history.top_tracks`, `history.listening_heatmap`, `history.repeat_rate`, `history.coverage`
-     - Spotify live tools: `spotify.get_top`, `spotify.search`
-     - Ops tools: `ops.sync_status`, `ops.latest_job_runs`, `ops.latest_import_jobs`
-2. Implement tool dispatcher in `services/api/src/app/mcp/dispatcher.py`:
-   - `POST /mcp/call` endpoint
-   - Request model: `{"tool": "...", "args": {...}}`
-   - Route to appropriate handler
-   - Validate args against tool schema
-   - Return typed response
-3. Implement history analysis in `services/api/src/app/history/queries.py`:
-   - `taste_summary(days, user_id)`:
-     - Play count, unique tracks/artists
-     - Top artists/tracks by play count
-     - Repeat rate and concentration
-     - Listening heatmap (weekday/hour)
-     - Coverage stats (data completeness)
-   - `top_artists(days, limit, user_id)` - Top artists by play count
-   - `top_tracks(days, limit, user_id)` - Top tracks by play count
-   - `listening_heatmap(days, user_id)` - Hour of day × day of week
-   - `repeat_rate(days, user_id)` - Track repeat statistics
-   - `coverage(days, user_id)` - Date range completeness check
-4. Create response models in `services/api/src/app/history/models.py`:
-   - `TasteSummary`, `ArtistCount`, `TrackCount`, `Heatmap`, `RepeatStats`, `CoverageStats`
-   - Full type hints per spec.md Section 11
-5. Implement Spotify live tools in `services/api/src/app/mcp/spotify_tools.py`:
-   - `get_top(entity, time_range, limit, user_id)` - Call Spotify's top API
-   - `search(q, type, limit, user_id)` - Search Spotify catalog
-6. Implement ops tools in `services/api/src/app/mcp/ops_tools.py`:
-   - `sync_status(user_id)` - Return sync_checkpoints data
-   - `latest_job_runs(user_id, limit)` - Recent job history
-   - `latest_import_jobs(user_id, limit)` - Recent imports
-7. Add unit tests:
-   - Tool catalog generation
-   - Tool dispatcher routing
-   - Each history query with test data
-   - Response model validation
-
-**Definition of Done:**
-- ✅ `GET /mcp/tools` returns complete tool catalog with schemas
-- ✅ `POST /mcp/call` dispatches to correct tool handler
-- ✅ All 11 tools implemented and working
-- ✅ History queries return accurate statistics
-- ✅ Heatmap generates correct weekday/hour aggregations
-- ✅ Coverage stats identify missing data gaps
-- ✅ Spotify live tools call real API and return results
-- ✅ All response models validate correctly
-- ✅ All MCP unit tests pass
-- ✅ `mypy` passes on all mcp modules
-
-**Testing:**
-```bash
-# Get tool catalog
-curl http://localhost:8000/mcp/tools | jq
-
-# Test taste_summary
-curl -X POST http://localhost:8000/mcp/call \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tool": "history.taste_summary",
-    "args": {"days": 90, "user_id": "..."}
-  }' | jq
-
-# Should return:
-# - play count, unique tracks/artists
-# - top 10 artists/tracks
-# - repeat stats
-# - heatmap data
-# - coverage stats
-
-# Test top_artists
-curl -X POST http://localhost:8000/mcp/call \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tool": "history.top_artists",
-    "args": {"days": 30, "limit": 20, "user_id": "..."}
-  }' | jq
-
-# Test Spotify live tool
-curl -X POST http://localhost:8000/mcp/call \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tool": "spotify.get_top",
-    "args": {"entity": "artists", "time_range": "short_term", "limit": 10, "user_id": "..."}
-  }' | jq
-
-# Test ops tool
-curl -X POST http://localhost:8000/mcp/call \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tool": "ops.sync_status",
-    "args": {"user_id": "..."}
-  }' | jq
-
-# Run unit tests
-docker-compose exec api pytest tests/test_mcp/
-```
-
-**Commit Message:**
-```
-feat: implement all MCP tool endpoints for history analysis
-
-- Add tool catalog endpoint (GET /mcp/tools) with complete schemas
-- Implement tool dispatcher (POST /mcp/call) with request validation
-- Create 6 history analysis tools (taste_summary, top_artists, etc.)
-- Implement listening heatmap with weekday/hour aggregations
-- Add coverage stats to detect missing data gaps
-- Implement 2 Spotify live tools (get_top, search)
-- Add 3 ops tools for sync status monitoring
-- Comprehensive unit tests for all tools
-
-ChatGPT can now analyze 90+ days of listening history via MCP interface
-```
-
----
-
-### Phase 8: Admin API & Frontend
-
-**Objective:** Build complete admin UI for managing users, monitoring sync status, and viewing logs.
-
-**Tasks:**
-1. Implement remaining admin API endpoints in `services/api/src/app/admin/`:
-   - `GET /admin/users` - List all users with sync status
-   - `GET /admin/users/{user_id}` - User detail with full sync state
-   - `GET /admin/sync-status` - Global sync status overview
-   - `GET /admin/job-runs?user_id=...` - Job history with pagination
-   - `GET /admin/import-jobs?user_id=...` - Import history with pagination
-   - `GET /admin/logs?service=...&level=...&q=...&since=...` - Log viewer with filtering
-2. Add admin authentication middleware in `services/api/src/app/admin/auth.py`:
-   - Support `ADMIN_AUTH_MODE`: `basic` or `token`
-   - Token auth: validate `Authorization: Bearer {ADMIN_TOKEN}`
+1. Implement admin authentication middleware in `services/api/src/app/admin/auth.py`:
+   - FastAPI dependency that validates auth based on `ADMIN_AUTH_MODE`
+   - Token auth: validate `Authorization: Bearer {ADMIN_TOKEN}` header
    - Basic auth: validate username/password against env vars
-3. Create frontend service in `services/frontend/`:
-   - FastAPI app serving Jinja2 templates
-   - HTMX for dynamic updates (recommended approach from spec)
-   - Pages:
-     - **Dashboard** - System health, recent activity, user count
-     - **Users** - List with token status, sync progress, actions
-     - **User Detail** - Full sync state, recent jobs, trigger actions
-     - **Imports** - Upload form, import job list with status
-     - **Jobs** - Job runs list with filtering, detail view
-     - **Logs** - Searchable log viewer with service/level filters
-     - **Analytics** - Taste summary visualization, top charts, heatmap
-4. Create templates in `services/frontend/src/frontend/templates/`:
-   - `base.html` - Layout with navigation
-   - `dashboard.html`, `users.html`, `user_detail.html`, `imports.html`, `jobs.html`, `logs.html`, `analytics.html`
-5. Add static assets in `services/frontend/src/frontend/static/`:
-   - CSS for styling (simple, clean design)
-   - HTMX library
-   - Basic JS for charts (Chart.js or similar)
-6. Implement API client in `services/frontend/src/frontend/api_client.py`:
-   - Typed methods for all admin endpoints
-   - Error handling and retries
+   - Apply to all admin endpoints via router-level dependency
+2. Implement user management endpoints in `services/api/src/app/admin/router.py` (extend existing):
+   - `GET /admin/users` — List all users with sync status (join users + sync_checkpoints)
+   - `GET /admin/users/{user_id}` — User detail with full sync state, token status, recent jobs
+   - `POST /admin/users/{user_id}/pause` — Set sync_checkpoint status to `paused`
+   - `POST /admin/users/{user_id}/resume` — Set sync_checkpoint status to `idle`
+   - `POST /admin/users/{user_id}/trigger-sync` — Reset initial sync checkpoint to trigger re-sync
+   - `DELETE /admin/users/{user_id}` — Delete user and all associated data
+3. Implement operational endpoints:
+   - `GET /admin/sync-status` — Global overview: user count, active syncs, recent errors
+   - `GET /admin/job-runs?user_id=&job_type=&status=&limit=&offset=` — Paginated job history
+   - `GET /admin/import-jobs?user_id=&status=&limit=&offset=` — Paginated import history
+4. Implement structured DB logging:
+   - `services/api/src/app/logging/handler.py` — Async DB log handler writing to `logs` table
+   - `GET /admin/logs?service=&level=&user_id=&q=&since=&limit=&offset=` — Log viewer with filtering
+   - Log retention: `POST /admin/maintenance/purge-logs?older_than_days=30`
+5. Add Pydantic response schemas for all new endpoints
+6. Add tests for auth middleware, all admin endpoints, and log handler
+
+**New Files:**
+- `services/api/src/app/admin/auth.py` — Admin auth dependency
+- `services/api/src/app/admin/schemas.py` — Extended with new response models
+- `services/api/src/app/logging/handler.py` — DB log handler
+- `services/api/tests/test_admin/test_auth.py` — Auth middleware tests
+- `services/api/tests/test_admin/test_users.py` — User management endpoint tests
+- `services/api/tests/test_admin/test_operations.py` — Job/import/log endpoint tests
+
+**Modified Files:**
+- `services/api/src/app/admin/router.py` — Add all new endpoints + auth dependency
+- `services/api/src/app/logging/__init__.py` — Export handler
+- `services/api/src/app/settings.py` — Add `ADMIN_AUTH_MODE`, `ADMIN_TOKEN`, `LOG_RETENTION_DAYS`
 
 **Definition of Done:**
-- ✅ All admin API endpoints implemented and documented
-- ✅ Admin authentication works (token or basic)
-- ✅ Frontend service runs and serves all pages
-- ✅ Can view list of users with sync status
-- ✅ Can pause/resume users from UI
-- ✅ Can trigger initial sync from UI
-- ✅ Can upload ZIP file from UI
-- ✅ Can view job runs with filtering
-- ✅ Can view and search logs
-- ✅ Analytics page shows taste summary and heatmap visualization
-- ✅ All admin API tests pass
-- ✅ `mypy` passes on admin and frontend modules
-
-**Testing:**
-```bash
-# Start all services
-docker-compose up -d
-
-# Visit frontend
-open http://localhost:8001
-
-# Should see dashboard with:
-# - System status
-# - User count
-# - Recent activity
-
-# Test user management:
-# 1. Navigate to Users page
-# 2. Click on a user
-# 3. View sync status, job history
-# 4. Pause user → verify status changes
-# 5. Resume user → verify status changes
-# 6. Trigger initial sync → verify job starts
-
-# Test import flow:
-# 1. Navigate to Imports page
-# 2. Upload ZIP file
-# 3. See import job created
-# 4. Wait for collector to process
-# 5. See import completed with stats
-
-# Test log viewer:
-# 1. Navigate to Logs page
-# 2. Filter by service (api/collector/frontend)
-# 3. Filter by level (info/warning/error)
-# 4. Search for text
-# 5. Verify logs displayed correctly
-
-# Test analytics:
-# 1. Navigate to Analytics page (select user)
-# 2. See taste summary stats
-# 3. See top artists/tracks charts
-# 4. See listening heatmap visualization
-
-# Run admin API tests
-docker-compose exec api pytest tests/test_admin/
-```
-
-**Commit Message:**
-```
-feat: implement admin API and web-based management UI
-
-- Add complete admin REST API (users, jobs, imports, logs)
-- Implement admin authentication (token or basic auth)
-- Build FastAPI frontend with Jinja2 templates and HTMX
-- Create dashboard for system monitoring
-- Add user management UI (list, detail, pause/resume, trigger sync)
-- Implement ZIP upload interface with import tracking
-- Add job runs viewer with filtering
-- Create searchable log viewer with service/level filters
-- Build analytics page with taste summary and heatmap visualization
-
-Complete web UI for managing Spotify history collection system
-```
+- All admin endpoints implemented with proper auth
+- Token and basic auth modes both work
+- Unauthenticated requests return 401
+- Pause/resume/trigger-sync modify sync_checkpoints correctly
+- Log viewer supports filtering by service, level, user, text search
+- DB log handler can be attached to Python logging
+- All new tests pass, ruff + mypy clean
 
 ---
 
-### Phase 9: Testing, Documentation & Production Readiness
+### Phase 8: Admin Frontend
 
-**Objective:** Comprehensive testing, documentation, and production hardening.
+**Objective:** Build server-rendered management UI for monitoring and operating the system.
+
+**Context:** Frontend service has only a FastAPI skeleton with health endpoint. It should call the API service (never touch DB directly) and use Jinja2 + HTMX for interactivity.
 
 **Tasks:**
-1. Add comprehensive integration tests in `tests/integration/`:
-   - `test_full_flow.py` - Complete user journey:
-     - OAuth authorization
-     - Initial sync
-     - ZIP import
-     - Incremental polling
-     - MCP tool queries
-     - Admin operations
-   - `test_error_scenarios.py`:
-     - Network failures
-     - Spotify API errors (429, 500, 503)
-     - Invalid ZIP files
-     - Database connection failures
-     - Token revocation
-   - `test_concurrent_operations.py`:
-     - Multiple users syncing simultaneously
-     - Concurrent polling and imports
-2. Add performance tests in `tests/performance/`:
-   - Large dataset queries (millions of plays)
-   - Heatmap generation performance
-   - Batch processing performance
-   - ZIP import of large files (100MB+)
-3. Implement log retention in `services/api/src/app/admin/maintenance.py`:
-   - Scheduled cleanup of logs older than N days
-   - Configurable via `LOG_RETENTION_DAYS` env var
-4. Add OpenAPI documentation:
-   - Complete docstrings for all endpoints
-   - Example requests/responses
-   - Authentication documentation
-5. Create comprehensive README.md:
-   - Project overview
-   - Architecture diagram (text-based)
-   - Quick start guide
-   - Configuration reference
-   - Development guide
-   - Deployment guide
-   - Troubleshooting section
-6. Update docker-compose.yml for production:
-   - Health checks for all services
-   - Restart policies
-   - Resource limits
-   - Volume management for persistence
-7. Add monitoring and observability:
-   - Structured JSON logging in all services
-   - Log correlation with request_id
-   - Metrics endpoints (Prometheus format)
-8. Create deployment documentation:
-   - `docs/deployment.md` - Production deployment guide
-   - `docs/chatgpt-integration.md` - How to set up as ChatGPT Custom GPT Action
-   - `docs/troubleshooting.md` - Common issues and solutions
-9. Security hardening:
-   - Review all endpoints for authorization
-   - Add rate limiting to public endpoints
-   - Implement CSRF protection for frontend
-   - Add security headers
-   - Document security best practices
+1. Set up frontend infrastructure:
+   - `services/frontend/src/frontend/api_client.py` — Typed async client for all admin API endpoints
+   - `services/frontend/src/frontend/templates/base.html` — Layout with navigation sidebar
+   - `services/frontend/src/frontend/static/` — CSS, HTMX library, Chart.js
+2. Implement pages:
+   - **Dashboard** (`/`) — System health: user count, active syncs, recent jobs, error summary
+   - **Users** (`/users`) — Table of all users with sync status, token expiry, actions
+   - **User Detail** (`/users/{id}`) — Full sync state, recent jobs, import history, pause/resume/trigger buttons
+   - **Imports** (`/imports`) — Upload form + import job list with status, stats, date range
+   - **Jobs** (`/jobs`) — Job runs table with filtering (user, type, status), detail view
+   - **Logs** (`/logs`) — Searchable log viewer with service/level filters, auto-refresh via HTMX polling
+   - **Analytics** (`/analytics/{user_id}`) — Taste summary stats, top artists/tracks charts, listening heatmap visualization
+3. Wire HTMX for dynamic updates:
+   - Polling for dashboard stats refresh
+   - Inline actions (pause/resume/trigger) with immediate feedback
+   - Infinite scroll or pagination for logs/jobs tables
+   - Upload progress for ZIP imports
+4. Add frontend auth (mirror admin auth — forward token/basic credentials to API)
+
+**New Files:**
+- `services/frontend/src/frontend/api_client.py`
+- `services/frontend/src/frontend/routes/` — Route modules (dashboard, users, imports, jobs, logs, analytics)
+- `services/frontend/src/frontend/templates/*.html` — 8 templates (base + 7 pages)
+- `services/frontend/src/frontend/static/css/style.css`
+- `services/frontend/src/frontend/static/js/` — HTMX, Chart.js (vendored or CDN)
+
+**Modified Files:**
+- `services/frontend/src/frontend/main.py` — Register routes, template config, static files
+- `services/frontend/Dockerfile` — Add template/static COPY steps if needed
 
 **Definition of Done:**
-- ✅ All integration tests pass (full flow, error scenarios, concurrent ops)
-- ✅ Performance tests pass (large datasets, ZIP imports)
-- ✅ Log retention cleanup works correctly
-- ✅ OpenAPI documentation complete and accurate
-- ✅ README.md covers all aspects of the project
-- ✅ Docker compose production-ready with health checks
-- ✅ All services produce structured JSON logs
-- ✅ Deployment documentation complete
-- ✅ Security review completed
-- ✅ 100% mypy compliance across all modules
-- ✅ Test coverage > 80% for all services
+- All 7 pages render correctly
+- HTMX actions work (pause/resume/trigger, upload, refresh)
+- Analytics page shows charts (top artists/tracks bar chart, heatmap grid)
+- Frontend auth forwards credentials to API correctly
+- Runs in Docker alongside other services
+- Manual verification of all pages
 
-**Testing:**
-```bash
-# Run all tests
-docker-compose exec api pytest tests/ -v --cov=app --cov-report=html
-docker-compose exec collector pytest tests/ -v --cov=collector --cov-report=html
-docker-compose exec frontend pytest tests/ -v --cov=frontend --cov-report=html
+---
 
-# Run integration tests
-pytest tests/integration/ -v
+### Phase 9: Production Readiness & Documentation
 
-# Run performance tests
-pytest tests/performance/ -v
+**Objective:** Harden the system for production use and create comprehensive documentation.
 
-# Check test coverage
-open htmlcov/index.html
+**Tasks:**
+1. Security hardening:
+   - Rate limiting on public endpoints (auth, MCP)
+   - Security headers middleware (HSTS, X-Content-Type-Options, etc.)
+   - CSRF protection for frontend form submissions
+   - Review all endpoints for proper authorization
+   - Ensure no tokens/PII in logs or error responses
+2. Observability:
+   - Structured JSON logging across all services
+   - Request-ID middleware for trace correlation
+   - Metrics endpoint (Prometheus format) — basic counters for requests, errors, poll/sync cycles
+3. Docker production hardening:
+   - Restart policies (`unless-stopped`)
+   - Resource limits (memory, CPU)
+   - Health check tuning
+   - `.dockerignore` cleanup
+4. Documentation:
+   - `README.md` — Project overview, architecture diagram, quick start guide, configuration reference
+   - `docs/deployment.md` — Production deployment guide (Docker, env vars, backups, monitoring)
+   - `docs/chatgpt-integration.md` — Setting up as ChatGPT Custom GPT Action (OpenAPI spec, auth, example prompts)
+   - `docs/troubleshooting.md` — Common issues and solutions
+   - OpenAPI docstrings for all endpoints with example requests/responses
+5. Additional testing:
+   - Integration tests for admin endpoints + frontend (via TestClient)
+   - Error scenario tests (Spotify API failures, DB timeouts, invalid ZIPs)
+   - Test coverage report (target: >80% for api and collector)
 
-# Verify mypy passes everywhere
-mypy services/api/src/
-mypy services/collector/src/
-mypy services/frontend/src/
-
-# Test log retention
-docker-compose exec api python -c "
-from app.admin.maintenance import cleanup_old_logs
-import asyncio
-asyncio.run(cleanup_old_logs(days=30))
-"
-
-# Verify logs older than 30 days deleted
-docker-compose exec postgres psql -U postgres -d spotify_mcp \
-  -c "SELECT COUNT(*) FROM logs WHERE timestamp < NOW() - INTERVAL '30 days';"
-# Should return 0
-
-# Test OpenAPI docs
-open http://localhost:8000/docs
-# Verify all endpoints documented with examples
-
-# Test complete user flow
-pytest tests/integration/test_full_flow.py -v
-
-# Test error scenarios
-pytest tests/integration/test_error_scenarios.py -v
-
-# Test concurrent operations
-pytest tests/integration/test_concurrent_operations.py -v
-
-# Verify health checks
-docker-compose ps
-# All services should show "healthy"
-
-# Check logs are structured JSON
-docker-compose logs api | tail -10
-# Should see JSON formatted logs
-
-# Load test
-ab -n 1000 -c 10 http://localhost:8000/healthz
-```
-
-**Commit Message:**
-```
-feat: add comprehensive testing, documentation, and production hardening
-
-- Add integration tests for full user flow and error scenarios
-- Implement performance tests for large datasets and imports
-- Add log retention cleanup with configurable retention period
-- Complete OpenAPI documentation with examples
-- Create comprehensive README with quick start and deployment guides
-- Add production-ready docker-compose with health checks and resource limits
-- Implement structured JSON logging with request correlation
-- Add deployment and troubleshooting documentation
-- Security hardening (rate limiting, CSRF, security headers)
-- Achieve 80%+ test coverage across all services
-
-System is now production-ready with full observability and documentation
-```
+**Definition of Done:**
+- Rate limiting active on public endpoints
+- Structured JSON logs with request-ID correlation
+- Docker Compose production-ready
+- All documentation written and accurate
+- Test coverage >80%
+- Fresh deployment test passes end-to-end
+- ChatGPT integration guide tested with real Custom GPT
 
 ---
 
@@ -1020,82 +693,37 @@ After all phases are complete, perform end-to-end verification:
 
 ## Implementation Timeline Estimate
 
-- Phase 1: 1-2 days (foundation is critical)
-- Phase 2: 1 day (OAuth is straightforward with good docs)
-- Phase 3: 1 day (Spotify client + basic polling)
-- Phase 4: 1-2 days (initial sync logic is complex)
-- Phase 5: 2 days (ZIP import has many edge cases)
-- Phase 6: 1 day (orchestration of existing pieces)
-- Phase 7: 2-3 days (11 tools with comprehensive queries)
-- Phase 8: 2-3 days (UI takes time for polish)
-- Phase 9: 2-3 days (testing and documentation)
+**Completed phases (1–6):** ~12 days of focused development
 
-**Total: 13-19 days of focused development**
+**Remaining phases:**
+- Phase 7: 1–2 days (admin API + auth middleware + DB logging)
+- Phase 8: 2–3 days (frontend UI with templates, HTMX, charts)
+- Phase 9: 1–2 days (security hardening, documentation, deployment guide)
+
+**Total remaining: 4–7 days of focused development**
 
 ---
 
-## Key Files to Create
+## Key Files — Remaining Phases
 
-### Phase 1
-- `docker-compose.yml`
-- `.env.example`
-- `services/api/pyproject.toml`, `Dockerfile`, `alembic.ini`
-- `services/collector/pyproject.toml`, `Dockerfile`
-- `services/frontend/pyproject.toml`, `Dockerfile`
-- `services/api/src/app/db/models.py` (all 11 tables)
-- `services/api/alembic/versions/001_initial_schema.py`
+### Phase 7 (Admin API & Auth)
+- `services/api/src/app/admin/auth.py` — Auth dependency
+- `services/api/src/app/admin/router.py` — Extend with user/job/log endpoints
+- `services/api/src/app/admin/schemas.py` — New response models
+- `services/api/src/app/logging/handler.py` — DB log handler
+- `services/api/tests/test_admin/test_auth.py`
+- `services/api/tests/test_admin/test_users.py`
+- `services/api/tests/test_admin/test_operations.py`
 
-### Phase 2
-- `services/api/src/app/auth/crypto.py`
-- `services/api/src/app/auth/spotify.py`
-- `services/api/src/app/auth/tokens.py`
-- `services/api/src/app/main.py`
-- `services/api/src/app/settings.py`
-
-### Phase 3
-- `services/api/src/app/spotify/client.py`
-- `services/api/src/app/spotify/models.py`
-- `services/api/src/app/db/operations.py`
-- `services/collector/src/collector/polling.py`
-- `services/collector/src/collector/db.py`
-
-### Phase 4
-- `services/collector/src/collector/initial_sync.py`
-- `services/collector/src/collector/job_tracking.py`
-- `services/collector/src/collector/settings.py`
-
-### Phase 5
-- `services/api/src/app/admin/imports.py`
-- `services/collector/src/collector/import_zip.py`
-
-### Phase 6
-- `services/collector/src/collector/runloop.py`
-- `services/collector/src/collector/main.py`
-- `services/api/src/app/admin/users.py`
-
-### Phase 7
-- `services/api/src/app/mcp/tools.py`
-- `services/api/src/app/mcp/dispatcher.py`
-- `services/api/src/app/history/queries.py`
-- `services/api/src/app/history/models.py`
-- `services/api/src/app/mcp/spotify_tools.py`
-- `services/api/src/app/mcp/ops_tools.py`
-
-### Phase 8
-- `services/api/src/app/admin/auth.py`
-- `services/api/src/app/admin/` (various endpoints)
-- `services/frontend/src/frontend/main.py`
-- `services/frontend/src/frontend/templates/*.html` (7 templates)
-- `services/frontend/src/frontend/static/` (CSS, JS)
+### Phase 8 (Admin Frontend)
 - `services/frontend/src/frontend/api_client.py`
+- `services/frontend/src/frontend/routes/*.py` — Route modules
+- `services/frontend/src/frontend/templates/*.html` — 8 templates
+- `services/frontend/src/frontend/static/` — CSS, JS
 
-### Phase 9
-- `tests/integration/test_full_flow.py`
-- `tests/integration/test_error_scenarios.py`
-- `tests/integration/test_concurrent_operations.py`
-- `tests/performance/` (performance tests)
-- `services/api/src/app/admin/maintenance.py`
-- `README.md`
+### Phase 9 (Production Readiness)
+- `README.md` — Comprehensive project README
 - `docs/deployment.md`
 - `docs/chatgpt-integration.md`
 - `docs/troubleshooting.md`
+- Security middleware, rate limiting, metrics endpoint

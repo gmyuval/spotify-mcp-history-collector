@@ -337,23 +337,84 @@ When ZIP imports lack Spotify URIs:
 - `app/spotify/__init__.py` re-exports `SpotifyClient` from shared; `app/constants.py` re-exports `SPOTIFY_TOKEN_URL` from shared
 - Tests: `api/tests/test_spotify/` (29 tests), `api/tests/test_db/` (11 tests), `collector/tests/` (9 tests) — total 49 new tests
 
-### Next Up: Phase 4 — Initial Sync & Collector Run Loop
-The collector currently has a placeholder main loop (`collector/main.py`). Phase 4 should implement:
-1. **Initial sync service** (`collector/initial_sync.py`) — Page backwards through `/me/player/recently-played` using `before` cursor, with stop conditions (empty batch, no progress, max days, max requests, excessive 429s). Uses `SpotifyClient` + `MusicRepository`. Updates `SyncCheckpoint.initial_sync_*` fields
-2. **Collector run loop** (`collector/main.py` replacement) — Priority-based: ZIP imports first, then initial sync for incomplete users, then incremental polling for all active users. Respects `COLLECTOR_INTERVAL_SECONDS` between cycles
-3. **Job tracking** — Create `JobRun` records for each poll/sync cycle (status, records_fetched/inserted/skipped, timing)
-4. Consider structured DB logging via `Log` table
+#### Phase 4: Initial Sync & Collector Run Loop
+- `services/collector/src/collector/initial_sync.py` — Backward paging through recently-played with stop conditions
+- `services/collector/src/collector/main.py` — Priority-based run loop (ZIP imports → initial sync → polling)
+- `services/collector/src/collector/job_tracking.py` — JobRun lifecycle management
+- Tests: `collector/tests/` — initial_sync (7), job_tracking (3), runloop (5)
+
+#### Phase 5: ZIP Import Pipeline
+- `services/shared/src/shared/zip_import/` — Parser, normalizers, models for Extended + Account Data formats
+- `services/collector/src/collector/zip_import.py` — ZipImportService processing pending import jobs
+- `services/api/src/app/admin/router.py` — Upload endpoint for ZIP files
+- Tests: `api/tests/test_zip_import/` (17), `collector/tests/test_zip_import_service.py` (4), `api/tests/test_admin/` (5)
+- Verified with real 18,894-play dataset spanning 10+ years
+
+#### Phase 6: MCP Tool Endpoints & History Queries
+- `services/api/src/app/history/` — schemas.py, queries.py, service.py, router.py — 6 history analysis endpoints
+- `services/api/src/app/mcp/` — schemas.py, registry.py, router.py — MCP dispatcher with tool catalog
+- `services/api/src/app/mcp/tools/` — history_tools.py (6), ops_tools.py (3), spotify_tools.py (2) — 11 total MCP tools
+- Alembic migration `002_timestamp_to_timestamptz` — all DateTime columns now TIMESTAMPTZ
+- Tests: `api/tests/test_history/` (21), `api/tests/test_mcp/` (18) — 39 new tests
+- All 11 MCP tools verified with real data and live Spotify API
 
 ### Not Yet Implemented (stubs only)
-- `services/api/src/app/mcp/` — MCP tool catalog + dispatcher
-- `services/api/src/app/admin/` — Admin API endpoints
-- `services/api/src/app/history/` — History queries + analysis
+- `services/api/src/app/admin/` — Full admin API endpoints (only upload endpoint exists)
 - `services/api/src/app/logging/` — DB log sink helpers
-- Collector run loop (main.py is placeholder), initial sync, ZIP import processing
 - Frontend templates and static files
 
 ### Architecture Notes for Future Phases
 - **Shared code pattern**: Code needed by both api and collector goes in `services/shared/`. Both services import from it. Docker build context is `./services` so both can COPY shared.
 - **Token management duplication**: `app.auth.tokens.TokenManager` (for API) and `collector.tokens.CollectorTokenManager` (for collector) are intentionally separate to avoid coupling. They share `shared.crypto.TokenEncryptor`.
-- **DB datetime convention**: The DB schema uses naive datetimes (no timezone). When storing Pydantic datetimes (tz-aware from Spotify API), strip tzinfo with `.replace(tzinfo=None)` before writing to DB or comparing with DB values. See `polling.py` for example.
+- **DB datetime convention**: All DB columns use `DateTime(timezone=True)` (PostgreSQL `TIMESTAMPTZ`). Always use `datetime.now(UTC)` for tz-aware UTC datetimes. Do NOT strip tzinfo — all values should be tz-aware. Note: SQLite (used in tests) may return naive datetimes; use `.replace(tzinfo=None)` only in test assertions when comparing against SQLite values.
 - **Test isolation**: API and collector tests must be run separately (`pytest services/api/tests/` and `cd services/collector && pytest tests/`) due to conftest BigInteger-SQLite compilation conflicts when run together from root.
+
+### Phase 6 Insights & Lessons Learned
+
+#### Timezone Handling
+- **TIMESTAMPTZ from the start**: Starting with naive `TIMESTAMP` and adding `.replace(tzinfo=None)` hacks at every boundary was unsustainable (~30 occurrences by Phase 5). Migrating to `TIMESTAMPTZ` eliminated the entire category of naive-vs-aware bugs. Future projects should use TIMESTAMPTZ from day one.
+- **SQLite test gap**: SQLite ignores `DateTime(timezone=True)` entirely — it stores tz-aware datetimes as text and reads them back as naive strings. This means tests using SQLite can miss tz-related bugs that only surface in PostgreSQL. Consider adding a small set of PostgreSQL integration tests (via testcontainers or Docker) for datetime-sensitive code paths.
+- **Defensive tz checks in polling.py**: Even with TIMESTAMPTZ, the polling service needs defensive checks (`if dt.tzinfo is None: dt = dt.replace(tzinfo=UTC)`) because SQLite tests produce naive values. This is an acceptable compromise documented with comments.
+
+#### MCP Registry Pattern
+- The decorator-based `MCPToolRegistry` with a global singleton works well for 11 tools. Each tool module self-registers at import time via `@registry.register(...)`, and `mcp/tools/__init__.py` imports all modules to trigger registration.
+- Tool handlers receive `(args: dict, session: AsyncSession)` — this keeps them testable (pass a test session) and decoupled from HTTP concerns.
+- The `/mcp/call` endpoint catches all handler exceptions and wraps them in `MCPCallResponse(success=False, error=...)` rather than raising HTTP errors. This matches MCP protocol semantics where errors are part of the response, not HTTP status codes.
+
+#### History Query Compatibility
+- **PostgreSQL vs SQLite for heatmap**: The heatmap query uses `EXTRACT(DOW/HOUR FROM ...)` on PostgreSQL but must fall back to `strftime('%w'/'%H', ...)` for SQLite. Dialect detection via `session.bind.dialect.name` handles this, but it's a maintenance burden. Future queries should consider this pattern if they use DB-specific functions.
+- **Query performance**: With ~19k plays, all queries return in <100ms. At scale (millions of plays), the heatmap and coverage queries may benefit from a materialized view or pre-aggregated summary table. The `plays` table already has an index on `(user_id, played_at)` which covers the primary access pattern.
+
+#### Testing Patterns
+- **Test factories**: The test suites create sample data (users, tracks, artists, plays) inline in each test file. A shared test factory/fixture module could reduce boilerplate in future phases.
+- **MCP tool tests vs history tests**: MCP tools are tested at two levels — direct history service tests (unit) and through the MCP dispatcher (integration). This provides good coverage without over-mocking.
+
+### Pointers for Next Phases
+
+#### Phase 7: Admin Frontend
+- Frontend service already has a FastAPI app at `services/frontend/`. It should use Jinja2 templates + HTMX for server-rendered interactivity.
+- Key pages: user management, sync status dashboard, job history, import management, log viewer.
+- Frontend has no DB dependency — it calls the API service at `API_BASE_URL`. Admin endpoints are at `services/api/src/app/admin/` (currently only ZIP upload exists).
+- Admin API needs endpoints for: list users, user detail, toggle sync, list job runs, list import jobs, trigger poll, view logs.
+- Consider `ADMIN_AUTH_MODE` (basic/token) for securing admin endpoints.
+
+#### Phase 8: Structured Logging & Observability
+- `services/api/src/app/logging/` is a stub. The `logs` table exists with `level`, `service`, `event_type`, `message`, `details` (JSON), `user_id`.
+- Implement a DB log handler that writes structured logs to the `logs` table for UI browsing.
+- Add log retention policy (auto-purge logs older than N days).
+- Consider adding request-id middleware for trace correlation.
+
+#### Phase 9: Audio Features Enrichment
+- The `audio_features` table exists but is unpopulated. `SpotifyClient.get_audio_features()` is implemented.
+- Add an enrichment job type to the collector that batch-fetches audio features for tracks missing them.
+- This enables future MCP tools like "what's my average danceability?" or "find my most energetic tracks."
+
+#### Phase 10: Local Track Resolution
+- ZIP imports without Spotify URIs create local IDs (`local:<sha1>`). These tracks can't be enriched with audio features or linked to real Spotify metadata.
+- Implement a resolution job that uses `SpotifyClient.search()` to match local tracks to real Spotify IDs.
+- Merge strategy needed: update track IDs, re-link plays, handle duplicates.
+
+#### General
+- **Test count**: 159 tests (131 API + 28 collector). Each new phase should maintain or increase coverage.
+- **Pre-commit hooks**: ruff v0.15.0 + mypy strict — all commits must pass. Do not use `--no-verify`.
+- **Branch strategy**: Feature branches off main, PRs via `gh pr create`, squash merge.

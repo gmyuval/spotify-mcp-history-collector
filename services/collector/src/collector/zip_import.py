@@ -64,7 +64,7 @@ class ZipImportService:
                 .where(ImportJob.id == job_id, ImportJob.status == ImportStatus.PENDING)
                 .values(
                     status=ImportStatus.PROCESSING,
-                    started_at=datetime.now(UTC).replace(tzinfo=None),
+                    started_at=datetime.now(UTC),
                 )
                 .returning(ImportJob)
             )
@@ -136,7 +136,7 @@ class ZipImportService:
                 result = await session.execute(select(ImportJob).where(ImportJob.id == job_id))
                 job = result.scalar_one()
                 job.status = ImportStatus.SUCCESS
-                job.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                job.completed_at = datetime.now(UTC)
                 job.records_ingested = total_inserted
                 job.earliest_played_at = earliest
                 job.latest_played_at = latest
@@ -166,7 +166,7 @@ class ZipImportService:
                 result = await session.execute(select(ImportJob).where(ImportJob.id == job_id))
                 job = result.scalar_one()
                 job.status = ImportStatus.ERROR
-                job.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                job.completed_at = datetime.now(UTC)
                 job.error_message = str(exc)[:1000]
 
                 job_run_result = await session.execute(select(JobRun).where(JobRun.id == job_run_id))

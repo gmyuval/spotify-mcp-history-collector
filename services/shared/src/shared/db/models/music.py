@@ -44,8 +44,10 @@ class Track(Base):
         nullable=False,
         default=TrackSource.SPOTIFY_API,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
 
     # Relationships
     artists: Mapped[list[Artist]] = relationship("Artist", secondary="track_artists", back_populates="tracks")
@@ -68,8 +70,10 @@ class Artist(Base):
         nullable=False,
         default=TrackSource.SPOTIFY_API,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
 
     # Relationships
     tracks: Mapped[list[Track]] = relationship("Track", secondary="track_artists", back_populates="artists")
@@ -95,7 +99,7 @@ class Play(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     track_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("tracks.id", ondelete="CASCADE"), nullable=False)
-    played_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    played_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     ms_played: Mapped[int | None] = mapped_column(Integer)
     context_type: Mapped[str | None] = mapped_column(String(50))
     context_uri: Mapped[str | None] = mapped_column(String(255))
@@ -104,7 +108,7 @@ class Play(Base):
         nullable=False,
         default=TrackSource.SPOTIFY_API,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     # Relationships
     user: Mapped[User] = relationship("User", back_populates="plays")
@@ -139,7 +143,7 @@ class AudioFeatures(Base):
     valence: Mapped[float | None] = mapped_column(Float)
     tempo: Mapped[float | None] = mapped_column(Float)
     time_signature: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     # Relationships
     track: Mapped[Track] = relationship("Track", back_populates="audio_features")

@@ -1,6 +1,6 @@
 """Tests for ZIP import normalizers."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from shared.zip_import.normalizers import (
     normalize_account_data_record,
@@ -24,7 +24,7 @@ def test_normalize_extended_record_valid() -> None:
     assert record.artist_name == "Queen"
     assert record.album_name == "A Night at the Opera"
     assert record.ms_played == 180000
-    assert record.played_at == datetime(2023, 6, 15, 10, 30, 0)
+    assert record.played_at == datetime(2023, 6, 15, 10, 30, 0, tzinfo=UTC)
     assert record.spotify_track_uri == "spotify:track:4u7EnebtmKWzUH433cf5Qv"
     assert record.spotify_track_id == "4u7EnebtmKWzUH433cf5Qv"
 
@@ -90,7 +90,7 @@ def test_normalize_account_data_record_valid() -> None:
     assert record.artist_name == "The Beatles"
     assert record.album_name is None
     assert record.ms_played == 120000
-    assert record.played_at == datetime(2023, 6, 15, 10, 30)
+    assert record.played_at == datetime(2023, 6, 15, 10, 30, tzinfo=UTC)
     assert record.spotify_track_uri is None
 
 
