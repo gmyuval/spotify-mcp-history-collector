@@ -30,18 +30,20 @@ class SyncCheckpoint(Base):
     )
 
     # Initial sync tracking
-    initial_sync_started_at: Mapped[datetime | None] = mapped_column(DateTime)
-    initial_sync_completed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    initial_sync_earliest_played_at: Mapped[datetime | None] = mapped_column(DateTime)
+    initial_sync_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    initial_sync_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    initial_sync_earliest_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Polling tracking
-    last_poll_started_at: Mapped[datetime | None] = mapped_column(DateTime)
-    last_poll_completed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    last_poll_latest_played_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_poll_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_poll_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_poll_latest_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     error_message: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
 
     # Relationships
     user: Mapped[User] = relationship("User", back_populates="sync_checkpoint")
@@ -60,8 +62,8 @@ class JobRun(Base):
         nullable=False,
         default=JobStatus.RUNNING,
     )
-    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Statistics
     records_fetched: Mapped[int] = mapped_column(Integer, default=0)
@@ -98,14 +100,14 @@ class ImportJob(Base):
 
     format_detected: Mapped[str | None] = mapped_column(String(100))
     records_ingested: Mapped[int] = mapped_column(Integer, default=0)
-    earliest_played_at: Mapped[datetime | None] = mapped_column(DateTime)
-    latest_played_at: Mapped[datetime | None] = mapped_column(DateTime)
+    earliest_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    latest_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    started_at: Mapped[datetime | None] = mapped_column(DateTime)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     # Relationships
     user: Mapped[User] = relationship("User", back_populates="import_jobs")

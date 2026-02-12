@@ -25,7 +25,7 @@ class JobTracker:
             user_id=user_id,
             job_type=job_type,
             status=JobStatus.RUNNING,
-            started_at=datetime.now(UTC).replace(tzinfo=None),
+            started_at=datetime.now(UTC),
         )
         session.add(job_run)
         await session.flush()
@@ -43,7 +43,7 @@ class JobTracker:
     ) -> None:
         """Mark a JobRun as successfully completed with stats."""
         job_run.status = JobStatus.SUCCESS
-        job_run.completed_at = datetime.now(UTC).replace(tzinfo=None)
+        job_run.completed_at = datetime.now(UTC)
         job_run.records_fetched = fetched
         job_run.records_inserted = inserted
         job_run.records_skipped = skipped
@@ -64,7 +64,7 @@ class JobTracker:
     ) -> None:
         """Mark a JobRun as failed with an error message."""
         job_run.status = JobStatus.ERROR
-        job_run.completed_at = datetime.now(UTC).replace(tzinfo=None)
+        job_run.completed_at = datetime.now(UTC)
         job_run.error_message = error_message
         await session.flush()
         logger.error("Job %d failed: %s", job_run.id, error_message)

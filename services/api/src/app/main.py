@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.admin import router as admin_router
 from app.auth import router as auth_router
 from app.dependencies import db_manager
+from app.history import router as history_router
+from app.mcp import router as mcp_router
 
 
 class SpotifyMCPApp:
@@ -45,6 +47,8 @@ class SpotifyMCPApp:
     def _setup_routers(self) -> None:
         self.app.include_router(auth_router, prefix="/auth", tags=["auth"])
         self.app.include_router(admin_router, prefix="/admin", tags=["admin"])
+        self.app.include_router(history_router, prefix="/history", tags=["history"])
+        self.app.include_router(mcp_router, prefix="/mcp", tags=["mcp"])
 
         @self.app.get("/healthz")
         async def health_check() -> dict[str, str]:

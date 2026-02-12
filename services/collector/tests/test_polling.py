@@ -122,7 +122,11 @@ async def test_poll_user_end_to_end(async_session: AsyncSession) -> None:
     result = await async_session.execute(select(SyncCheckpoint).where(SyncCheckpoint.user_id == user.id))
     checkpoint = result.scalar_one()
     assert checkpoint.last_poll_completed_at is not None
-    assert checkpoint.last_poll_latest_played_at == datetime(2024, 1, 15, 10, 30, 0)
+    # SQLite returns naive datetimes; PostgreSQL returns tz-aware. Compare date parts.
+    expected = datetime(2024, 1, 15, 10, 30, 0)
+    actual = checkpoint.last_poll_latest_played_at
+    assert actual is not None
+    assert actual.replace(tzinfo=None) == expected
 
 
 async def test_poll_user_empty_response(async_session: AsyncSession) -> None:

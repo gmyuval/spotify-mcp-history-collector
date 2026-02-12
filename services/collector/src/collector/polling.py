@@ -41,7 +41,7 @@ class PollingService:
         job_run = await self._job_tracker.start_job(user_id, JobType.POLL, session)
 
         try:
-            checkpoint.last_poll_started_at = datetime.now(UTC).replace(tzinfo=None)
+            checkpoint.last_poll_started_at = datetime.now(UTC)
             checkpoint.status = SyncStatus.SYNCING
             await session.flush()
 
@@ -62,7 +62,7 @@ class PollingService:
             logger.info("Fetched %d recently-played items for user %d", len(response.items), user_id)
 
             if not response.items:
-                checkpoint.last_poll_completed_at = datetime.now(UTC).replace(tzinfo=None)
+                checkpoint.last_poll_completed_at = datetime.now(UTC)
                 checkpoint.status = SyncStatus.IDLE
                 await session.flush()
                 await self._job_tracker.complete_job(job_run, fetched=0, inserted=0, skipped=0, session=session)
@@ -72,17 +72,18 @@ class PollingService:
             inserted, skipped = await self._music_repo.batch_process_play_history(response.items, user_id, session)
 
             # 5. Update SyncCheckpoint
-            checkpoint.last_poll_completed_at = datetime.now(UTC).replace(tzinfo=None)
+            checkpoint.last_poll_completed_at = datetime.now(UTC)
             checkpoint.status = SyncStatus.IDLE
             checkpoint.error_message = None
 
             # Set last_poll_latest_played_at to the most recent played_at.
-            # Strip tzinfo to match the DB's naive-datetime convention.
-            latest_played_at = max(item.played_at for item in response.items).replace(tzinfo=None)
-            if (
-                checkpoint.last_poll_latest_played_at is None
-                or latest_played_at > checkpoint.last_poll_latest_played_at
-            ):
+            latest_played_at = max(item.played_at for item in response.items)
+            if latest_played_at.tzinfo is None:
+                latest_played_at = latest_played_at.replace(tzinfo=UTC)
+            existing = checkpoint.last_poll_latest_played_at
+            if existing is not None and existing.tzinfo is None:
+                existing = existing.replace(tzinfo=UTC)
+            if existing is None or latest_played_at > existing:
                 checkpoint.last_poll_latest_played_at = latest_played_at
 
             await session.flush()

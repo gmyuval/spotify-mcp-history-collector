@@ -33,7 +33,7 @@ def normalize_extended_record(raw: dict[str, object]) -> NormalizedPlayRecord | 
 
     try:
         played_at = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-        played_at = played_at.astimezone(UTC).replace(tzinfo=None)
+        played_at = played_at.astimezone(UTC)
     except ValueError, TypeError:
         logger.warning("Skipping record with unparseable timestamp: %s", ts_str)
         return None
@@ -77,7 +77,7 @@ def normalize_account_data_record(raw: dict[str, object]) -> NormalizedPlayRecor
         return None
 
     try:
-        played_at = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M")
+        played_at = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M").replace(tzinfo=UTC)
     except ValueError, TypeError:
         logger.warning("Skipping record with unparseable endTime: %s", end_time_str)
         return None

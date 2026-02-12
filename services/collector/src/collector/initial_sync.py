@@ -55,7 +55,7 @@ class InitialSyncService:
 
         # Mark checkpoint as syncing
         checkpoint.status = SyncStatus.SYNCING
-        checkpoint.initial_sync_started_at = datetime.now(UTC).replace(tzinfo=None)
+        checkpoint.initial_sync_started_at = datetime.now(UTC)
         await session.flush()
 
         # Get a valid access token + create client
@@ -124,12 +124,14 @@ class InitialSyncService:
                 previous_oldest = batch_oldest
 
                 # Update checkpoint with earliest timestamp seen so far
-                batch_oldest_naive = batch_oldest.replace(tzinfo=None)
+                # Ensure batch_oldest is tz-aware for comparison with DB
+                if batch_oldest.tzinfo is None:
+                    batch_oldest = batch_oldest.replace(tzinfo=UTC)
                 if (
                     checkpoint.initial_sync_earliest_played_at is None
-                    or batch_oldest_naive < checkpoint.initial_sync_earliest_played_at
+                    or batch_oldest < checkpoint.initial_sync_earliest_played_at
                 ):
-                    checkpoint.initial_sync_earliest_played_at = batch_oldest_naive
+                    checkpoint.initial_sync_earliest_played_at = batch_oldest
                     await session.flush()
 
                 # Stop condition: max days
@@ -174,7 +176,7 @@ class InitialSyncService:
                 )
             else:
                 # Normal stop: mark sync completed
-                checkpoint.initial_sync_completed_at = datetime.now(UTC).replace(tzinfo=None)
+                checkpoint.initial_sync_completed_at = datetime.now(UTC)
                 checkpoint.status = SyncStatus.IDLE
                 checkpoint.error_message = None
                 await session.flush()

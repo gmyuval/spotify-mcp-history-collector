@@ -1,0 +1,92 @@
+"""MCP tool handlers for live Spotify API queries."""
+
+import logging
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.tokens import TokenManager
+from app.mcp.registry import registry
+from app.mcp.schemas import MCPToolParam
+from app.settings import get_settings
+from shared.spotify.client import SpotifyClient
+
+logger = logging.getLogger(__name__)
+
+_USER_PARAM = MCPToolParam(name="user_id", type="int", description="User ID (must have active OAuth)")
+
+
+@registry.register(
+    name="spotify.get_top",
+    description="Spotify's native top artists or tracks for the user (requires active OAuth)",
+    category="spotify",
+    parameters=[
+        _USER_PARAM,
+        MCPToolParam(name="entity", type="str", description="'artists' or 'tracks'", required=False, default="artists"),
+        MCPToolParam(
+            name="time_range",
+            type="str",
+            description="'short_term' (4w), 'medium_term' (6m), or 'long_term' (years)",
+            required=False,
+            default="medium_term",
+        ),
+        MCPToolParam(name="limit", type="int", description="Max results (1-50)", required=False, default=20),
+    ],
+)
+async def get_top(args: dict[str, Any], session: AsyncSession) -> Any:
+    settings = get_settings()
+    token_mgr = TokenManager(settings)
+    access_token = await token_mgr.get_valid_token(args["user_id"], session)
+    client = SpotifyClient(access_token)
+
+    entity = args.get("entity", "artists")
+    time_range = args.get("time_range", "medium_term")
+    limit = min(args.get("limit", 20), 50)
+
+    if entity == "tracks":
+        tracks_resp = await client.get_top_tracks(time_range=time_range, limit=limit)
+        return [{"name": t.name, "id": t.id, "artists": [a.name for a in t.artists]} for t in tracks_resp.items]
+    else:
+        artists_resp = await client.get_top_artists(time_range=time_range, limit=limit)
+        return [{"name": a.name, "id": a.id, "genres": a.genres or []} for a in artists_resp.items]
+
+
+@registry.register(
+    name="spotify.search",
+    description="Search Spotify for tracks, artists, or albums (requires active OAuth)",
+    category="spotify",
+    parameters=[
+        _USER_PARAM,
+        MCPToolParam(name="q", type="str", description="Search query"),
+        MCPToolParam(
+            name="type",
+            type="str",
+            description="'track', 'artist', or 'album'",
+            required=False,
+            default="track",
+        ),
+        MCPToolParam(name="limit", type="int", description="Max results (1-50)", required=False, default=10),
+    ],
+)
+async def search(args: dict[str, Any], session: AsyncSession) -> Any:
+    settings = get_settings()
+    token_mgr = TokenManager(settings)
+    access_token = await token_mgr.get_valid_token(args["user_id"], session)
+    client = SpotifyClient(access_token)
+
+    resp = await client.search(
+        args["q"],
+        search_type=args.get("type", "track"),
+        limit=min(args.get("limit", 10), 50),
+    )
+    results: list[dict[str, Any]] = []
+    if resp.tracks:
+        for t in resp.tracks.items:
+            results.append({"type": "track", "name": t.name, "id": t.id, "artists": [a.name for a in t.artists]})
+    if resp.artists:
+        for a in resp.artists.items:
+            results.append({"type": "artist", "name": a.name, "id": a.id})
+    if resp.albums:
+        for al in resp.albums.items:
+            results.append({"type": "album", "name": al.name, "id": al.id})
+    return results
