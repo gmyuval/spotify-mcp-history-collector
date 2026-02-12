@@ -2,11 +2,12 @@
 
 import io
 import zipfile
+from collections.abc import AsyncGenerator, Generator
 
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.dependencies import db_manager
 from app.main import app
@@ -28,7 +29,7 @@ def _test_settings() -> AppSettings:
 
 
 @pytest.fixture
-async def async_engine():  # type: ignore[no-untyped-def]
+async def async_engine() -> AsyncGenerator[AsyncEngine]:
     engine = create_async_engine("sqlite+aiosqlite://", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -39,10 +40,10 @@ async def async_engine():  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
-def override_deps(async_engine):  # type: ignore[no-untyped-def]
+def override_deps(async_engine: AsyncEngine) -> Generator[None]:
     session_factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
-    async def _override_session():  # type: ignore[no-untyped-def]
+    async def _override_session() -> AsyncGenerator[AsyncSession]:
         async with session_factory() as session:
             try:
                 yield session
@@ -58,12 +59,12 @@ def override_deps(async_engine):  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
-def client(override_deps) -> TestClient:  # type: ignore[no-untyped-def]
+def client(override_deps: None) -> TestClient:
     return TestClient(app)
 
 
 @pytest.fixture
-async def test_user(async_engine) -> int:  # type: ignore[no-untyped-def]
+async def test_user(async_engine: AsyncEngine) -> int:
     """Create a test user and return their ID."""
     session_factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:

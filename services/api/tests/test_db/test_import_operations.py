@@ -1,10 +1,11 @@
 """Tests for MusicRepository ZIP import methods."""
 
+from collections.abc import AsyncGenerator
 from datetime import datetime
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from shared.db.base import Base
 from shared.db.enums import TrackSource
@@ -15,7 +16,7 @@ from shared.zip_import.models import NormalizedPlayRecord
 
 
 @pytest.fixture
-async def async_engine():  # type: ignore[no-untyped-def]
+async def async_engine() -> AsyncGenerator[AsyncEngine]:
     engine = create_async_engine("sqlite+aiosqlite://", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -26,7 +27,7 @@ async def async_engine():  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
-async def async_session(async_engine):  # type: ignore[no-untyped-def]
+async def async_session(async_engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
     session_factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         yield session

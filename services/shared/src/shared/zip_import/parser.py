@@ -75,9 +75,11 @@ class ZipImportParser:
         if format_name == "extended":
             pattern = EXTENDED_HISTORY_PATTERN
             normalizer = normalize_extended_record
-        else:
+        elif format_name == "account_data":
             pattern = ACCOUNT_DATA_PATTERN
             normalizer = normalize_account_data_record
+        else:
+            raise ValueError(f"Unknown format_name: {format_name!r}")
 
         total_parsed = 0
         batch: list[NormalizedPlayRecord] = []

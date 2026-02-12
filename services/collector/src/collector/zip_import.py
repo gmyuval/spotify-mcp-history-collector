@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from collector.job_tracking import JobTracker
 from collector.settings import CollectorSettings
@@ -57,15 +57,20 @@ class ZipImportService:
         db_manager: DatabaseManager,
     ) -> None:
         """Process a single import job end-to-end."""
-        # Mark as processing and start job tracking
+        # Atomically claim the job (prevents concurrent double-processing)
         async with db_manager.session() as session:
-            result = await session.execute(select(ImportJob).where(ImportJob.id == job_id))
+            result = await session.execute(
+                update(ImportJob)
+                .where(ImportJob.id == job_id, ImportJob.status == ImportStatus.PENDING)
+                .values(
+                    status=ImportStatus.PROCESSING,
+                    started_at=datetime.now(UTC).replace(tzinfo=None),
+                )
+                .returning(ImportJob)
+            )
             import_job = result.scalar_one_or_none()
-            if import_job is None or import_job.status != ImportStatus.PENDING:
+            if import_job is None:
                 return
-
-            import_job.status = ImportStatus.PROCESSING
-            import_job.started_at = datetime.now(UTC).replace(tzinfo=None)
 
             job_run = await self._job_tracker.start_job(user_id, JobType.IMPORT_ZIP, session)
             job_run_id = job_run.id

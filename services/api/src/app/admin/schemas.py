@@ -11,7 +11,6 @@ class ImportJobResponse(BaseModel):
     id: int
     user_id: int
     status: str
-    file_path: str
     file_size_bytes: int
     created_at: datetime
 

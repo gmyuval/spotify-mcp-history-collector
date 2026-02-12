@@ -2,13 +2,16 @@
 
 import json
 import zipfile
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from cryptography.fernet import Fernet
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from collector.settings import CollectorSettings
 from collector.zip_import import ZipImportService
@@ -23,7 +26,7 @@ TEST_FERNET_KEY = Fernet.generate_key().decode()
 
 
 def _test_settings(**overrides: object) -> CollectorSettings:
-    defaults: dict[str, object] = {
+    defaults: dict[str, Any] = {
         "SPOTIFY_CLIENT_ID": "test-id",
         "SPOTIFY_CLIENT_SECRET": "test-secret",
         "TOKEN_ENCRYPTION_KEY": TEST_FERNET_KEY,
@@ -31,11 +34,11 @@ def _test_settings(**overrides: object) -> CollectorSettings:
         "IMPORT_MAX_RECORDS": 5_000_000,
     }
     defaults.update(overrides)
-    return CollectorSettings(**defaults)  # type: ignore[arg-type]
+    return CollectorSettings(**defaults)
 
 
 @pytest.fixture
-async def async_engine():  # type: ignore[no-untyped-def]
+async def async_engine() -> AsyncGenerator[AsyncEngine]:
     engine = create_async_engine("sqlite+aiosqlite://", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -46,22 +49,20 @@ async def async_engine():  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
-async def async_session(async_engine):  # type: ignore[no-untyped-def]
+async def async_session(async_engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
     session_factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         yield session
 
 
 @pytest.fixture
-def db_manager(async_engine):  # type: ignore[no-untyped-def]
+def db_manager(async_engine: AsyncEngine) -> AsyncMock:
     """Create a mock DatabaseManager that yields real sessions."""
-    from contextlib import asynccontextmanager
-
     manager = AsyncMock(spec=DatabaseManager)
     session_factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
     @asynccontextmanager
-    async def _mock_session():  # type: ignore[no-untyped-def]
+    async def _mock_session() -> AsyncGenerator[AsyncSession]:
         async with session_factory() as s:
             yield s
             await s.commit()

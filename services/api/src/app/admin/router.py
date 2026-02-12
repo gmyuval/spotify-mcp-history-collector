@@ -1,9 +1,11 @@
 """Admin API endpoints — user management, import uploads, status."""
 
+import functools
 import uuid
 from pathlib import Path
 from typing import Annotated
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,12 +44,13 @@ async def upload_import(
 
     # Prepare upload directory
     upload_dir = Path(settings.UPLOAD_DIR)
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    await anyio.to_thread.run_sync(lambda: upload_dir.mkdir(parents=True, exist_ok=True))
 
     max_bytes = settings.IMPORT_MAX_ZIP_SIZE_MB * 1024 * 1024
 
-    # Generate unique filename
-    safe_filename = f"{user_id}_{uuid.uuid4().hex}_{file.filename}"
+    # Generate unique filename (sanitize user-supplied name to prevent path traversal)
+    original_name = Path(file.filename).name
+    safe_filename = f"{user_id}_{uuid.uuid4().hex}_{original_name}"
     dest_path = upload_dir / safe_filename
 
     # Stream upload to disk with size check
@@ -62,16 +65,16 @@ async def upload_import(
                     break
                 total_size += len(chunk)
                 if total_size > max_bytes:
-                    dest_path.unlink(missing_ok=True)
+                    await anyio.to_thread.run_sync(lambda: dest_path.unlink(missing_ok=True))
                     raise HTTPException(
                         status_code=413,
                         detail=f"File exceeds maximum size of {settings.IMPORT_MAX_ZIP_SIZE_MB}MB",
                     )
-                dest.write(chunk)
+                await anyio.to_thread.run_sync(functools.partial(dest.write, chunk))
     except HTTPException:
         raise
     except Exception as exc:
-        dest_path.unlink(missing_ok=True)
+        await anyio.to_thread.run_sync(lambda: dest_path.unlink(missing_ok=True))
         raise HTTPException(status_code=500, detail=f"Failed to save file: {exc}") from exc
 
     # Create ImportJob
@@ -88,7 +91,6 @@ async def upload_import(
         id=import_job.id,
         user_id=import_job.user_id,
         status=import_job.status.value,
-        file_path=str(dest_path),
         file_size_bytes=total_size,
         created_at=import_job.created_at,
     )
