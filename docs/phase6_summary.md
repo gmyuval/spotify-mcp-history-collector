@@ -69,7 +69,7 @@ All other queries use standard SQLAlchemy constructs that work on both dialects.
 
 ### Layered Architecture
 
-```
+```text
 HTTP request → router.py → service.py → queries.py → SQLAlchemy → DB
                                            ↓
 MCP request → mcp/router.py → registry → handler → service.py → queries.py

@@ -36,8 +36,13 @@ _USER_PARAM = MCPToolParam(name="user_id", type="int", description="User ID (mus
 async def get_top(args: dict[str, Any], session: AsyncSession) -> Any:
     settings = get_settings()
     token_mgr = TokenManager(settings)
-    access_token = await token_mgr.get_valid_token(args["user_id"], session)
-    client = SpotifyClient(access_token)
+    user_id = args["user_id"]
+    access_token = await token_mgr.get_valid_token(user_id, session)
+
+    async def _on_token_expired() -> str:
+        return await token_mgr.refresh_access_token(user_id, session)
+
+    client = SpotifyClient(access_token, on_token_expired=_on_token_expired)
 
     entity = args.get("entity", "artists")
     time_range = args.get("time_range", "medium_term")
@@ -71,8 +76,13 @@ async def get_top(args: dict[str, Any], session: AsyncSession) -> Any:
 async def search(args: dict[str, Any], session: AsyncSession) -> Any:
     settings = get_settings()
     token_mgr = TokenManager(settings)
-    access_token = await token_mgr.get_valid_token(args["user_id"], session)
-    client = SpotifyClient(access_token)
+    user_id = args["user_id"]
+    access_token = await token_mgr.get_valid_token(user_id, session)
+
+    async def _on_token_expired() -> str:
+        return await token_mgr.refresh_access_token(user_id, session)
+
+    client = SpotifyClient(access_token, on_token_expired=_on_token_expired)
 
     resp = await client.search(
         args["q"],

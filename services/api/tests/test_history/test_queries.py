@@ -38,7 +38,7 @@ async def async_session(async_engine: AsyncEngine) -> AsyncGenerator[AsyncSessio
 
 
 @pytest.fixture
-async def seeded_session(async_session: AsyncSession) -> AsyncSession:
+async def seeded_session(async_session: AsyncSession) -> tuple[AsyncSession, int]:
     """Create a user, two artists, two tracks, link them, and insert plays."""
     user = User(spotify_user_id="quser", display_name="Q")
     async_session.add(user)
@@ -103,11 +103,12 @@ async def seeded_session(async_session: AsyncSession) -> AsyncSession:
     async_session.add_all(plays)
     await async_session.flush()
 
-    return async_session
+    return async_session, user.id
 
 
-async def test_query_top_artists(seeded_session: AsyncSession) -> None:
-    rows = await query_top_artists(1, seeded_session, days=3650, limit=10)
+async def test_query_top_artists(seeded_session: tuple[AsyncSession, int]) -> None:
+    session, user_id = seeded_session
+    rows = await query_top_artists(user_id, session, days=3650, limit=10)
     assert len(rows) == 2
     assert rows[0]["artist_name"] == "Artist A"
     assert rows[0]["play_count"] == 3
@@ -115,24 +116,27 @@ async def test_query_top_artists(seeded_session: AsyncSession) -> None:
     assert rows[1]["play_count"] == 2
 
 
-async def test_query_top_tracks(seeded_session: AsyncSession) -> None:
-    rows = await query_top_tracks(1, seeded_session, days=3650, limit=10)
+async def test_query_top_tracks(seeded_session: tuple[AsyncSession, int]) -> None:
+    session, user_id = seeded_session
+    rows = await query_top_tracks(user_id, session, days=3650, limit=10)
     assert len(rows) == 2
     assert rows[0]["track_name"] == "Track X"
     assert rows[0]["play_count"] == 3
     assert rows[0]["artist_name"] == "Artist A"
 
 
-async def test_query_play_stats(seeded_session: AsyncSession) -> None:
-    stats = await query_play_stats(1, seeded_session, days=3650)
+async def test_query_play_stats(seeded_session: tuple[AsyncSession, int]) -> None:
+    session, user_id = seeded_session
+    stats = await query_play_stats(user_id, session, days=3650)
     assert stats["total_plays"] == 5
     assert stats["unique_tracks"] == 2
     assert stats["unique_artists"] == 2
     assert stats["total_ms_played"] == 200000 + 210000 + 190000 + 180000 + 185000
 
 
-async def test_query_heatmap(seeded_session: AsyncSession) -> None:
-    cells = await query_heatmap(1, seeded_session, days=3650)
+async def test_query_heatmap(seeded_session: tuple[AsyncSession, int]) -> None:
+    session, user_id = seeded_session
+    cells = await query_heatmap(user_id, session, days=3650)
     assert len(cells) > 0
     total = sum(c["play_count"] for c in cells)
     assert total == 5
@@ -142,8 +146,9 @@ async def test_query_heatmap(seeded_session: AsyncSession) -> None:
         assert 0 <= c["hour"] <= 23
 
 
-async def test_query_coverage(seeded_session: AsyncSession) -> None:
-    cov = await query_coverage(1, seeded_session, days=3650)
+async def test_query_coverage(seeded_session: tuple[AsyncSession, int]) -> None:
+    session, user_id = seeded_session
+    cov = await query_coverage(user_id, session, days=3650)
     assert cov["total_plays"] == 5
     assert cov["api_source_count"] == 3
     assert cov["import_source_count"] == 2

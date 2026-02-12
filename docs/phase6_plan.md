@@ -130,7 +130,7 @@ Stateless service class that:
 
 #### `history/router.py` — Direct REST Endpoints
 
-```
+```text
 GET /history/users/{user_id}/top-artists?days=90&limit=20
 GET /history/users/{user_id}/top-tracks?days=90&limit=20
 GET /history/users/{user_id}/heatmap?days=90
