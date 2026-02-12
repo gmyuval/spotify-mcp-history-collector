@@ -21,6 +21,10 @@ class AppSettings(BaseSettings):
     OAUTH_STATE_TTL_SECONDS: int = DEFAULT_OAUTH_STATE_TTL_SECONDS
     TOKEN_EXPIRY_BUFFER_SECONDS: int = DEFAULT_TOKEN_EXPIRY_BUFFER_SECONDS
 
+    # Import uploads
+    UPLOAD_DIR: str = "/app/uploads"
+    IMPORT_MAX_ZIP_SIZE_MB: int = 500
+
     model_config = {"env_prefix": ""}
 
 

@@ -7,7 +7,7 @@ from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String,
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from shared.db.base import Base
+from shared.db.base import Base, enum_values, utc_now
 from shared.db.enums import ImportStatus, JobStatus, JobType, SyncStatus
 
 if TYPE_CHECKING:
@@ -23,7 +23,11 @@ class SyncCheckpoint(Base):
     user_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    status: Mapped[SyncStatus] = mapped_column(SQLEnum(SyncStatus), nullable=False, default=SyncStatus.IDLE)
+    status: Mapped[SyncStatus] = mapped_column(
+        SQLEnum(SyncStatus, values_callable=enum_values),
+        nullable=False,
+        default=SyncStatus.IDLE,
+    )
 
     # Initial sync tracking
     initial_sync_started_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -36,10 +40,8 @@ class SyncCheckpoint(Base):
     last_poll_latest_played_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     error_message: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user: Mapped[User] = relationship("User", back_populates="sync_checkpoint")
@@ -52,9 +54,13 @@ class JobRun(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    job_type: Mapped[JobType] = mapped_column(SQLEnum(JobType), nullable=False)
-    status: Mapped[JobStatus] = mapped_column(SQLEnum(JobStatus), nullable=False, default=JobStatus.RUNNING)
-    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    job_type: Mapped[JobType] = mapped_column(SQLEnum(JobType, values_callable=enum_values), nullable=False)
+    status: Mapped[JobStatus] = mapped_column(
+        SQLEnum(JobStatus, values_callable=enum_values),
+        nullable=False,
+        default=JobStatus.RUNNING,
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Statistics
@@ -82,7 +88,11 @@ class ImportJob(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    status: Mapped[ImportStatus] = mapped_column(SQLEnum(ImportStatus), nullable=False, default=ImportStatus.PENDING)
+    status: Mapped[ImportStatus] = mapped_column(
+        SQLEnum(ImportStatus, values_callable=enum_values),
+        nullable=False,
+        default=ImportStatus.PENDING,
+    )
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     file_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
@@ -95,7 +105,7 @@ class ImportJob(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
     error_message: Mapped[str | None] = mapped_column(Text)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
 
     # Relationships
     user: Mapped[User] = relationship("User", back_populates="import_jobs")
