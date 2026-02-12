@@ -6,10 +6,34 @@
 #
 annotated-types==0.7.0
     # via pydantic
+anyio==4.12.1
+    # via httpx
 asyncpg==0.31.0
+    # via spotify-mcp-shared (services/shared/pyproject.toml)
+certifi==2026.1.4
+    # via
+    #   httpcore
+    #   httpx
+cffi==2.0.0
+    # via cryptography
+cryptography==46.0.5
     # via spotify-mcp-shared (services/shared/pyproject.toml)
 greenlet==3.3.1
     # via sqlalchemy
+h11==0.16.0
+    # via httpcore
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via spotify-mcp-shared (services/shared/pyproject.toml)
+idna==3.11
+    # via
+    #   anyio
+    #   httpx
+ijson==3.4.0.post0
+    # via spotify-mcp-shared (services/shared/pyproject.toml)
+pycparser==3.0
+    # via cffi
 pydantic==2.12.5
     # via
     #   pydantic-settings

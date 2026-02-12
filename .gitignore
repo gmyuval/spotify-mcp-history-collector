@@ -149,6 +149,16 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Test artifacts & uploads
+test_uploads/
+test_export.zip
+
+# Personal Spotify data exports
+resources/my_spotify_data.zip
+
+# VS Code
+.vscode/
+
 # pytype static type analyzer
 .pytype/
 

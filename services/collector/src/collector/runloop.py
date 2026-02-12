@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from collector.initial_sync import InitialSyncService
 from collector.polling import PollingService
 from collector.settings import CollectorSettings
+from collector.zip_import import ZipImportService
 from shared.db.enums import SyncStatus
 from shared.db.models.operations import SyncCheckpoint
 from shared.db.models.user import User
@@ -26,6 +27,7 @@ class CollectorRunLoop:
         self._db_manager = db_manager
         self._polling_service = PollingService(settings)
         self._initial_sync_service = InitialSyncService(settings)
+        self._zip_import_service = ZipImportService(settings)
         self._user_semaphore = asyncio.Semaphore(self._settings.INITIAL_SYNC_CONCURRENCY)
 
     async def run(self, shutdown_event: asyncio.Event) -> None:
@@ -54,8 +56,13 @@ class CollectorRunLoop:
         """Execute one full collector cycle."""
         logger.info("Starting collector cycle")
 
-        # Phase 1: ZIP imports (placeholder for Phase 5)
-        # TODO: process pending import_jobs here
+        # Phase 1: ZIP imports
+        try:
+            imported = await self._zip_import_service.process_pending_imports(self._db_manager)
+            if imported:
+                logger.info("Processed %d ZIP import job(s)", imported)
+        except Exception:
+            logger.exception("Error during ZIP import phase")
 
         # Phase 2 & 3: Process each user (initial sync or polling)
         async with self._db_manager.session() as session:

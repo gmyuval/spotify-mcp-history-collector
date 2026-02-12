@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from shared.db.base import Base
+from shared.db.base import Base, utc_now
 
 if TYPE_CHECKING:
     from shared.db.models.music import Play
@@ -24,10 +24,8 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(255))
     country: Mapped[str | None] = mapped_column(String(10))
     product: Mapped[str | None] = mapped_column(String(50))
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
     # Relationships
     token: Mapped[SpotifyToken | None] = relationship("SpotifyToken", back_populates="user", uselist=False)
@@ -50,10 +48,8 @@ class SpotifyToken(Base):
     access_token: Mapped[str | None] = mapped_column(Text)
     token_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
     scope: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user: Mapped[User] = relationship("User", back_populates="token")

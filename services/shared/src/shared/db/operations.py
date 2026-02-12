@@ -13,6 +13,7 @@ from shared.spotify.models import (
     SpotifyPlayHistoryItem,
     SpotifyTrack,
 )
+from shared.zip_import.models import NormalizedPlayRecord
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +220,161 @@ class MusicRepository:
         skipped = 0
         for item in items:
             play = await self.process_play_history_item(item, user_id, session)
+            if play is not None:
+                inserted += 1
+            else:
+                skipped += 1
+        return inserted, skipped
+
+    # --- ZIP Import Methods ---
+
+    async def upsert_track_from_import(
+        self,
+        *,
+        track_name: str,
+        album_name: str | None,
+        spotify_track_id: str | None,
+        local_track_id: str,
+        session: AsyncSession,
+    ) -> Track:
+        """Insert or update a track from a ZIP import.
+
+        Resolution order:
+        1. Match by spotify_track_id if present
+        2. Match by local_track_id
+        3. Create new record
+        """
+        if spotify_track_id:
+            result = await session.execute(select(Track).where(Track.spotify_track_id == spotify_track_id))
+            existing = result.scalar_one_or_none()
+            if existing:
+                if not existing.local_track_id:
+                    existing.local_track_id = local_track_id
+                return existing
+
+        result = await session.execute(select(Track).where(Track.local_track_id == local_track_id))
+        existing = result.scalar_one_or_none()
+        if existing:
+            if spotify_track_id and not existing.spotify_track_id:
+                existing.spotify_track_id = spotify_track_id
+            return existing
+
+        track = Track(
+            spotify_track_id=spotify_track_id,
+            local_track_id=local_track_id,
+            name=track_name,
+            album_name=album_name,
+            source=TrackSource.IMPORT_ZIP,
+        )
+        session.add(track)
+        await session.flush()
+        return track
+
+    async def upsert_artist_from_import(
+        self,
+        *,
+        artist_name: str,
+        local_artist_id: str,
+        session: AsyncSession,
+    ) -> Artist:
+        """Insert or update an artist from a ZIP import.
+
+        Matches by local_artist_id first, then by name.
+        """
+        result = await session.execute(select(Artist).where(Artist.local_artist_id == local_artist_id))
+        existing = result.scalar_one_or_none()
+        if existing:
+            return existing
+
+        result = await session.execute(select(Artist).where(Artist.name == artist_name).limit(1))
+        existing = result.scalar_one_or_none()
+        if existing:
+            if not existing.local_artist_id:
+                existing.local_artist_id = local_artist_id
+            return existing
+
+        artist = Artist(
+            local_artist_id=local_artist_id,
+            name=artist_name,
+            source=TrackSource.IMPORT_ZIP,
+        )
+        session.add(artist)
+        await session.flush()
+        return artist
+
+    async def insert_play_from_import(
+        self,
+        *,
+        user_id: int,
+        track_id: int,
+        played_at: datetime,
+        ms_played: int,
+        session: AsyncSession,
+    ) -> Play | None:
+        """Insert a play record from a ZIP import. Returns None if duplicate."""
+        result = await session.execute(
+            select(Play).where(
+                Play.user_id == user_id,
+                Play.played_at == played_at,
+                Play.track_id == track_id,
+            )
+        )
+        if result.scalar_one_or_none():
+            return None
+
+        play = Play(
+            user_id=user_id,
+            track_id=track_id,
+            played_at=played_at,
+            ms_played=ms_played,
+            source=TrackSource.IMPORT_ZIP,
+        )
+        session.add(play)
+        await session.flush()
+        return play
+
+    async def process_import_record(
+        self,
+        record: NormalizedPlayRecord,
+        user_id: int,
+        session: AsyncSession,
+    ) -> Play | None:
+        """Process a single normalized import record: upsert track + artist, insert play."""
+        db_artist = await self.upsert_artist_from_import(
+            artist_name=record.artist_name,
+            local_artist_id=record.local_artist_id,
+            session=session,
+        )
+
+        db_track = await self.upsert_track_from_import(
+            track_name=record.track_name,
+            album_name=record.album_name,
+            spotify_track_id=record.spotify_track_id,
+            local_track_id=record.local_track_id,
+            session=session,
+        )
+
+        await self.link_track_artists(db_track.id, [db_artist.id], session)
+
+        return await self.insert_play_from_import(
+            user_id=user_id,
+            track_id=db_track.id,
+            played_at=record.played_at,
+            ms_played=record.ms_played,
+            session=session,
+        )
+
+    async def batch_process_import_records(
+        self,
+        records: list[NormalizedPlayRecord],
+        user_id: int,
+        session: AsyncSession,
+    ) -> tuple[int, int]:
+        """Process a batch of normalized import records. Returns (inserted, skipped)."""
+        inserted = 0
+        skipped = 0
+        for record in records:
+            play = await self.process_import_record(record, user_id, session)
             if play is not None:
                 inserted += 1
             else:

@@ -19,7 +19,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from shared.db.base import Base
+from shared.db.base import Base, enum_values, utc_now
 from shared.db.enums import TrackSource
 
 if TYPE_CHECKING:
@@ -39,11 +39,13 @@ class Track(Base):
     album_name: Mapped[str | None] = mapped_column(String(500))
     album_spotify_id: Mapped[str | None] = mapped_column(String(255))
     isrc: Mapped[str | None] = mapped_column(String(50))
-    source: Mapped[TrackSource] = mapped_column(SQLEnum(TrackSource), nullable=False, default=TrackSource.SPOTIFY_API)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    source: Mapped[TrackSource] = mapped_column(
+        SQLEnum(TrackSource, values_callable=enum_values),
+        nullable=False,
+        default=TrackSource.SPOTIFY_API,
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
     # Relationships
     artists: Mapped[list[Artist]] = relationship("Artist", secondary="track_artists", back_populates="tracks")
@@ -61,11 +63,13 @@ class Artist(Base):
     local_artist_id: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     genres: Mapped[str | None] = mapped_column(Text)
-    source: Mapped[TrackSource] = mapped_column(SQLEnum(TrackSource), nullable=False, default=TrackSource.SPOTIFY_API)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    source: Mapped[TrackSource] = mapped_column(
+        SQLEnum(TrackSource, values_callable=enum_values),
+        nullable=False,
+        default=TrackSource.SPOTIFY_API,
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
     # Relationships
     tracks: Mapped[list[Track]] = relationship("Track", secondary="track_artists", back_populates="artists")
@@ -95,8 +99,12 @@ class Play(Base):
     ms_played: Mapped[int | None] = mapped_column(Integer)
     context_type: Mapped[str | None] = mapped_column(String(50))
     context_uri: Mapped[str | None] = mapped_column(String(255))
-    source: Mapped[TrackSource] = mapped_column(SQLEnum(TrackSource), nullable=False, default=TrackSource.SPOTIFY_API)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    source: Mapped[TrackSource] = mapped_column(
+        SQLEnum(TrackSource, values_callable=enum_values),
+        nullable=False,
+        default=TrackSource.SPOTIFY_API,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
 
     # Relationships
     user: Mapped[User] = relationship("User", back_populates="plays")
@@ -131,7 +139,7 @@ class AudioFeatures(Base):
     valence: Mapped[float | None] = mapped_column(Float)
     tempo: Mapped[float | None] = mapped_column(Float)
     time_signature: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now)
 
     # Relationships
     track: Mapped[Track] = relationship("Track", back_populates="audio_features")
