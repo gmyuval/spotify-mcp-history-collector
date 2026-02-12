@@ -45,8 +45,14 @@ async def get_top(args: dict[str, Any], session: AsyncSession) -> Any:
     client = SpotifyClient(access_token, on_token_expired=_on_token_expired)
 
     entity = args.get("entity", "artists")
+    if entity not in {"artists", "tracks"}:
+        raise ValueError("entity must be 'artists' or 'tracks'")
+
     time_range = args.get("time_range", "medium_term")
-    limit = min(args.get("limit", 20), 50)
+    if time_range not in {"short_term", "medium_term", "long_term"}:
+        raise ValueError("time_range must be 'short_term', 'medium_term', or 'long_term'")
+
+    limit = max(1, min(args.get("limit", 20), 50))
 
     if entity == "tracks":
         tracks_resp = await client.get_top_tracks(time_range=time_range, limit=limit)
@@ -84,10 +90,16 @@ async def search(args: dict[str, Any], session: AsyncSession) -> Any:
 
     client = SpotifyClient(access_token, on_token_expired=_on_token_expired)
 
+    search_type = args.get("type", "track")
+    if search_type not in {"track", "artist", "album"}:
+        raise ValueError("type must be 'track', 'artist', or 'album'")
+
+    limit = max(1, min(args.get("limit", 10), 50))
+
     resp = await client.search(
         args["q"],
-        search_type=args.get("type", "track"),
-        limit=min(args.get("limit", 10), 50),
+        search_type=search_type,
+        limit=limit,
     )
     results: list[dict[str, Any]] = []
     if resp.tracks:
