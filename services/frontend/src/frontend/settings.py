@@ -1,6 +1,7 @@
 """Frontend settings loaded from environment variables."""
 
 import functools
+from typing import Literal
 
 from pydantic_settings import BaseSettings
 
@@ -9,7 +10,7 @@ class FrontendSettings(BaseSettings):
     """Frontend service configuration."""
 
     API_BASE_URL: str = "http://api:8000"
-    FRONTEND_AUTH_MODE: str = "token"  # "token", "basic", or "" (disabled)
+    FRONTEND_AUTH_MODE: Literal["token", "basic", ""] = "token"
     ADMIN_TOKEN: str = ""
     ADMIN_USERNAME: str = ""
     ADMIN_PASSWORD: str = ""

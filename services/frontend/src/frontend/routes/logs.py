@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from frontend.api_client import AdminApiClient, ApiError
+from frontend.routes._helpers import safe_int
 
 router = APIRouter()
 
@@ -69,6 +70,8 @@ async def purge_logs(request: Request) -> HTMLResponse:
 
     try:
         days = int(days_str)
+        if days < 1:
+            raise ValueError("days must be positive")
         result = await api.purge_logs(older_than_days=days)
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "partials/_alert.html",
@@ -96,8 +99,8 @@ async def purge_logs(request: Request) -> HTMLResponse:
 
 def _extract_filters(request: Request) -> dict[str, Any]:
     """Extract filter query params from the request."""
-    limit = int(request.query_params.get("limit", "50"))
-    offset = int(request.query_params.get("offset", "0"))
+    limit = safe_int(request.query_params.get("limit"), 50)
+    offset = safe_int(request.query_params.get("offset"), 0)
     service = request.query_params.get("service", "")
     level = request.query_params.get("level", "")
     user_id_str = request.query_params.get("user_id", "")

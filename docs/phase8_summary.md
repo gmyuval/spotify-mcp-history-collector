@@ -6,7 +6,7 @@ Phase 8 transforms the blank frontend skeleton into a fully functional server-re
 
 ## Architecture
 
-```
+```text
 Browser → Frontend (port 8001, Jinja2 + HTMX) → API (port 8000, REST JSON)
 ```
 
@@ -67,7 +67,7 @@ Browser → Frontend (port 8001, Jinja2 + HTMX) → API (port 8000, REST JSON)
 
 ## Test Results
 
-```
+```text
 Frontend:  40 passed (19 api_client + 21 routes)
 API:      171 passed
 Collector: 28 passed

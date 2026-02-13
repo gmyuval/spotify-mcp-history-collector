@@ -1,9 +1,12 @@
 """User management pages — list, detail, and actions."""
 
+import asyncio
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from frontend.api_client import AdminApiClient, ApiError
+from frontend.routes._helpers import safe_int
 
 router = APIRouter()
 
@@ -15,8 +18,8 @@ async def list_users(request: Request) -> HTMLResponse:
     error: str | None = None
     data: dict[str, object] = {"items": [], "total": 0, "limit": 50, "offset": 0}
 
-    limit = int(request.query_params.get("limit", "50"))
-    offset = int(request.query_params.get("offset", "0"))
+    limit = safe_int(request.query_params.get("limit"), 50)
+    offset = safe_int(request.query_params.get("offset"), 0)
 
     try:
         data = await api.list_users(limit=limit, offset=offset)
@@ -41,8 +44,8 @@ async def list_users(request: Request) -> HTMLResponse:
 async def users_table_partial(request: Request) -> HTMLResponse:
     """HTMX partial — users table body with pagination."""
     api: AdminApiClient = request.app.state.api
-    limit = int(request.query_params.get("limit", "50"))
-    offset = int(request.query_params.get("offset", "0"))
+    limit = safe_int(request.query_params.get("limit"), 50)
+    offset = safe_int(request.query_params.get("offset"), 0)
 
     try:
         data = await api.list_users(limit=limit, offset=offset)
@@ -71,11 +74,14 @@ async def user_detail(request: Request, user_id: int) -> HTMLResponse:
     recent_imports: list[object] = []
 
     try:
-        user = await api.get_user(user_id)
-        jobs_data = await api.list_job_runs(user_id=user_id, limit=10)
-        recent_jobs = jobs_data.get("items", [])
-        imports_data = await api.list_import_jobs(user_id=user_id, limit=10)
-        recent_imports = imports_data.get("items", [])
+        user_result, jobs_data, imports_data = await asyncio.gather(
+            api.get_user(user_id),
+            api.list_job_runs(user_id=user_id, limit=10),
+            api.list_import_jobs(user_id=user_id, limit=10),
+        )
+        user = dict(user_result)
+        recent_jobs = list(jobs_data.get("items", []))
+        recent_imports = list(imports_data.get("items", []))
     except ApiError as e:
         error = e.detail
 

@@ -22,29 +22,7 @@
         </tr>
       </thead>
       <tbody id="users-tbody">
-        {% for user in users %}
-        <tr>
-          <td>{{ user.id }}</td>
-          <td><code>{{ user.spotify_user_id }}</code></td>
-          <td>{{ user.display_name or "—" }}</td>
-          <td>
-            {% if user.sync_status == "idle" %}<span class="badge bg-success">idle</span>
-            {% elif user.sync_status == "paused" %}<span class="badge bg-warning text-dark">paused</span>
-            {% elif user.sync_status == "syncing" %}<span class="badge bg-primary">syncing</span>
-            {% elif user.sync_status == "error" %}<span class="badge bg-danger">error</span>
-            {% else %}<span class="badge bg-secondary">{{ user.sync_status or "unknown" }}</span>{% endif %}
-          </td>
-          <td>{{ user.last_poll_completed_at[:19] if user.last_poll_completed_at else "—" }}</td>
-          <td>{{ user.initial_sync_completed_at[:19] if user.initial_sync_completed_at else "—" }}</td>
-          <td>{{ user.created_at[:10] if user.created_at else "—" }}</td>
-          <td>
-            <a href="/users/{{ user.id }}" class="btn btn-sm btn-outline-primary">View</a>
-          </td>
-        </tr>
-        {% endfor %}
-        {% if not users %}
-        <tr><td colspan="8" class="text-muted text-center py-3">No users found</td></tr>
-        {% endif %}
+        {% include "partials/_users_table.html" %}
       </tbody>
     </table>
   </div>

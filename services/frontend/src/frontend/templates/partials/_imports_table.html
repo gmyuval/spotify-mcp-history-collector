@@ -10,7 +10,7 @@
     {% else %}<span class="badge bg-secondary">{{ imp.status }}</span>{% endif %}
   </td>
   <td>{{ imp.format_detected or "—" }}</td>
-  <td>{{ imp.records_ingested }}</td>
+  <td>{{ imp.records_ingested | default(0, true) }}</td>
   <td>
     {% if imp.earliest_played_at and imp.latest_played_at %}
       {{ imp.earliest_played_at[:10] }} — {{ imp.latest_played_at[:10] }}
