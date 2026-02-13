@@ -1,0 +1,30 @@
+{% for job in jobs %}
+<tr>
+  <td>{{ job.id }}</td>
+  <td><a href="/users/{{ job.user_id }}">{{ job.user_id }}</a></td>
+  <td><span class="badge bg-secondary">{{ job.job_type }}</span></td>
+  <td>
+    {% if job.status == "success" %}<span class="badge bg-success">{{ job.status }}</span>
+    {% elif job.status == "error" %}<span class="badge bg-danger">{{ job.status }}</span>
+    {% elif job.status == "running" %}<span class="badge bg-primary">{{ job.status }}</span>
+    {% else %}<span class="badge bg-secondary">{{ job.status }}</span>{% endif %}
+  </td>
+  <td>{{ job.records_fetched }}</td>
+  <td>{{ job.records_inserted }}</td>
+  <td>{{ job.records_skipped }}</td>
+  <td>{{ job.started_at[:19] if job.started_at else "—" }}</td>
+  <td>{{ job.completed_at[:19] if job.completed_at else "—" }}</td>
+  <td class="log-message">{{ job.error_message or "—" }}</td>
+</tr>
+{% endfor %}
+{% if not jobs %}
+<tr><td colspan="10" class="text-muted text-center py-3">No job runs found</td></tr>
+{% endif %}
+
+{% if total > limit %}
+<div id="jobs-pagination" hx-swap-oob="innerHTML">
+  {% with url="/jobs/partials/jobs-table", target="#jobs-tbody" %}
+  {% include "partials/_pagination.html" %}
+  {% endwith %}
+</div>
+{% endif %}

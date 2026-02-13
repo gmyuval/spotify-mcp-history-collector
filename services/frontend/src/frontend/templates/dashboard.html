@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h2 class="mb-4">Dashboard</h2>
+
+<!-- Sync status cards — auto-refresh every 30s -->
+<div id="sync-status-cards"
+     hx-get="/partials/sync-status"
+     hx-trigger="every 30s"
+     hx-swap="innerHTML">
+  {% include "partials/_sync_status.html" %}
+</div>
+
+<!-- Recent errors -->
+{% if sync_status.recent_errors %}
+<div class="card mt-4">
+  <div class="card-header"><strong>Recent Errors</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-striped mb-0">
+      <thead><tr>
+        <th>Job ID</th><th>User</th><th>Type</th><th>Error</th><th>Started</th>
+      </tr></thead>
+      <tbody>
+        {% for err in sync_status.recent_errors %}
+        <tr>
+          <td>{{ err.job_run_id }}</td>
+          <td><a href="/users/{{ err.user_id }}">{{ err.user_id }}</a></td>
+          <td><span class="badge bg-secondary">{{ err.job_type }}</span></td>
+          <td class="log-message">{{ err.error_message or "—" }}</td>
+          <td>{{ err.started_at[:19] if err.started_at else "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="row mt-4">
+  <!-- Recent job runs -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <strong>Recent Job Runs</strong>
+        <a href="/jobs" class="btn btn-sm btn-outline-primary">View all</a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-striped mb-0">
+          <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Records</th><th>Started</th></tr></thead>
+          <tbody>
+            {% for job in recent_jobs %}
+            <tr>
+              <td>{{ job.id }}</td>
+              <td><span class="badge bg-secondary">{{ job.job_type }}</span></td>
+              <td>
+                {% if job.status == "success" %}<span class="badge bg-success">{{ job.status }}</span>
+                {% elif job.status == "error" %}<span class="badge bg-danger">{{ job.status }}</span>
+                {% elif job.status == "running" %}<span class="badge bg-primary">{{ job.status }}</span>
+                {% else %}<span class="badge bg-secondary">{{ job.status }}</span>{% endif %}
+              </td>
+              <td>{{ job.records_inserted }}</td>
+              <td>{{ job.started_at[:19] if job.started_at else "—" }}</td>
+            </tr>
+            {% endfor %}
+            {% if not recent_jobs %}<tr><td colspan="5" class="text-muted text-center">No job runs yet</td></tr>{% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent imports -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <strong>Recent Imports</strong>
+        <a href="/imports" class="btn btn-sm btn-outline-primary">View all</a>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm table-striped mb-0">
+          <thead><tr><th>ID</th><th>User</th><th>Status</th><th>Records</th><th>Created</th></tr></thead>
+          <tbody>
+            {% for imp in recent_imports %}
+            <tr>
+              <td>{{ imp.id }}</td>
+              <td><a href="/users/{{ imp.user_id }}">{{ imp.user_id }}</a></td>
+              <td>
+                {% if imp.status == "success" %}<span class="badge bg-success">{{ imp.status }}</span>
+                {% elif imp.status == "error" %}<span class="badge bg-danger">{{ imp.status }}</span>
+                {% elif imp.status == "processing" %}<span class="badge bg-primary">{{ imp.status }}</span>
+                {% else %}<span class="badge bg-secondary">{{ imp.status }}</span>{% endif %}
+              </td>
+              <td>{{ imp.records_ingested }}</td>
+              <td>{{ imp.created_at[:19] if imp.created_at else "—" }}</td>
+            </tr>
+            {% endfor %}
+            {% if not recent_imports %}<tr><td colspan="5" class="text-muted text-center">No imports yet</td></tr>{% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

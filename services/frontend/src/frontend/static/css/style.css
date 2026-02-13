@@ -1,0 +1,75 @@
+/* Sidebar layout */
+#sidebar {
+  width: 220px;
+  min-height: 100vh;
+  position: sticky;
+  top: 0;
+}
+
+.active-link {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+/* Stat cards on dashboard */
+.stat-card {
+  text-align: center;
+}
+.stat-card .display-6 {
+  font-weight: 700;
+}
+
+/* Tables */
+.table th {
+  white-space: nowrap;
+}
+
+/* Badge overrides for consistency */
+.badge {
+  font-weight: 500;
+  text-transform: lowercase;
+}
+
+/* Log viewer */
+.log-message {
+  max-width: 500px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.log-message:hover {
+  white-space: normal;
+  overflow: visible;
+}
+
+/* HTMX loading indicator */
+.htmx-indicator {
+  display: none;
+}
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  display: inline-block;
+}
+
+/* Toast animation */
+.toast-msg {
+  animation: fadeIn 0.3s ease-in;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive: collapse sidebar on small screens */
+@media (max-width: 768px) {
+  #sidebar {
+    width: 60px;
+  }
+  #sidebar h5,
+  #sidebar .nav-link {
+    font-size: 0;
+  }
+  #sidebar .nav-link::first-letter {
+    font-size: 1rem;
+  }
+}
