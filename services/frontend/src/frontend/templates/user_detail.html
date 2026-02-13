@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}User {{ user.display_name or user.spotify_user_id or "" }}{% endblock %}
+{% block content %}
+{% if not user %}
+<div class="alert alert-warning">User not found.</div>
+{% else %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2>{{ user.display_name or user.spotify_user_id }}</h2>
+  <a href="/users" class="btn btn-outline-secondary btn-sm">Back to Users</a>
+</div>
+
+<div class="row g-4">
+  <!-- Profile card -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><strong>Profile</strong></div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <tr><th>ID</th><td>{{ user.id }}</td></tr>
+          <tr><th>Spotify ID</th><td><code>{{ user.spotify_user_id }}</code></td></tr>
+          <tr><th>Email</th><td>{{ user.email or "—" }}</td></tr>
+          <tr><th>Country</th><td>{{ user.country or "—" }}</td></tr>
+          <tr><th>Product</th><td>{{ user.product or "—" }}</td></tr>
+          <tr><th>Created</th><td>{{ user.created_at[:19] if user.created_at else "—" }}</td></tr>
+          <tr><th>Updated</th><td>{{ user.updated_at[:19] if user.updated_at else "—" }}</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sync state card -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><strong>Sync State</strong></div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <tr>
+            <th>Status</th>
+            <td>
+              {% if user.sync_status == "idle" %}<span class="badge bg-success">idle</span>
+              {% elif user.sync_status == "paused" %}<span class="badge bg-warning text-dark">paused</span>
+              {% elif user.sync_status == "syncing" %}<span class="badge bg-primary">syncing</span>
+              {% elif user.sync_status == "error" %}<span class="badge bg-danger">error</span>
+              {% else %}<span class="badge bg-secondary">{{ user.sync_status or "unknown" }}</span>{% endif %}
+            </td>
+          </tr>
+          <tr><th>Initial Sync Started</th><td>{{ user.initial_sync_started_at[:19] if user.initial_sync_started_at else "—" }}</td></tr>
+          <tr><th>Initial Sync Completed</th><td>{{ user.initial_sync_completed_at[:19] if user.initial_sync_completed_at else "—" }}</td></tr>
+          <tr><th>Earliest Play (Initial)</th><td>{{ user.initial_sync_earliest_played_at[:19] if user.initial_sync_earliest_played_at else "—" }}</td></tr>
+          <tr><th>Last Poll Started</th><td>{{ user.last_poll_started_at[:19] if user.last_poll_started_at else "—" }}</td></tr>
+          <tr><th>Last Poll Completed</th><td>{{ user.last_poll_completed_at[:19] if user.last_poll_completed_at else "—" }}</td></tr>
+          <tr><th>Latest Play (Poll)</th><td>{{ user.last_poll_latest_played_at[:19] if user.last_poll_latest_played_at else "—" }}</td></tr>
+          <tr>
+            <th>Token Expires</th>
+            <td>
+              {% if user.token_expires_at %}
+                {{ user.token_expires_at[:19] }}
+              {% else %}
+                <span class="text-muted">No token</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% if user.error_message %}
+          <tr><th>Error</th><td class="text-danger">{{ user.error_message }}</td></tr>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Actions -->
+<div class="card mt-4">
+  <div class="card-header"><strong>Actions</strong></div>
+  <div class="card-body">
+    <div class="d-flex gap-2 flex-wrap">
+      {% if user.sync_status == "paused" %}
+      <button class="btn btn-success btn-sm"
+              hx-post="/users/{{ user.id }}/resume"
+              hx-target="#action-result"
+              hx-swap="innerHTML">Resume Sync</button>
+      {% else %}
+      <button class="btn btn-warning btn-sm"
+              hx-post="/users/{{ user.id }}/pause"
+              hx-target="#action-result"
+              hx-swap="innerHTML">Pause Sync</button>
+      {% endif %}
+      <button class="btn btn-info btn-sm"
+              hx-post="/users/{{ user.id }}/trigger-sync"
+              hx-target="#action-result"
+              hx-swap="innerHTML">Trigger Re-sync</button>
+      <button class="btn btn-danger btn-sm"
+              hx-delete="/users/{{ user.id }}"
+              hx-target="#action-result"
+              hx-swap="innerHTML"
+              hx-confirm="Are you sure you want to delete this user and all associated data?">Delete User</button>
+    </div>
+    <div id="action-result" class="mt-2"></div>
+  </div>
+</div>
+
+<!-- Recent job runs -->
+<div class="card mt-4">
+  <div class="card-header"><strong>Recent Job Runs</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-striped mb-0">
+      <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Fetched</th><th>Inserted</th><th>Skipped</th><th>Started</th><th>Error</th></tr></thead>
+      <tbody>
+        {% for job in recent_jobs %}
+        <tr>
+          <td>{{ job.id }}</td>
+          <td><span class="badge bg-secondary">{{ job.job_type }}</span></td>
+          <td>
+            {% if job.status == "success" %}<span class="badge bg-success">{{ job.status }}</span>
+            {% elif job.status == "error" %}<span class="badge bg-danger">{{ job.status }}</span>
+            {% elif job.status == "running" %}<span class="badge bg-primary">{{ job.status }}</span>
+            {% else %}<span class="badge bg-secondary">{{ job.status }}</span>{% endif %}
+          </td>
+          <td>{{ job.records_fetched }}</td>
+          <td>{{ job.records_inserted }}</td>
+          <td>{{ job.records_skipped }}</td>
+          <td>{{ job.started_at[:19] if job.started_at else "—" }}</td>
+          <td class="log-message">{{ job.error_message or "—" }}</td>
+        </tr>
+        {% endfor %}
+        {% if not recent_jobs %}<tr><td colspan="8" class="text-muted text-center">No jobs yet</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Recent imports -->
+<div class="card mt-4">
+  <div class="card-header"><strong>Recent Imports</strong></div>
+  <div class="card-body p-0">
+    <table class="table table-sm table-striped mb-0">
+      <thead><tr><th>ID</th><th>Status</th><th>Format</th><th>Records</th><th>Date Range</th><th>Created</th><th>Error</th></tr></thead>
+      <tbody>
+        {% for imp in recent_imports %}
+        <tr>
+          <td>{{ imp.id }}</td>
+          <td>
+            {% if imp.status == "success" %}<span class="badge bg-success">{{ imp.status }}</span>
+            {% elif imp.status == "error" %}<span class="badge bg-danger">{{ imp.status }}</span>
+            {% elif imp.status == "processing" %}<span class="badge bg-primary">{{ imp.status }}</span>
+            {% else %}<span class="badge bg-secondary">{{ imp.status }}</span>{% endif %}
+          </td>
+          <td>{{ imp.format_detected or "—" }}</td>
+          <td>{{ imp.records_ingested }}</td>
+          <td>
+            {% if imp.earliest_played_at and imp.latest_played_at %}
+              {{ imp.earliest_played_at[:10] }} — {{ imp.latest_played_at[:10] }}
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ imp.created_at[:19] if imp.created_at else "—" }}</td>
+          <td class="log-message">{{ imp.error_message or "—" }}</td>
+        </tr>
+        {% endfor %}
+        {% if not recent_imports %}<tr><td colspan="7" class="text-muted text-center">No imports yet</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

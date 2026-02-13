@@ -1,0 +1,34 @@
+<div class="row g-3">
+  <div class="col-md-3">
+    <div class="card stat-card border-primary">
+      <div class="card-body">
+        <div class="display-6 text-primary">{{ sync_status.total_users | default(0) }}</div>
+        <div class="text-muted">Total Users</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card border-info">
+      <div class="card-body">
+        <div class="display-6 text-info">{{ sync_status.active_syncs | default(0) }}</div>
+        <div class="text-muted">Active Syncs</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card border-warning">
+      <div class="card-body">
+        <div class="display-6 text-warning">{{ sync_status.paused_users | default(0) }}</div>
+        <div class="text-muted">Paused</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card border-danger">
+      <div class="card-body">
+        <div class="display-6 text-danger">{{ sync_status.error_users | default(0) }}</div>
+        <div class="text-muted">Errors</div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -34,8 +34,8 @@ This is a greenfield implementation of a complete Spotify playback history colle
 | 4 | Initial Sync & Collector Run Loop | **DONE** | #4 |
 | 5 | ZIP Import System | **DONE** | #5 |
 | 6 | MCP Tool Endpoints & History Queries + TIMESTAMPTZ | **DONE** | #6 |
-| 7 | Admin API & Authentication | **NOT STARTED** | — |
-| 8 | Admin Frontend | **NOT STARTED** | — |
+| 7 | Admin API & Authentication | **DONE** | #7 |
+| 8 | Admin Frontend | **IN PROGRESS** | — |
 | 9 | Production Readiness & Documentation | **NOT STARTED** | — |
 
 **Note:** The original plan had 9 phases but the actual execution differed:

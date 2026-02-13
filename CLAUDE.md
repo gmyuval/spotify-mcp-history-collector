@@ -358,10 +358,29 @@ When ZIP imports lack Spotify URIs:
 - Tests: `api/tests/test_history/` (21), `api/tests/test_mcp/` (18) — 39 new tests
 - All 11 MCP tools verified with real data and live Spotify API
 
-### Not Yet Implemented (stubs only)
-- `services/api/src/app/admin/` — Full admin API endpoints (only upload endpoint exists)
-- `services/api/src/app/logging/` — DB log sink helpers
-- Frontend templates and static files
+#### Phase 7: Admin API & Authentication
+- `services/api/src/app/admin/router.py` — 13 admin endpoints: users CRUD, sync control, job runs, import jobs, logs, purge, sync status
+- `services/api/src/app/admin/auth.py` — `AdminAuthMiddleware` supporting token and basic auth modes (`ADMIN_AUTH_MODE`)
+- `services/api/src/app/admin/schemas.py` — Pydantic request/response models for all admin endpoints
+- `services/api/src/app/logging/handler.py` — `DatabaseLogHandler` (async background DB writer with batching)
+- `services/api/src/app/logging/middleware.py` — Request logging middleware (structured log entries per request)
+- Tests: `api/tests/test_admin/` — auth (11), users (10), operations (10), logs (7), import_upload (5) — 43 new tests
+- Total API tests: 171
+
+#### Phase 8: Admin Frontend (in progress)
+- `services/frontend/src/frontend/settings.py` — `FrontendSettings(BaseSettings)` with API_BASE_URL, auth config
+- `services/frontend/src/frontend/api_client.py` — `AdminApiClient` (httpx.AsyncClient wrapper) with all 13 admin API methods + `ApiError`
+- `services/frontend/src/frontend/main.py` — `FrontendApp` class with Jinja2, static files, lifespan, route registration
+- `services/frontend/src/frontend/routes/` — 5 route modules: dashboard, users, jobs, imports, logs
+- `services/frontend/src/frontend/templates/` — 7 page templates + 8 HTMX partials (Bootstrap 5 + HTMX)
+- `services/frontend/src/frontend/static/css/style.css` — Sidebar layout, badge colors, responsive styles
+- Pages: Dashboard (sync status + recent activity), Users (list + detail + pause/resume/trigger/delete), Jobs (filtered list), Imports (list + ZIP upload), Logs (filtered + purge)
+- Tests: `frontend/tests/` — conftest, test_api_client (19), test_routes (21) — 40 tests
+- Total project tests: 239 (API 171 + Collector 28 + Frontend 40)
+
+### Not Yet Implemented
+- Analytics page (deferred to post-Phase 9)
+- Docker integration testing (frontend ↔ API ↔ DB end-to-end)
 
 ### Architecture Notes for Future Phases
 - **Shared code pattern**: Code needed by both api and collector goes in `services/shared/`. Both services import from it. Docker build context is `./services` so both can COPY shared.
@@ -391,19 +410,6 @@ When ZIP imports lack Spotify URIs:
 
 ### Pointers for Next Phases
 
-#### Phase 7: Admin Frontend
-- Frontend service already has a FastAPI app at `services/frontend/`. It should use Jinja2 templates + HTMX for server-rendered interactivity.
-- Key pages: user management, sync status dashboard, job history, import management, log viewer.
-- Frontend has no DB dependency — it calls the API service at `API_BASE_URL`. Admin endpoints are at `services/api/src/app/admin/` (currently only ZIP upload exists).
-- Admin API needs endpoints for: list users, user detail, toggle sync, list job runs, list import jobs, trigger poll, view logs.
-- Consider `ADMIN_AUTH_MODE` (basic/token) for securing admin endpoints.
-
-#### Phase 8: Structured Logging & Observability
-- `services/api/src/app/logging/` is a stub. The `logs` table exists with `level`, `service`, `event_type`, `message`, `details` (JSON), `user_id`.
-- Implement a DB log handler that writes structured logs to the `logs` table for UI browsing.
-- Add log retention policy (auto-purge logs older than N days).
-- Consider adding request-id middleware for trace correlation.
-
 #### Phase 9: Audio Features Enrichment
 - The `audio_features` table exists but is unpopulated. `SpotifyClient.get_audio_features()` is implemented.
 - Add an enrichment job type to the collector that batch-fetches audio features for tracks missing them.
@@ -415,6 +421,6 @@ When ZIP imports lack Spotify URIs:
 - Merge strategy needed: update track IDs, re-link plays, handle duplicates.
 
 #### General
-- **Test count**: 159 tests (131 API + 28 collector). Each new phase should maintain or increase coverage.
+- **Test count**: 239 tests (171 API + 28 collector + 40 frontend). Each new phase should maintain or increase coverage.
 - **Pre-commit hooks**: ruff v0.15.0 + mypy strict — all commits must pass. Do not use `--no-verify`.
 - **Branch strategy**: Feature branches off main, PRs via `gh pr create`, squash merge.
