@@ -25,6 +25,15 @@ class AppSettings(BaseSettings):
     UPLOAD_DIR: str = "/app/uploads"
     IMPORT_MAX_ZIP_SIZE_MB: int = 500
 
+    # Admin authentication
+    ADMIN_AUTH_MODE: str = ""  # "token", "basic", or "" (disabled)
+    ADMIN_TOKEN: str = ""  # For token auth mode
+    ADMIN_USERNAME: str = ""  # For basic auth mode
+    ADMIN_PASSWORD: str = ""  # For basic auth mode
+
+    # Logging
+    LOG_RETENTION_DAYS: int = 30
+
     model_config = {"env_prefix": ""}
 
 

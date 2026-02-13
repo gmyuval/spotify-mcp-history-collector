@@ -1,5 +1,6 @@
 """Main FastAPI application for Spotify MCP API."""
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,7 @@ from app.admin import router as admin_router
 from app.auth import router as auth_router
 from app.dependencies import db_manager
 from app.history import router as history_router
+from app.logging.handler import DBLogHandler
 from app.mcp import router as mcp_router
 
 
@@ -31,9 +33,16 @@ class SpotifyMCPApp:
     @staticmethod
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
-        """Application lifespan: clean up database connections on shutdown."""
-        yield
-        await db_manager.dispose()
+        """Application lifespan: start DB log handler, clean up on shutdown."""
+        db_log_handler = DBLogHandler(db_manager, service="api")
+        await db_log_handler.start()
+        logging.getLogger().addHandler(db_log_handler)
+        try:
+            yield
+        finally:
+            logging.getLogger().removeHandler(db_log_handler)
+            await db_log_handler.stop()
+            await db_manager.dispose()
 
     def _setup_middleware(self) -> None:
         self.app.add_middleware(
