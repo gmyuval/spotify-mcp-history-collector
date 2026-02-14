@@ -115,7 +115,8 @@ Once the collector has gathered some history (it polls every 10 minutes by defau
 ```bash
 curl -X POST http://localhost:8000/mcp/call \
   -H "Content-Type: application/json" \
-  -d '{"tool": "history.taste_summary", "args": {"days": 90}}'
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"tool": "history.taste_summary", "args": {"days": 90, "user_id": 1}}'
 ```
 
 ---
@@ -185,7 +186,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 ```json
 {
   "tool": "history.taste_summary",
-  "args": { "days": 90, "user_id": "spotify_user_id" }
+  "args": { "days": 90, "user_id": 1 }
 }
 ```
 

@@ -317,7 +317,7 @@ These options handle TLS termination and certificate management automatically.
 Purge old log entries (older than `LOG_RETENTION_DAYS`):
 
 ```bash
-curl -X POST http://localhost:8000/admin/logs/purge \
+curl -X POST "http://localhost:8000/admin/maintenance/purge-logs?days=90" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
