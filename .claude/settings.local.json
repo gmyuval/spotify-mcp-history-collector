@@ -51,7 +51,21 @@
       "Bash(git -C \"d:\\\\projects\\\\spotify-mcp-history-collector\" rebase origin/main)",
       "Bash(git -C:*)",
       "Bash(git worktree remove:*)",
-      "Bash(gh pr view:*)"
+      "Bash(gh pr view:*)",
+      "Bash(\"C:\\\\Users\\\\yuval\\\\.conda\\\\envs\\\\spotify-mcp\\\\Scripts\\\\pytest.exe\" services/api/tests/ -x -q)",
+      "Bash(\"C:\\\\Users\\\\yuval\\\\.conda\\\\envs\\\\spotify-mcp\\\\Scripts\\\\pytest.exe\" tests/ -x -q)",
+      "Bash(\"C:\\\\Users\\\\yuval\\\\.conda\\\\envs\\\\spotify-mcp\\\\Scripts\\\\ruff.exe\" check services/api/src services/frontend/src services/shared/src services/collector/src)",
+      "Bash(\"C:\\\\Users\\\\yuval\\\\.conda\\\\envs\\\\spotify-mcp\\\\Scripts\\\\mypy.exe\" services/api/src services/frontend/src services/shared/src services/collector/src)",
+      "Bash(conda run --no-banner -n spotify-mcp pytest services/api/tests/ -x -q)",
+      "Bash(conda run --no-banner -n spotify-mcp pytest:*)",
+      "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/Scripts/pytest.exe services/api/tests/ -x -q)",
+      "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/Scripts/pytest.exe tests/ -x -q)",
+      "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/Scripts/pytest.exe services/frontend/tests/ -x -q)",
+      "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/Scripts/ruff.exe check:*)",
+      "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/Scripts/mypy.exe:*)",
+      "Bash(docker info:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(git remote prune:*)"
     ]
   }
 }
