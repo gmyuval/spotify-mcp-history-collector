@@ -16,7 +16,7 @@
 # Configuration is read from resources/.env.do:
 #   DOMAIN_NAME, SSH_KEY_NAME, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET,
 #   DROPLET_SIZE, DB_EXTERNAL_HOST, DB_PRIVATE_HOST, DB_PORT, DB_USER,
-#   DB_PASSWORD, DB_NAME
+#   DB_PASSWORD, DB_NAME, DB_CLUSTER_ID
 # =============================================================================
 set -euo pipefail
 
@@ -37,7 +37,8 @@ source "$ENV_FILE"
 
 # Validate required variables
 for var in DOMAIN_NAME SSH_KEY_NAME SPOTIFY_CLIENT_ID SPOTIFY_CLIENT_SECRET DROPLET_SIZE \
-           DB_EXTERNAL_HOST DB_PRIVATE_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME; do
+           DB_EXTERNAL_HOST DB_PRIVATE_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME \
+           DB_CLUSTER_ID; do
     if [[ -z "${!var:-}" ]]; then
         echo "ERROR: $var is not set in $ENV_FILE"
         exit 1
@@ -149,15 +150,10 @@ fi
 # ---------------------------------------------------------------------------
 log "Step 5: Adding droplet to database trusted sources"
 
-DB_CLUSTER_ID=$(doctl databases list --format ID,Name --no-header | head -1 | awk '{print $1}')
-if [[ -z "$DB_CLUSTER_ID" ]]; then
-    echo "  WARNING: No database cluster found. Add the droplet manually in DO console."
-else
-    echo "  Database cluster ID: $DB_CLUSTER_ID"
-    # Add the droplet as a trusted source
-    doctl databases firewalls append "$DB_CLUSTER_ID" --rule "droplet:$DROPLET_ID" || \
-        echo "  Note: Droplet may already be a trusted source"
-fi
+echo "  Database cluster ID: $DB_CLUSTER_ID"
+# Add the droplet as a trusted source
+doctl databases firewalls append "$DB_CLUSTER_ID" --rule "droplet:$DROPLET_ID" || \
+    echo "  Note: Droplet may already be a trusted source"
 
 # ---------------------------------------------------------------------------
 # Step 6: Create DNS A record
@@ -281,8 +277,14 @@ REMOTE_SETUP
 # ---------------------------------------------------------------------------
 log "Step 8: Creating database '$DB_NAME'"
 
-ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" bash -s <<REMOTE_DB
+ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" bash -s -- \
+  "$DB_USER" "$DB_PASSWORD" "$DB_EXTERNAL_HOST" "$DB_PORT" "$DB_NAME" <<'REMOTE_DB'
 set -euo pipefail
+DB_USER="$1"
+DB_PASSWORD="$2"
+DB_EXTERNAL_HOST="$3"
+DB_PORT="$4"
+DB_NAME="$5"
 # Check if database already exists, create if not
 if psql "postgresql://$DB_USER:$DB_PASSWORD@$DB_EXTERNAL_HOST:$DB_PORT/defaultdb?sslmode=require" \
     -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then

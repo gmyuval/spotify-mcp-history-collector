@@ -7,7 +7,7 @@ forwarding requests.
 
 ## Architecture
 
-```
+```text
 Browser → Caddy :443
   ├── /healthz         → api:8000 (no auth — monitoring)
   ├── /oauth2/*        → oauth2-proxy:4180 (login/callback/sign_out)

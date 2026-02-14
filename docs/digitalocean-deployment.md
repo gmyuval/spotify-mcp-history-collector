@@ -5,7 +5,7 @@ Docker Compose, Caddy (automatic HTTPS), and GitHub Actions CI/CD.
 
 ## Architecture
 
-```
+```text
                     Internet
                        │
                        ▼
@@ -117,6 +117,15 @@ SSH_KEY_NAME=my-ssh-key        # Name from: doctl compute ssh-key list
 SPOTIFY_CLIENT_ID=abc123...
 SPOTIFY_CLIENT_SECRET=xyz789...
 DROPLET_SIZE=s-2vcpu-2gb       # $18/mo — sufficient for all services
+
+# Database connection (existing managed PostgreSQL)
+DB_EXTERNAL_HOST=db-host.ondigitalocean.com
+DB_PRIVATE_HOST=private-db-host.ondigitalocean.com
+DB_PORT=25060
+DB_USER=doadmin
+DB_PASSWORD=your_db_password
+DB_NAME=spotify_mcp
+DB_CLUSTER_ID=your-cluster-uuid  # From: doctl databases list
 ```
 
 ### `.env.prod` (generated on the Droplet)
