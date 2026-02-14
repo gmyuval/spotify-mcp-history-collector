@@ -1,0 +1,65 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: deploy
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd /opt/spotify-mcp
+
+            echo "=== Pulling latest code ==="
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "=== Building and deploying ==="
+            docker compose --env-file .env.prod -f docker-compose.prod.yml build --pull
+            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+
+            echo "=== Waiting for API health ==="
+            for i in $(seq 1 30); do
+              if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api curl -sf http://localhost:8000/healthz > /dev/null 2>&1; then
+                echo "API is healthy"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "ERROR: API health check failed after 30 attempts"
+                docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=50 api
+                exit 1
+              fi
+              echo "Waiting for API... ($i/30)"
+              sleep 5
+            done
+
+            echo "=== Running migrations ==="
+            if ! docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head; then
+              echo "ERROR: Migration failed"
+              docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=50 api
+              exit 1
+            fi
+
+            echo "=== Verifying all services ==="
+            docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+            docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api curl -sf http://localhost:8000/healthz
+            docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T frontend curl -sf http://localhost:8001/healthz
+            echo ""
+            echo "=== Cleaning up old images ==="
+            docker image prune -af --filter "until=24h"
+            echo ""
+            echo "=== Deployment complete ==="
