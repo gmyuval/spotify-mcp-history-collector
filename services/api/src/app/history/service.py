@@ -2,13 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.history.queries import (
-    query_coverage,
-    query_heatmap,
-    query_play_stats,
-    query_top_artists,
-    query_top_tracks,
-)
+from app.history.queries import HistoryQueries
 from app.history.schemas import (
     ArtistCount,
     CoverageStats,
@@ -30,7 +24,7 @@ class HistoryService:
         days: int = 90,
         limit: int = 20,
     ) -> list[ArtistCount]:
-        rows = await query_top_artists(user_id, session, days, limit)
+        rows = await HistoryQueries.top_artists(user_id, session, days, limit)
         return [ArtistCount(**row) for row in rows]
 
     async def get_top_tracks(
@@ -40,7 +34,7 @@ class HistoryService:
         days: int = 90,
         limit: int = 20,
     ) -> list[TrackCount]:
-        rows = await query_top_tracks(user_id, session, days, limit)
+        rows = await HistoryQueries.top_tracks(user_id, session, days, limit)
         return [TrackCount(**row) for row in rows]
 
     async def get_listening_heatmap(
@@ -49,7 +43,7 @@ class HistoryService:
         session: AsyncSession,
         days: int = 90,
     ) -> ListeningHeatmap:
-        cells_raw = await query_heatmap(user_id, session, days)
+        cells_raw = await HistoryQueries.heatmap(user_id, session, days)
         cells = [HeatmapCell(**c) for c in cells_raw]
         total = sum(c.play_count for c in cells)
         return ListeningHeatmap(days=days, total_plays=total, cells=cells)
@@ -61,11 +55,11 @@ class HistoryService:
         days: int = 90,
         limit: int = 10,
     ) -> RepeatStats:
-        stats = await query_play_stats(user_id, session, days)
+        stats = await HistoryQueries.play_stats(user_id, session, days)
         total_plays: int = stats["total_plays"]  # type: ignore[assignment]
         unique_tracks: int = stats["unique_tracks"]  # type: ignore[assignment]
         rate = total_plays / unique_tracks if unique_tracks > 0 else 0.0
-        most_repeated = await query_top_tracks(user_id, session, days, limit)
+        most_repeated = await HistoryQueries.top_tracks(user_id, session, days, limit)
         return RepeatStats(
             days=days,
             total_plays=total_plays,
@@ -80,7 +74,7 @@ class HistoryService:
         session: AsyncSession,
         days: int = 90,
     ) -> CoverageStats:
-        raw = await query_coverage(user_id, session, days)
+        raw = await HistoryQueries.coverage(user_id, session, days)
         return CoverageStats(
             days=days,
             requested_days=days,
@@ -93,11 +87,11 @@ class HistoryService:
         session: AsyncSession,
         days: int = 90,
     ) -> TasteSummary:
-        stats = await query_play_stats(user_id, session, days)
-        top_artists_raw = await query_top_artists(user_id, session, days, 10)
-        top_tracks_raw = await query_top_tracks(user_id, session, days, 10)
-        heatmap_raw = await query_heatmap(user_id, session, days)
-        coverage_raw = await query_coverage(user_id, session, days)
+        stats = await HistoryQueries.play_stats(user_id, session, days)
+        top_artists_raw = await HistoryQueries.top_artists(user_id, session, days, 10)
+        top_tracks_raw = await HistoryQueries.top_tracks(user_id, session, days, 10)
+        heatmap_raw = await HistoryQueries.heatmap(user_id, session, days)
+        coverage_raw = await HistoryQueries.coverage(user_id, session, days)
 
         total_plays: int = stats["total_plays"]  # type: ignore[assignment]
         unique_tracks: int = stats["unique_tracks"]  # type: ignore[assignment]

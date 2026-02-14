@@ -35,8 +35,8 @@ This is a greenfield implementation of a complete Spotify playback history colle
 | 5 | ZIP Import System | **DONE** | #5 |
 | 6 | MCP Tool Endpoints & History Queries + TIMESTAMPTZ | **DONE** | #6 |
 | 7 | Admin API & Authentication | **DONE** | #7 |
-| 8 | Admin Frontend | **IN PROGRESS** | — |
-| 9 | Production Readiness & Documentation | **NOT STARTED** | — |
+| 8 | Admin Frontend | **DONE** | #8 |
+| 9 | Production Readiness & Documentation | **IN PROGRESS** | — |
 
 **Note:** The original plan had 9 phases but the actual execution differed:
 - Original Phase 6 (Collector Worker) was absorbed into Phase 4 (run loop, main.py) and Phase 5 (ZIP import integration). However, the admin user-management endpoints planned in original Phase 6 were deferred.

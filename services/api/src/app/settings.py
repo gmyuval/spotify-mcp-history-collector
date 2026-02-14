@@ -31,6 +31,13 @@ class AppSettings(BaseSettings):
     ADMIN_USERNAME: str = ""  # For basic auth mode
     ADMIN_PASSWORD: str = ""  # For basic auth mode
 
+    # CORS
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:8001"  # comma-separated origins
+
+    # Rate limiting
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 10
+    RATE_LIMIT_MCP_PER_MINUTE: int = 60
+
     # Logging
     LOG_RETENTION_DAYS: int = 30
 

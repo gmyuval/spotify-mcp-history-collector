@@ -1,6 +1,7 @@
 """Main FastAPI application for Spotify MCP API."""
 
 import logging
+import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -11,8 +12,27 @@ from app.admin import router as admin_router
 from app.auth import router as auth_router
 from app.dependencies import db_manager
 from app.history import router as history_router
+from app.logging.formatter import JSONLogFormatter
 from app.logging.handler import DBLogHandler
 from app.mcp import router as mcp_router
+from app.middleware import (
+    RateLimitMiddleware,
+    RequestIDMiddleware,
+    SecurityHeadersMiddleware,
+)
+from app.settings import get_settings
+
+
+def _configure_logging() -> None:
+    """Set up structured JSON logging on the root logger."""
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    # Remove any existing handlers (e.g. default StreamHandler)
+    for handler in root.handlers[:]:
+        root.removeHandler(handler)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JSONLogFormatter(service="api"))
+    root.addHandler(handler)
 
 
 class SpotifyMCPApp:
@@ -21,6 +41,7 @@ class SpotifyMCPApp:
     app: FastAPI
 
     def __init__(self) -> None:
+        _configure_logging()
         self.app = FastAPI(
             title="Spotify MCP API",
             description="Spotify OAuth, MCP tool endpoints, and admin APIs",
@@ -45,9 +66,26 @@ class SpotifyMCPApp:
             await db_manager.dispose()
 
     def _setup_middleware(self) -> None:
+        settings = get_settings()
+
+        # Rate limiting (outermost — runs first)
+        self.app.add_middleware(
+            RateLimitMiddleware,
+            auth_limit=settings.RATE_LIMIT_AUTH_PER_MINUTE,
+            mcp_limit=settings.RATE_LIMIT_MCP_PER_MINUTE,
+        )
+
+        # Security headers
+        self.app.add_middleware(SecurityHeadersMiddleware)
+
+        # Request-ID (generates/propagates X-Request-ID)
+        self.app.add_middleware(RequestIDMiddleware)
+
+        # CORS
+        origins = [o.strip() for o in settings.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],  # Configure appropriately for production
+            allow_origins=origins,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
