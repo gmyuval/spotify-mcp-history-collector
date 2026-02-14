@@ -299,6 +299,11 @@ REMOTE_DB
 # ---------------------------------------------------------------------------
 log "Step 9: Generating .env.prod"
 
+# Verify Python cryptography is available
+if ! python -c "from cryptography.fernet import Fernet" 2>/dev/null; then
+    err "Python 'cryptography' package required. Install with: pip install cryptography"
+fi
+
 # Generate secrets locally
 TOKEN_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 ADMIN_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
@@ -355,6 +360,7 @@ echo ""
 echo "  ADMIN_TOKEN: $ADMIN_TOKEN"
 echo "  OAUTH2_PROXY_COOKIE_SECRET: (auto-generated, already in .env.prod)"
 echo "  (Save the admin token — you'll need it for MCP/ChatGPT access)"
+echo "  WARNING: Clear your terminal history after saving the token."
 echo ""
 echo "  NOTE: Google OAuth credentials (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET)"
 echo "  are left blank. You must fill them in on the droplet before oauth2-proxy will work."

@@ -35,12 +35,12 @@ Browser → Caddy :443
 3. Navigate to **APIs & Services > OAuth consent screen**
    - User Type: External
    - App name: "Spotify MCP Admin"
-   - Authorized domains: `praxiscode.dev`
+   - Authorized domains: `yourdomain.com`
    - Scopes: `email`, `profile`, `openid` (defaults)
 4. Navigate to **APIs & Services > Credentials**
    - Create OAuth 2.0 Client ID
    - Application type: Web application
-   - Authorized redirect URI: `https://music.praxiscode.dev/oauth2/callback`
+   - Authorized redirect URI: `https://yourdomain.com/oauth2/callback`
 5. Copy the Client ID and Client Secret
 
 ### 2. Configure on the Server
@@ -125,7 +125,8 @@ The `/mcp/*` routes bypass Google OAuth and use Bearer token auth:
 
 ```bash
 curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  https://music.praxiscode.dev/mcp/call \
+  -H "Content-Type: application/json" \
+  https://yourdomain.com/mcp/call \
   -d '{"tool": "history.taste_summary", "args": {"days": 90, "user_id": 1}}'
 ```
 

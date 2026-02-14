@@ -48,11 +48,18 @@ jobs:
             done
 
             echo "=== Running migrations ==="
-            docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head
+            if ! docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head; then
+              echo "ERROR: Migration failed"
+              docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=50 api
+              exit 1
+            fi
 
             echo "=== Verifying all services ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml ps
             docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api curl -sf http://localhost:8000/healthz
             docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T frontend curl -sf http://localhost:8001/healthz
+            echo ""
+            echo "=== Cleaning up old images ==="
+            docker image prune -af --filter "until=24h"
             echo ""
             echo "=== Deployment complete ==="

@@ -6,45 +6,58 @@ Docker Compose, Caddy (automatic HTTPS), and GitHub Actions CI/CD.
 ## Architecture
 
 ```
-                Internet
-                   │
-                   ▼
-          ┌────────────────┐
-          │   Caddy :443   │  Automatic HTTPS (Let's Encrypt)
-          └───────┬────────┘
-                  │
-       ┌──────────┴──────────┐
-       ▼                     ▼
-┌──────────────┐     ┌──────────────┐
-│  API :8000   │     │Frontend :8001│
-│  (FastAPI)   │     │  (FastAPI)   │
-└──────┬───────┘     └──────────────┘
-       │                     │
-       │ DATABASE_URL        │ API_BASE_URL
-       │ (VPC private)       │ (Docker network)
-       ▼                     │
-┌──────────────┐             │
-│  DO Managed  │             │
-│  PostgreSQL  │◄────────────┘ (via API)
-└──────────────┘
-       ▲
-       │ DATABASE_URL
-┌──────┴───────┐
-│  Collector   │
-│  (worker)    │
-└──────────────┘
+                    Internet
+                       │
+                       ▼
+              ┌────────────────┐
+              │   Caddy :443   │  Automatic HTTPS (Let's Encrypt)
+              └───────┬────────┘
+                      │
+         ┌────────────┼────────────────┐
+         │            │                │
+         ▼            ▼                ▼
+   /healthz      /mcp/*          all other routes
+   (no auth)   (Bearer token)    (forward_auth)
+         │            │                │
+         ▼            │        ┌───────▼────────┐
+   ┌──────────┐       │        │ oauth2-proxy   │
+   │ API:8000 │       │        │ :4180          │
+   └──────────┘       │        │ (Google OAuth) │
+                      │        └───────┬────────┘
+                      │                │ authenticated
+         ┌────────────┴────────────────┘
+         ▼                     ▼
+  ┌──────────────┐     ┌──────────────┐
+  │  API :8000   │     │Frontend :8001│
+  │  (FastAPI)   │     │  (FastAPI)   │
+  └──────┬───────┘     └──────────────┘
+         │                     │
+         │ DATABASE_URL        │ API_BASE_URL
+         │ (VPC private)       │ (Docker network)
+         ▼                     │
+  ┌──────────────┐             │
+  │  DO Managed  │             │
+  │  PostgreSQL  │◄────────────┘ (via API)
+  └──────────────┘
+         ▲
+         │ DATABASE_URL
+  ┌──────┴───────┐
+  │  Collector   │
+  │  (worker)    │
+  └──────────────┘
 ```
 
 **Route mapping (Caddy):**
 
-| Path | Backend |
-|------|---------|
-| `/auth/*` | API |
-| `/admin/*` | API |
-| `/mcp/*` | API |
-| `/history/*` | API |
-| `/healthz` | API |
-| `/*` | Frontend |
+| Path | Backend | Auth |
+|------|---------|------|
+| `/healthz` | API | None |
+| `/oauth2/*` | oauth2-proxy | Google OAuth flow |
+| `/mcp/*` | API | Bearer token |
+| `/auth/*` | API | Google OAuth (forward_auth) |
+| `/admin/*` | API | Google OAuth (forward_auth) |
+| `/history/*` | API | Google OAuth (forward_auth) |
+| `/*` | Frontend | Google OAuth (forward_auth) |
 
 ## Prerequisites
 
@@ -56,6 +69,8 @@ Docker Compose, Caddy (automatic HTTPS), and GitHub Actions CI/CD.
 - A domain name with DNS managed by DigitalOcean
 - A Spotify Developer application
   ([dashboard](https://developer.spotify.com/dashboard))
+- A Google OAuth 2.0 application for oauth2-proxy
+  (see [Google OAuth setup guide](./google-oauth-setup.md))
 
 ## Quick Start (Automated)
 
@@ -86,9 +101,11 @@ The script will:
 11. Run database migrations
 12. Generate a CI/CD deploy key and configure GitHub Secrets
 
-**Only remaining manual step:** Add
-`https://yourdomain.com/auth/callback` as a Redirect URI in your
-[Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+**Remaining manual steps:**
+1. Add `https://yourdomain.com/auth/callback` as a Redirect URI in your
+   [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. Set up Google OAuth credentials and configure them on the droplet
+   (see [Google OAuth setup guide](./google-oauth-setup.md))
 
 ## Configuration
 
@@ -116,6 +133,13 @@ The provisioning script generates this automatically. Key values:
 | `TOKEN_ENCRYPTION_KEY` | Auto-generated (Fernet) |
 | `ADMIN_TOKEN` | Auto-generated (URL-safe random) |
 | `CORS_ALLOWED_ORIGINS` | `https://{DOMAIN}` |
+| `OAUTH2_PROXY_COOKIE_SECRET` | Auto-generated (32-byte base64) |
+| `GOOGLE_OAUTH_CLIENT_ID` | Manual — from Google Cloud Console |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Manual — from Google Cloud Console |
+
+Email access control is managed via `deploy/authenticated-emails.txt`
+(one email per line). See [Google OAuth setup guide](./google-oauth-setup.md)
+for complete instructions.
 
 For the full template with all available options, see `.env.prod.example`.
 
@@ -161,11 +185,13 @@ gh secret set SSH_PRIVATE_KEY --repo gmyuval/spotify-mcp-history-collector < dep
 | File | Purpose |
 |------|---------|
 | `docker-compose.prod.yml` | Production service definitions (no local Postgres, Caddy, production uvicorn) |
-| `deploy/Caddyfile` | Reverse proxy routes with automatic HTTPS |
+| `deploy/Caddyfile` | Reverse proxy routes with automatic HTTPS and forward_auth |
+| `deploy/authenticated-emails.txt` | Email whitelist for oauth2-proxy (one email per line) |
 | `deploy/provision.sh` | One-time automated provisioning script |
 | `.github/workflows/deploy.yml` | CI/CD pipeline (deploy on push to main) |
 | `.env.prod.example` | Template for production environment variables |
 | `resources/.env.do` | Provisioning parameters (not committed — gitignored) |
+| `docs/google-oauth-setup.md` | Google OAuth setup guide for oauth2-proxy |
 
 ## Manual Operations
 
