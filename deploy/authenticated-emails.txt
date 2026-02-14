@@ -1,0 +1,2 @@
+# Authorized emails — one per line
+# Add your Google email here, then restart oauth2-proxy

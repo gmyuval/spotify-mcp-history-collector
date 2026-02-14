@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin.auth import require_admin
 from app.dependencies import db_manager
 from app.history.schemas import (
     ArtistCount,
@@ -24,7 +25,7 @@ class HistoryRouter:
 
     def __init__(self) -> None:
         self._service = HistoryService()
-        self.router = APIRouter()
+        self.router = APIRouter(dependencies=[Depends(require_admin)])
         self._register_routes()
 
     def _register_routes(self) -> None:

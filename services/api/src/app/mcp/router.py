@@ -26,6 +26,7 @@ class MCPRouter:
             self.list_tools,
             methods=["GET"],
             response_model=list[MCPToolDefinition],
+            dependencies=[Depends(require_admin)],
         )
         self.router.add_api_route(
             "/call",
