@@ -190,7 +190,7 @@ Replace `{user_id}` with the user's Spotify user ID (visible in the admin fronte
 
 For production deployments, you must serve the application over HTTPS. Update these environment variables before proceeding:
 
-```
+```bash
 SPOTIFY_REDIRECT_URI=https://yourdomain.com/auth/callback
 ```
 
@@ -202,7 +202,7 @@ Caddy automatically obtains and renews TLS certificates from Let's Encrypt.
 
 Create a `Caddyfile`:
 
-```
+```caddyfile
 yourdomain.com {
     handle /auth/* {
         reverse_proxy localhost:8000

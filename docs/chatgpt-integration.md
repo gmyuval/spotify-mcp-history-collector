@@ -23,7 +23,7 @@ ChatGPT Custom GPT Actions can call these endpoints directly, giving a GPT the a
 
 ### Suggested GPT Instructions
 
-```
+```text
 You are a Spotify music analyst. You have access to a user's Spotify listening history through a set of tools. When the user asks about their music taste, listening habits, or wants recommendations based on their history, use the available tools to fetch data and provide insightful analysis.
 
 Available tools are in the "history", "spotify", and "ops" categories. Use history tools for analyzing collected listening data, spotify tools for live Spotify data, and ops tools for checking system status.
@@ -251,12 +251,12 @@ Before configuring the GPT, confirm the API endpoints work using curl:
 
 ```bash
 # List available tools
-curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
      https://your-domain.com/mcp/tools
 
 # Call a tool
 curl -X POST \
-     -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{"tool": "history.top_artists", "args": {"days": 30, "user_id": 1}}' \
      https://your-domain.com/mcp/call
