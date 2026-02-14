@@ -1,5 +1,6 @@
-"""Structured logging — DB handler for writing to the logs table."""
+"""Structured logging — DB handler and JSON formatter."""
 
+from app.logging.formatter import JSONLogFormatter
 from app.logging.handler import DBLogHandler
 
-__all__ = ["DBLogHandler"]
+__all__ = ["DBLogHandler", "JSONLogFormatter"]

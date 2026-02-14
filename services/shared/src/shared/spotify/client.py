@@ -106,7 +106,7 @@ class SpotifyClient:
                     logger.info("Spotify returned 401, attempting token refresh")
                     self._access_token = await self._on_token_expired()
                     continue
-                raise SpotifyAuthError(f"Spotify returned 401 Unauthorized: {response.text[:200]}")
+                raise SpotifyAuthError("Spotify returned 401 Unauthorized")
 
             # 429 Rate Limited
             if response.status_code == 429:
@@ -144,7 +144,7 @@ class SpotifyClient:
             else:
                 raise SpotifyRequestError(
                     status_code=response.status_code,
-                    detail=response.text[:500],
+                    detail=f"Spotify API error (HTTP {response.status_code})",
                 )
 
         # Exhausted retries

@@ -1,4 +1,4 @@
-"""MCP dispatcher — tool catalog and invocation endpoints."""
+"""MCP dispatcher — class-based router for tool catalog and invocation."""
 
 import logging
 from typing import Annotated
@@ -15,26 +15,46 @@ from app.mcp.schemas import MCPCallRequest, MCPCallResponse, MCPToolDefinition
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+
+class MCPRouter:
+    """Class-based router for MCP tool catalog and invocation."""
+
+    def __init__(self) -> None:
+        self.router = APIRouter()
+        self.router.add_api_route(
+            "/tools",
+            self.list_tools,
+            methods=["GET"],
+            response_model=list[MCPToolDefinition],
+        )
+        self.router.add_api_route(
+            "/call",
+            self.call_tool,
+            methods=["POST"],
+            response_model=MCPCallResponse,
+            dependencies=[Depends(require_admin)],
+        )
+
+    async def list_tools(self) -> list[MCPToolDefinition]:
+        """Return the full MCP tool catalog."""
+        return registry.get_catalog()
+
+    async def call_tool(
+        self,
+        request: MCPCallRequest,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> MCPCallResponse:
+        """Invoke an MCP tool by name. Errors are wrapped in the response body."""
+        if not registry.is_registered(request.tool):
+            return MCPCallResponse(tool=request.tool, success=False, error=f"Unknown tool: {request.tool}")
+        try:
+            result = await registry.invoke(request.tool, request.args, session)
+            return MCPCallResponse(tool=request.tool, success=True, result=result)
+        except Exception as exc:
+            logger.exception("MCP tool %s failed", request.tool)
+            error_type = type(exc).__name__
+            return MCPCallResponse(tool=request.tool, success=False, error=f"{error_type}: tool execution failed")
 
 
-@router.get("/tools", response_model=list[MCPToolDefinition])
-async def list_tools() -> list[MCPToolDefinition]:
-    """Return the full MCP tool catalog."""
-    return registry.get_catalog()
-
-
-@router.post("/call", response_model=MCPCallResponse, dependencies=[Depends(require_admin)])
-async def call_tool(
-    request: MCPCallRequest,
-    session: Annotated[AsyncSession, Depends(db_manager.dependency)],
-) -> MCPCallResponse:
-    """Invoke an MCP tool by name. Errors are wrapped in the response body."""
-    if not registry.is_registered(request.tool):
-        return MCPCallResponse(tool=request.tool, success=False, error=f"Unknown tool: {request.tool}")
-    try:
-        result = await registry.invoke(request.tool, request.args, session)
-        return MCPCallResponse(tool=request.tool, success=True, result=result)
-    except Exception as exc:
-        logger.exception("MCP tool %s failed", request.tool)
-        return MCPCallResponse(tool=request.tool, success=False, error=str(exc))
+_instance = MCPRouter()
+router = _instance.router

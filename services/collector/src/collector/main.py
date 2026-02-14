@@ -8,6 +8,7 @@ import sys
 from collector.runloop import CollectorRunLoop
 from collector.settings import CollectorSettings
 from shared.db import DatabaseManager
+from shared.logging.handler import DBLogHandler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -43,12 +44,19 @@ async def main() -> None:
     loop = asyncio.get_running_loop()
     _register_shutdown_signals(loop, shutdown_event)
 
+    # Wire up DB log handler so collector logs appear in the admin log viewer
+    db_log_handler = DBLogHandler(db_manager, service="collector")
+    await db_log_handler.start()
+    logging.getLogger().addHandler(db_log_handler)
+
     try:
         run_loop = CollectorRunLoop(settings, db_manager)
         await run_loop.run(shutdown_event)
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received, shutting down")
     finally:
+        logging.getLogger().removeHandler(db_log_handler)
+        await db_log_handler.stop()
         await db_manager.dispose()
         logger.info("Collector shut down complete")
 

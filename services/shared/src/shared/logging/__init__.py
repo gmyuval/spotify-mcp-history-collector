@@ -1,4 +1,4 @@
-"""Re-export DBLogHandler from shared package for backward compatibility."""
+"""Shared logging utilities — DB log handler."""
 
 from shared.logging.handler import DBLogHandler
 

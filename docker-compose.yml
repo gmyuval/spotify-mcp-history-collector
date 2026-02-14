@@ -14,6 +14,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1g
     networks:
       - spotify_mcp_network
 
@@ -31,6 +35,7 @@ services:
       - TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
       - ADMIN_AUTH_MODE=${ADMIN_AUTH_MODE:-token}
       - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:8001}
       - UPLOAD_DIR=/app/uploads
     volumes:
       - upload_data:/app/uploads
@@ -42,6 +47,10 @@ services:
     networks:
       - spotify_mcp_network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
       interval: 30s
@@ -79,6 +88,10 @@ services:
     networks:
       - spotify_mcp_network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     command: ["python", "-m", "collector.main"]
 
   frontend:
@@ -98,6 +111,10 @@ services:
     networks:
       - spotify_mcp_network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/healthz"]
       interval: 30s
