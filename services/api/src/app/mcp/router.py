@@ -61,7 +61,7 @@ class MCPRouter:
             return MCPCallResponse(
                 tool=request.tool,
                 success=False,
-                error=f"{error_type}: tool execution failed",
+                error=f"{error_type}: {exc}",
             )
 
 

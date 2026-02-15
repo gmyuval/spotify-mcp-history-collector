@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator, Generator
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from cryptography.fernet import Fernet
@@ -197,3 +198,23 @@ def test_call_explicit_arguments_win(client: TestClient, seeded_user: int) -> No
     assert data["success"] is True
     # days=3650 from explicit arguments should win over days=1 from flat
     assert len(data["result"]) == 1
+
+
+def test_call_tool_exception_includes_message(client: TestClient, seeded_user: int) -> None:
+    """When a tool raises an unhandled exception, the error message is forwarded to the client."""
+    with patch(
+        "app.mcp.tools.spotify_tools.SpotifyToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_track = AsyncMock(side_effect=RuntimeError("Something specific went wrong"))
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_track", "user_id": seeded_user, "track_id": "t1"},
+        )
+        data = resp.json()
+        assert data["success"] is False
+        assert "RuntimeError" in data["error"]
+        assert "Something specific went wrong" in data["error"]

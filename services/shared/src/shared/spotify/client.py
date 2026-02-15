@@ -154,10 +154,14 @@ class SpotifyClient:
 
             # Other 4xx — non-retryable
             else:
-                raise SpotifyRequestError(
-                    status_code=response.status_code,
-                    detail=f"Spotify API error (HTTP {response.status_code})",
-                )
+                detail = f"HTTP {response.status_code}"
+                try:
+                    error_body = response.json()
+                    detail = error_body.get("error", {}).get("message", detail)
+                except Exception:
+                    if response.text:
+                        detail = response.text[:200]
+                raise SpotifyRequestError(status_code=response.status_code, detail=detail)
 
         # Exhausted retries
         if last_status == 429:
@@ -319,13 +323,13 @@ class SpotifyClient:
         *,
         position: int | None = None,
     ) -> SpotifySnapshotResponse:
-        """POST /playlists/{id}/tracks."""
+        """POST /playlists/{id}/items."""
         body: dict[str, Any] = {"uris": uris}
         if position is not None:
             body["position"] = position
         response = await self._request(
             "POST",
-            f"{PLAYLIST_URL}/{playlist_id}/tracks",
+            f"{PLAYLIST_URL}/{playlist_id}/items",
             json_body=body,
         )
         return SpotifySnapshotResponse.model_validate(response.json())
@@ -335,11 +339,11 @@ class SpotifyClient:
         playlist_id: str,
         uris: list[str],
     ) -> SpotifySnapshotResponse:
-        """DELETE /playlists/{id}/tracks."""
+        """DELETE /playlists/{id}/items."""
         body: dict[str, Any] = {"tracks": [{"uri": uri} for uri in uris]}
         response = await self._request(
             "DELETE",
-            f"{PLAYLIST_URL}/{playlist_id}/tracks",
+            f"{PLAYLIST_URL}/{playlist_id}/items",
             json_body=body,
         )
         return SpotifySnapshotResponse.model_validate(response.json())
