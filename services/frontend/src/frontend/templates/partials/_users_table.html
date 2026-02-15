@@ -19,7 +19,10 @@
 </tr>
 {% endfor %}
 {% if not users %}
-<tr><td colspan="8" class="text-muted text-center py-3">No users found</td></tr>
+<tr><td colspan="8" class="text-center py-4">
+  <p class="text-muted mb-2">No Spotify accounts connected yet.</p>
+  <a href="/auth/login" class="btn btn-success btn-sm">Connect Spotify Account</a>
+</td></tr>
 {% endif %}
 
 <!-- Out-of-band pagination update -->
