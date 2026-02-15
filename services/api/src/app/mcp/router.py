@@ -46,15 +46,20 @@ class MCPRouter:
         session: Annotated[AsyncSession, Depends(db_manager.dependency)],
     ) -> MCPCallResponse:
         """Invoke an MCP tool by name. Errors are wrapped in the response body."""
+        logger.info("MCP call: tool=%s arguments=%s", request.tool, request.arguments)
         if not registry.is_registered(request.tool):
             return MCPCallResponse(tool=request.tool, success=False, error=f"Unknown tool: {request.tool}")
         try:
-            result = await registry.invoke(request.tool, request.args, session)
+            result = await registry.invoke(request.tool, request.arguments, session)
             return MCPCallResponse(tool=request.tool, success=True, result=result)
         except Exception as exc:
             logger.exception("MCP tool %s failed", request.tool)
             error_type = type(exc).__name__
-            return MCPCallResponse(tool=request.tool, success=False, error=f"{error_type}: tool execution failed")
+            return MCPCallResponse(
+                tool=request.tool,
+                success=False,
+                error=f"{error_type}: tool execution failed",
+            )
 
 
 _instance = MCPRouter()
