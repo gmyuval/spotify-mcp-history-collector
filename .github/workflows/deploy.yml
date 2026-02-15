@@ -80,10 +80,13 @@ jobs:
           username: deploy
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: DEPLOY_REF
-          script_stop: true
           script: |
             set -euo pipefail
             cd /opt/spotify-mcp
+
+            echo "=== Fixing repo ownership ==="
+            sudo -n chown -R deploy:deploy /opt/spotify-mcp/.git \
+              || { echo "ERROR: sudo requires a password for deploy"; exit 1; }
 
             echo "=== Deploying ref: $DEPLOY_REF ==="
             git fetch origin "$DEPLOY_REF"
