@@ -337,7 +337,7 @@ Migration seeds default roles + permissions.
 
 ### New service structure
 
-```
+```text
 services/explorer/
 ├── Dockerfile
 ├── pyproject.toml
@@ -530,7 +530,7 @@ services/explorer/
 
 ## Implementation Order & Dependencies
 
-```
+```text
 Phase 0 (error fix)           ← standalone, do first
 Phase 1 (caching)             ← standalone
 Phase 2 (RBAC schema)         ← standalone

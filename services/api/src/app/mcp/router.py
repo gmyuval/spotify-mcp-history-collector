@@ -1,6 +1,7 @@
 """MCP dispatcher — class-based router for tool catalog and invocation."""
 
 import logging
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -14,6 +15,21 @@ from app.mcp.registry import registry
 from app.mcp.schemas import MCPCallRequest, MCPCallResponse, MCPToolDefinition
 
 logger = logging.getLogger(__name__)
+
+_SENSITIVE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"Bearer\s+[A-Za-z0-9._-]+"), "Bearer [redacted]"),
+    (re.compile(r"(?i)refresh_token=\S+"), "refresh_token=[redacted]"),
+    (re.compile(r"(?i)access_token=\S+"), "access_token=[redacted]"),
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[redacted email]"),
+    (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "[redacted ip]"),
+]
+
+
+def _redact_sensitive(message: str) -> str:
+    """Strip tokens, emails, and IPs from error messages before returning to clients."""
+    for pattern, replacement in _SENSITIVE_PATTERNS:
+        message = pattern.sub(replacement, message)
+    return message
 
 
 class MCPRouter:
@@ -58,10 +74,11 @@ class MCPRouter:
         except Exception as exc:
             logger.exception("MCP tool %s failed", request.tool)
             error_type = type(exc).__name__
+            safe_message = _redact_sensitive(str(exc))
             return MCPCallResponse(
                 tool=request.tool,
                 success=False,
-                error=f"{error_type}: {exc}",
+                error=f"{error_type}: {safe_message}",
             )
 
 

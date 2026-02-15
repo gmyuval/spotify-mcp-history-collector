@@ -218,3 +218,33 @@ def test_call_tool_exception_includes_message(client: TestClient, seeded_user: i
         assert data["success"] is False
         assert "RuntimeError" in data["error"]
         assert "Something specific went wrong" in data["error"]
+
+
+def test_call_tool_exception_redacts_sensitive_data(client: TestClient, seeded_user: int) -> None:
+    """Sensitive data (tokens, emails, IPs) in exception messages is redacted."""
+    with patch(
+        "app.mcp.tools.spotify_tools.SpotifyToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_track = AsyncMock(
+            side_effect=RuntimeError(
+                "Auth failed: Bearer BQD1234_abcXYZ.token_here for user@example.com from 192.168.1.100"
+            )
+        )
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_track", "user_id": seeded_user, "track_id": "t1"},
+        )
+        data = resp.json()
+        assert data["success"] is False
+        assert "RuntimeError" in data["error"]
+        # Sensitive data should be redacted
+        assert "BQD1234" not in data["error"]
+        assert "Bearer [redacted]" in data["error"]
+        assert "user@example.com" not in data["error"]
+        assert "[redacted email]" in data["error"]
+        assert "192.168.1.100" not in data["error"]
+        assert "[redacted ip]" in data["error"]
