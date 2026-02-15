@@ -99,15 +99,16 @@ def test_list_tools(client: TestClient) -> None:
     assert resp.status_code == 200
     tools = resp.json()
     assert isinstance(tools, list)
-    assert len(tools) >= 11  # 6 history + 2 spotify + 3 ops
+    assert len(tools) >= 12  # 6 history + 2 spotify + 4 ops
     names = {t["name"] for t in tools}
     assert "history.taste_summary" in names
     assert "ops.sync_status" in names
+    assert "ops.list_users" in names
     assert "spotify.search" in names
 
 
 def test_call_unknown_tool(client: TestClient) -> None:
-    resp = client.post("/mcp/call", json={"tool": "nonexistent.tool", "args": {}})
+    resp = client.post("/mcp/call", json={"tool": "nonexistent.tool", "arguments": {}})
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is False
@@ -117,7 +118,7 @@ def test_call_unknown_tool(client: TestClient) -> None:
 def test_call_history_top_artists(client: TestClient, seeded_user: int) -> None:
     resp = client.post(
         "/mcp/call",
-        json={"tool": "history.top_artists", "args": {"user_id": seeded_user, "days": 3650}},
+        json={"tool": "history.top_artists", "arguments": {"user_id": seeded_user, "days": 3650}},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -130,7 +131,7 @@ def test_call_history_top_artists(client: TestClient, seeded_user: int) -> None:
 def test_call_history_taste_summary(client: TestClient, seeded_user: int) -> None:
     resp = client.post(
         "/mcp/call",
-        json={"tool": "history.taste_summary", "args": {"user_id": seeded_user, "days": 3650}},
+        json={"tool": "history.taste_summary", "arguments": {"user_id": seeded_user, "days": 3650}},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -141,7 +142,7 @@ def test_call_history_taste_summary(client: TestClient, seeded_user: int) -> Non
 def test_call_ops_sync_status_no_checkpoint(client: TestClient, seeded_user: int) -> None:
     resp = client.post(
         "/mcp/call",
-        json={"tool": "ops.sync_status", "args": {"user_id": seeded_user}},
+        json={"tool": "ops.sync_status", "arguments": {"user_id": seeded_user}},
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -149,8 +150,19 @@ def test_call_ops_sync_status_no_checkpoint(client: TestClient, seeded_user: int
     assert data["result"]["status"] == "no_checkpoint"
 
 
+def test_call_list_users(client: TestClient, seeded_user: int) -> None:
+    """ops.list_users requires no arguments."""
+    resp = client.post("/mcp/call", json={"tool": "ops.list_users"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert isinstance(data["result"], list)
+    assert len(data["result"]) == 1
+    assert data["result"][0]["user_id"] == seeded_user
+
+
 def test_call_flat_args(client: TestClient, seeded_user: int) -> None:
-    """ChatGPT may send args at the top level instead of nested in 'args'."""
+    """ChatGPT may send args at the top level instead of nested."""
     resp = client.post(
         "/mcp/call",
         json={"tool": "history.top_artists", "user_id": seeded_user, "days": 3650},
@@ -162,14 +174,26 @@ def test_call_flat_args(client: TestClient, seeded_user: int) -> None:
     assert len(data["result"]) == 1
 
 
-def test_call_flat_args_explicit_args_win(client: TestClient, seeded_user: int) -> None:
-    """When both flat and nested args are present, nested 'args' take priority."""
+def test_call_legacy_args_field(client: TestClient, seeded_user: int) -> None:
+    """Legacy 'args' field name still works for backward compatibility."""
     resp = client.post(
         "/mcp/call",
-        json={"tool": "history.top_artists", "args": {"user_id": seeded_user, "days": 3650}, "days": 1},
+        json={"tool": "history.top_artists", "args": {"user_id": seeded_user, "days": 3650}},
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True
-    # days=3650 from explicit args should win over days=1 from flat
+    assert len(data["result"]) == 1
+
+
+def test_call_explicit_arguments_win(client: TestClient, seeded_user: int) -> None:
+    """When both flat and nested args are present, explicit arguments win."""
+    resp = client.post(
+        "/mcp/call",
+        json={"tool": "history.top_artists", "arguments": {"user_id": seeded_user, "days": 3650}, "days": 1},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    # days=3650 from explicit arguments should win over days=1 from flat
     assert len(data["result"]) == 1

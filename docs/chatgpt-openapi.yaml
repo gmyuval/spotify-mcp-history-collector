@@ -10,128 +10,88 @@ servers:
   - url: https://music.praxiscode.dev
 
 paths:
-  /mcp/tools:
-    get:
-      operationId: listTools
-      summary: List available tools
-      description: Returns the full catalog of MCP tools with parameter definitions.
-      responses:
-        "200":
-          description: Tool catalog
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ToolDefinition"
-
   /mcp/call:
     post:
       operationId: callTool
       summary: Invoke an MCP tool
       description: >
-        Call any tool from the catalog. Pass the tool name and arguments.
-        Errors are returned in the response body (success=false), not as
-        HTTP error codes.
+        Call any tool from the catalog. Pass the tool name and its parameters
+        as top-level fields. Errors are returned in the response body
+        (success=false), not as HTTP error codes.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ToolCallRequest"
+              type: object
+              required: [tool]
+              properties:
+                tool:
+                  type: string
+                  description: Tool name to invoke.
+                  enum:
+                    - ops.list_users
+                    - history.taste_summary
+                    - history.top_artists
+                    - history.top_tracks
+                    - history.listening_heatmap
+                    - history.repeat_rate
+                    - history.coverage
+                    - spotify.get_top
+                    - spotify.search
+                    - ops.sync_status
+                    - ops.latest_job_runs
+                    - ops.latest_import_jobs
+                user_id:
+                  type: integer
+                  description: >
+                    User ID. Required for all tools except ops.list_users.
+                    Get the ID from ops.list_users first.
+                days:
+                  type: integer
+                  description: Time window in days for history tools. Default 90.
+                limit:
+                  type: integer
+                  description: >
+                    Max results for top_artists, top_tracks,
+                    latest_job_runs, latest_import_jobs. Default 20.
+                entity:
+                  type: string
+                  description: "For spotify.get_top only: 'artists' or 'tracks'."
+                  enum: [artists, tracks]
+                time_range:
+                  type: string
+                  description: >
+                    For spotify.get_top only: 'short_term' (4 weeks),
+                    'medium_term' (6 months), 'long_term' (years).
+                  enum: [short_term, medium_term, long_term]
+                q:
+                  type: string
+                  description: "For spotify.search only: search query string."
+                search_type:
+                  type: string
+                  description: "For spotify.search only: type of search. Default 'track'."
+                  enum: [track, artist, album]
       responses:
         "200":
           description: Tool result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ToolCallResponse"
+                type: object
+                properties:
+                  tool:
+                    type: string
+                  success:
+                    type: boolean
+                  result:
+                    description: Tool result data (structure varies by tool)
+                  error:
+                    type: string
+                    nullable: true
 
 components:
-  schemas:
-    ToolDefinition:
-      type: object
-      properties:
-        name:
-          type: string
-          description: "Tool identifier (e.g. history.taste_summary)"
-        description:
-          type: string
-        category:
-          type: string
-          enum: [history, spotify, ops]
-        parameters:
-          type: array
-          items:
-            type: object
-            properties:
-              name:
-                type: string
-              type:
-                type: string
-              description:
-                type: string
-              required:
-                type: boolean
-              default: {}
-
-    ToolCallRequest:
-      type: object
-      required: [tool]
-      properties:
-        tool:
-          type: string
-          description: >
-            Tool name to invoke. Available tools:
-            - history.taste_summary — Comprehensive listening analysis (top artists/tracks, hours, repeat rate, peak times)
-            - history.top_artists — Top artists by play count
-            - history.top_tracks — Top tracks by play count
-            - history.listening_heatmap — Weekday/hour listening patterns
-            - history.repeat_rate — Track repeat/replay statistics
-            - history.coverage — Data completeness and source breakdown
-            - spotify.get_top — Spotify's native top artists/tracks (live API)
-            - spotify.search — Search Spotify for tracks/artists/albums
-            - ops.sync_status — User sync state
-            - ops.latest_job_runs — Recent job history
-            - ops.latest_import_jobs — Recent import job status
-          enum:
-            - history.taste_summary
-            - history.top_artists
-            - history.top_tracks
-            - history.listening_heatmap
-            - history.repeat_rate
-            - history.coverage
-            - spotify.get_top
-            - spotify.search
-            - ops.sync_status
-            - ops.latest_job_runs
-            - ops.latest_import_jobs
-        args:
-          type: object
-          description: >
-            Tool arguments. Common parameters:
-            - user_id (int, required for all tools) — The user ID
-            - days (int, optional, default 90) — Time window for history tools
-            - limit (int, optional) — Max results for top_artists/top_tracks (default 20)
-            - entity (str) — For spotify.get_top: "artists" or "tracks"
-            - time_range (str) — For spotify.get_top: "short_term", "medium_term", "long_term"
-            - q (str) — For spotify.search: search query
-            - type (str) — For spotify.search: "track", "artist", or "album"
-          additionalProperties: true
-
-    ToolCallResponse:
-      type: object
-      properties:
-        tool:
-          type: string
-        success:
-          type: boolean
-        result:
-          description: Tool result data (structure varies by tool)
-        error:
-          type: string
-          nullable: true
-
+  schemas: {}
   securitySchemes:
     BearerAuth:
       type: http

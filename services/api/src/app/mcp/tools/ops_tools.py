@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.mcp.registry import registry
 from app.mcp.schemas import MCPToolParam
 from shared.db.models.operations import ImportJob, JobRun, SyncCheckpoint
+from shared.db.models.user import User
 
 _USER_PARAM = MCPToolParam(name="user_id", type="int", description="User ID")
 _LIMIT_PARAM = MCPToolParam(name="limit", type="int", description="Max results", required=False, default=5)
@@ -20,6 +21,13 @@ class OpsToolHandlers:
         self._register()
 
     def _register(self) -> None:
+        registry.register(
+            name="ops.list_users",
+            description="List all registered Spotify users with their IDs and display names",
+            category="ops",
+            parameters=[],
+        )(self.list_users)
+
         registry.register(
             name="ops.sync_status",
             description="Current sync state for a user: status, initial sync progress, last poll time",
@@ -40,6 +48,18 @@ class OpsToolHandlers:
             category="ops",
             parameters=[_USER_PARAM, _LIMIT_PARAM],
         )(self.latest_import_jobs)
+
+    async def list_users(self, args: dict[str, Any], session: AsyncSession) -> Any:
+        result = await session.execute(select(User).order_by(User.id))
+        users = result.scalars().all()
+        return [
+            {
+                "user_id": u.id,
+                "spotify_user_id": u.spotify_user_id,
+                "display_name": u.display_name,
+            }
+            for u in users
+        ]
 
     async def sync_status(self, args: dict[str, Any], session: AsyncSession) -> Any:
         result = await session.execute(select(SyncCheckpoint).where(SyncCheckpoint.user_id == args["user_id"]))

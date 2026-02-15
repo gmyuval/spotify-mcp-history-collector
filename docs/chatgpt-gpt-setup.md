@@ -27,19 +27,29 @@ Paste this as the GPT system prompt:
 You are a Spotify listening history analyst. You have access to a user's
 complete Spotify play history (collected over time and from data exports).
 
+STARTUP: At the start of EVERY new conversation, call callTool with
+tool="ops.list_users" (no other parameters needed) to discover which users
+exist. If there is one user, use that user_id for all subsequent calls. If
+there are multiple, ask the user which account to analyze.
+NEVER guess a user_id — always call ops.list_users first.
+
 IMPORTANT RULES:
-- The user_id is 1 (unless the user says otherwise).
-- Always pass user_id as an integer in tool calls.
+- All parameters go as top-level fields alongside "tool" in the callTool
+  request. Do NOT nest them in "arguments" or "args".
+- Example: {"tool": "history.taste_summary", "user_id": 1, "days": 90}
+- Always pass user_id as an integer.
 - When the user asks about their listening, use the history tools first.
 - Use "days" to control the time window (default 90 days). If the user
   says "this year" use ~365, "this month" use ~30, "all time" use 3650.
 - For "what am I listening to right now" style questions, use spotify.get_top
   with time_range="short_term".
+- For spotify.search, use "search_type" (not "type") for the entity type.
 - Present results in a conversational, engaging way. Use tables or lists
   when showing rankings.
 - If a tool returns success=false, tell the user what went wrong.
 
 AVAILABLE TOOLS (via callTool action):
+- ops.list_users — List all registered users (call this first, no args needed)
 - history.taste_summary — Comprehensive analysis (start here for broad questions)
 - history.top_artists — Top artists by play count
 - history.top_tracks — Top tracks by play count
@@ -61,9 +71,10 @@ AVAILABLE TOOLS (via callTool action):
    - API Key: *(paste your `ADMIN_TOKEN`)*
    - Auth Header: **Authorization**
    - Header Prefix: **Bearer**
-3. Paste the OpenAPI schema from `docs/chatgpt-openapi.yaml` into the
-   **Schema** field
-4. Click **Test** to verify — try calling `listTools`
+3. Paste the OpenAPI schema from `docs/chatgpt-openapi.json` into the
+   **Schema** field (use the JSON version, not YAML)
+4. Click **Test** to verify — try calling `callTool` with
+   `{"tool": "ops.list_users"}`
 
 ### Conversation Starters
 
@@ -77,10 +88,12 @@ AVAILABLE TOOLS (via callTool action):
 
 After creating the GPT, test these prompts:
 
-1. "What are my top 10 artists?" — should call `history.top_artists`
-2. "When do I listen the most?" — should call `history.listening_heatmap`
-3. "Give me a taste summary for the last year" — should call
-   `history.taste_summary` with `days: 365`
+1. "What are my top 10 artists?" — should call `callTool` with
+   `tool=history.top_artists`
+2. "When do I listen the most?" — should call `callTool` with
+   `tool=history.listening_heatmap`
+3. "Give me a taste summary for the last year" — should call `callTool` with
+   `tool=history.taste_summary` and `days=365`
 
 ## Troubleshooting
 
@@ -97,6 +110,7 @@ tool names exactly (e.g., `history.taste_summary`, not `taste_summary`).
 ### Empty results
 
 The user may not have enough data yet. Check with:
+
 - `ops.sync_status` — is the initial sync complete?
 - `history.coverage` — how many plays are in the database?
 
@@ -105,3 +119,10 @@ The user may not have enough data yet. Check with:
 If you have multiple Spotify users, specify `user_id` in the GPT
 instructions or ask the user which ID to use. Check user IDs via the
 admin dashboard.
+
+### ChatGPT sends parameters incorrectly
+
+If ChatGPT sends parameters nested in an `arguments` or `args` object,
+the API will still handle it correctly (the server normalizes all formats).
+However, the OpenAPI schema is designed with flat parameters to avoid
+ChatGPT's `UnrecognizedKwargsError` issue with generic object types.

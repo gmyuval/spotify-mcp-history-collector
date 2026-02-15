@@ -148,11 +148,11 @@ def test_basic_auth_missing_header(async_engine: AsyncEngine, cleanup: None) -> 
 # --- MCP auth ---
 
 
-def test_mcp_tools_public(async_engine: AsyncEngine, cleanup: None) -> None:
-    """GET /mcp/tools should be accessible without auth."""
+def test_mcp_tools_requires_auth(async_engine: AsyncEngine, cleanup: None) -> None:
+    """GET /mcp/tools requires Bearer token auth (defense-in-depth)."""
     client = _make_client(async_engine, _settings_token)
     resp = client.get("/mcp/tools")
-    assert resp.status_code == 200
+    assert resp.status_code == 401
 
 
 def test_mcp_call_requires_auth(async_engine: AsyncEngine, cleanup: None) -> None:
