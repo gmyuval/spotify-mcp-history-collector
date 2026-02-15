@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,7 +26,12 @@ class AuthRouter:
     def __init__(self) -> None:
         self.router = APIRouter()
         self.router.add_api_route("/login", self.login, methods=["GET"])
-        self.router.add_api_route("/callback", self.callback, methods=["GET"])
+        self.router.add_api_route(
+            "/callback",
+            self.callback,
+            methods=["GET"],
+            response_model=None,
+        )
 
     async def login(
         self,
@@ -38,18 +43,24 @@ class AuthRouter:
 
     async def callback(
         self,
+        request: Request,
         code: Annotated[str, Query()],
         state: Annotated[str, Query()],
         session: Annotated[AsyncSession, Depends(db_manager.dependency)],
         service: Annotated[OAuthService, Depends(_get_oauth_service)],
-    ) -> AuthCallbackResponse:
+    ) -> AuthCallbackResponse | RedirectResponse:
         """Handle Spotify OAuth callback: exchange code, upsert user and tokens."""
         try:
-            return await service.handle_callback(code, state, session)
+            result = await service.handle_callback(code, state, session)
         except InvalidStateError as exc:
             raise HTTPException(status_code=400, detail="Invalid or expired state parameter") from exc
         except SpotifyAPIError as exc:
             raise HTTPException(status_code=502, detail=exc.detail) from exc
+
+        accept = request.headers.get("accept", "")
+        if "text/html" in accept:
+            return RedirectResponse(url="/users", status_code=303)
+        return result
 
 
 _instance = AuthRouter()

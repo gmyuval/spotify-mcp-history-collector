@@ -11,6 +11,14 @@
   {% include "partials/_sync_status.html" %}
 </div>
 
+<!-- Active operations — auto-refresh every 10s -->
+<div id="active-operations"
+     hx-get="/partials/active-operations"
+     hx-trigger="every 10s"
+     hx-swap="innerHTML">
+  {% include "partials/_active_operations.html" %}
+</div>
+
 <!-- Recent errors -->
 {% if sync_status.recent_errors %}
 <div class="card mt-4">
