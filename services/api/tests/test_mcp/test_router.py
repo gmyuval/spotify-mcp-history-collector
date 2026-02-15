@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator, Generator
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from cryptography.fernet import Fernet
@@ -197,3 +198,64 @@ def test_call_explicit_arguments_win(client: TestClient, seeded_user: int) -> No
     assert data["success"] is True
     # days=3650 from explicit arguments should win over days=1 from flat
     assert len(data["result"]) == 1
+
+
+def test_call_tool_exception_includes_message(client: TestClient, seeded_user: int) -> None:
+    """When a tool raises an unhandled exception, the error message is forwarded to the client."""
+    with patch(
+        "app.mcp.tools.spotify_tools.SpotifyToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_track = AsyncMock(side_effect=RuntimeError("Something specific went wrong"))
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_track", "user_id": seeded_user, "track_id": "t1"},
+        )
+        data = resp.json()
+        assert data["success"] is False
+        assert "RuntimeError" in data["error"]
+        assert "Something specific went wrong" in data["error"]
+
+
+def test_call_tool_exception_redacts_sensitive_data(client: TestClient, seeded_user: int) -> None:
+    """Sensitive data (tokens, emails, IPs) in exception messages is redacted."""
+    with patch(
+        "app.mcp.tools.spotify_tools.SpotifyToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_track = AsyncMock(
+            side_effect=RuntimeError(
+                "Auth failed: Bearer BQD1234_abcXYZ.token_here "
+                "for user@example.com from 192.168.1.100 "
+                'body: {"refresh_token": "secret123", "access_token": "tok456"} '
+                "ipv6: 2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+            )
+        )
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_track", "user_id": seeded_user, "track_id": "t1"},
+        )
+        data = resp.json()
+        assert data["success"] is False
+        assert "RuntimeError" in data["error"]
+        # Bearer token redacted
+        assert "BQD1234" not in data["error"]
+        assert "Bearer [redacted]" in data["error"]
+        # Email redacted
+        assert "user@example.com" not in data["error"]
+        assert "[redacted email]" in data["error"]
+        # IPv4 redacted
+        assert "192.168.1.100" not in data["error"]
+        assert "[redacted ip]" in data["error"]
+        # JSON-style tokens redacted
+        assert "secret123" not in data["error"]
+        assert "tok456" not in data["error"]
+        # IPv6 redacted
+        assert "2001:0db8" not in data["error"]
+        assert "[redacted ipv6]" in data["error"]

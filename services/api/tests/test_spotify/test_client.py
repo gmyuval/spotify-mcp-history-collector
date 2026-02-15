@@ -172,8 +172,24 @@ async def test_4xx_raises_request_error_immediately() -> None:
     )
 
     client = SpotifyClient("test-token", max_retries=3)
-    with pytest.raises(SpotifyRequestError, match="403"):
+    with pytest.raises(SpotifyRequestError, match="403") as exc_info:
         await client.get_recently_played()
+    assert "Forbidden" in str(exc_info.value)
+
+
+@respx.mock
+async def test_4xx_extracts_spotify_json_error_message() -> None:
+    """SpotifyRequestError extracts error message from Spotify's JSON error body."""
+    error_body = {"error": {"status": 404, "message": "Resource not found"}}
+    respx.get("https://api.spotify.com/v1/me/player/recently-played").mock(
+        return_value=httpx.Response(404, json=error_body)
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    with pytest.raises(SpotifyRequestError, match="Resource not found") as exc_info:
+        await client.get_recently_played()
+    assert exc_info.value.status_code == 404
+    assert "Resource not found" in exc_info.value.detail
 
 
 @respx.mock
@@ -430,7 +446,7 @@ async def test_get_user_playlists() -> None:
                         "name": "Playlist 1",
                         "public": True,
                         "owner": {"id": "user1", "display_name": "Test User"},
-                        "tracks": {"href": "https://api.spotify.com/v1/playlists/pl1/tracks", "total": 25},
+                        "tracks": {"href": "https://api.spotify.com/v1/playlists/pl1/items", "total": 25},
                     },
                     {
                         "id": "pl2",
@@ -451,7 +467,7 @@ async def test_get_user_playlists() -> None:
     result = await client.get_user_playlists()
     assert len(result.items) == 2
     assert result.items[0].name == "Playlist 1"
-    assert result.items[0].tracks == {"href": "https://api.spotify.com/v1/playlists/pl1/tracks", "total": 25}
+    assert result.items[0].tracks == {"href": "https://api.spotify.com/v1/playlists/pl1/items", "total": 25}
     assert result.items[0].tracks.get("total") == 25
     assert result.total == 2
 
@@ -536,7 +552,7 @@ async def test_create_playlist() -> None:
 @respx.mock
 async def test_add_tracks_to_playlist() -> None:
     """add_tracks_to_playlist sends POST with URIs in JSON body."""
-    route = respx.post("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+    route = respx.post("https://api.spotify.com/v1/playlists/pl1/items").mock(
         return_value=httpx.Response(200, json={"snapshot_id": "snap2"})
     )
 
@@ -553,7 +569,7 @@ async def test_add_tracks_to_playlist() -> None:
 @respx.mock
 async def test_add_tracks_with_position() -> None:
     """add_tracks_to_playlist with position includes it in the body."""
-    route = respx.post("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+    route = respx.post("https://api.spotify.com/v1/playlists/pl1/items").mock(
         return_value=httpx.Response(200, json={"snapshot_id": "snap3"})
     )
 
@@ -567,7 +583,7 @@ async def test_add_tracks_with_position() -> None:
 @respx.mock
 async def test_remove_tracks_from_playlist() -> None:
     """remove_tracks_from_playlist sends DELETE with track URIs."""
-    route = respx.delete("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+    route = respx.delete("https://api.spotify.com/v1/playlists/pl1/items").mock(
         return_value=httpx.Response(200, json={"snapshot_id": "snap4"})
     )
 
