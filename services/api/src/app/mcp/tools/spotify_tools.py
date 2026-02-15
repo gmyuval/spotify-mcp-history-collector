@@ -61,6 +61,36 @@ class SpotifyToolHandlers:
             ],
         )(self.search)
 
+        registry.register(
+            name="spotify.get_track",
+            description="Get detailed info for a Spotify track by ID (name, artists, album, duration, popularity)",
+            category="spotify",
+            parameters=[
+                _USER_PARAM,
+                MCPToolParam(name="track_id", type="str", description="Spotify track ID"),
+            ],
+        )(self.get_track)
+
+        registry.register(
+            name="spotify.get_artist",
+            description="Get detailed info for a Spotify artist by ID (genres, popularity, followers, images)",
+            category="spotify",
+            parameters=[
+                _USER_PARAM,
+                MCPToolParam(name="artist_id", type="str", description="Spotify artist ID"),
+            ],
+        )(self.get_artist)
+
+        registry.register(
+            name="spotify.get_album",
+            description="Get album details and full track listing by album ID",
+            category="spotify",
+            parameters=[
+                _USER_PARAM,
+                MCPToolParam(name="album_id", type="str", description="Spotify album ID"),
+            ],
+        )(self.get_album)
+
     async def _get_client(self, user_id: int, session: AsyncSession) -> SpotifyClient:
         """Create a SpotifyClient with token management for the given user."""
         settings = get_settings()
@@ -117,6 +147,63 @@ class SpotifyToolHandlers:
             for al in resp.albums.items:
                 results.append({"type": "album", "name": al.name, "id": al.id})
         return results
+
+    async def get_track(self, args: dict[str, Any], session: AsyncSession) -> Any:
+        client = await self._get_client(args["user_id"], session)
+        track = await client.get_track(args["track_id"])
+        return {
+            "id": track.id,
+            "name": track.name,
+            "artists": [{"id": a.id, "name": a.name} for a in track.artists],
+            "album": {"id": track.album.id, "name": track.album.name} if track.album else None,
+            "duration_ms": track.duration_ms,
+            "popularity": track.popularity,
+            "explicit": track.explicit,
+            "external_urls": track.external_urls,
+        }
+
+    async def get_artist(self, args: dict[str, Any], session: AsyncSession) -> Any:
+        client = await self._get_client(args["user_id"], session)
+        artist = await client.get_artist(args["artist_id"])
+        return {
+            "id": artist.id,
+            "name": artist.name,
+            "genres": artist.genres,
+            "popularity": artist.popularity,
+            "followers": artist.followers,
+            "images": [{"url": img.url, "height": img.height, "width": img.width} for img in artist.images],
+            "external_urls": artist.external_urls,
+        }
+
+    async def get_album(self, args: dict[str, Any], session: AsyncSession) -> Any:
+        client = await self._get_client(args["user_id"], session)
+        album = await client.get_album(args["album_id"])
+        tracks_list = []
+        if album.tracks:
+            for t in album.tracks.items:
+                tracks_list.append(
+                    {
+                        "id": t.id,
+                        "name": t.name,
+                        "track_number": t.track_number,
+                        "duration_ms": t.duration_ms,
+                        "artists": [{"id": a.id, "name": a.name} for a in t.artists],
+                    }
+                )
+        return {
+            "id": album.id,
+            "name": album.name,
+            "album_type": album.album_type,
+            "release_date": album.release_date,
+            "total_tracks": album.total_tracks,
+            "artists": [{"id": a.id, "name": a.name} for a in album.artists],
+            "genres": album.genres,
+            "popularity": album.popularity,
+            "label": album.label,
+            "tracks": tracks_list,
+            "images": [{"url": img.url} for img in album.images],
+            "external_urls": album.external_urls,
+        }
 
 
 _instance = SpotifyToolHandlers()
