@@ -170,22 +170,25 @@ class PlaylistToolHandlers:
             "external_urls": pl.external_urls,
         }
         # --- TEMPORARY DEBUG: raw Spotify response info ---
-        from shared.spotify.constants import PLAYLIST_URL
+        try:
+            from shared.spotify.constants import PLAYLIST_URL
 
-        raw_resp = await client._request("GET", f"{PLAYLIST_URL}/{args['playlist_id']}")  # noqa: SLF001
-        raw_json = raw_resp.json()
-        raw_tracks = raw_json.get("tracks", {})
-        debug: dict[str, Any] = {
-            "raw_status": raw_resp.status_code,
-            "raw_tracks_type": type(raw_tracks).__name__,
-            "raw_tracks_total": raw_tracks.get("total") if isinstance(raw_tracks, dict) else None,
-            "raw_tracks_items_count": len(raw_tracks.get("items", [])) if isinstance(raw_tracks, dict) else None,
-            "raw_tracks_keys": list(raw_tracks.keys()) if isinstance(raw_tracks, dict) else str(raw_tracks)[:200],
-            "raw_first_item_keys": list(raw_tracks["items"][0].keys())
-            if isinstance(raw_tracks, dict) and raw_tracks.get("items")
-            else None,
-        }
-        result["_debug"] = debug
+            raw_resp = await client._request("GET", f"{PLAYLIST_URL}/{args['playlist_id']}")  # noqa: SLF001
+            raw_json = raw_resp.json()
+            raw_tracks = raw_json.get("tracks", {})
+            debug: dict[str, Any] = {
+                "raw_status": raw_resp.status_code,
+                "raw_tracks_type": type(raw_tracks).__name__,
+                "raw_tracks_total": raw_tracks.get("total") if isinstance(raw_tracks, dict) else None,
+                "raw_tracks_items_count": len(raw_tracks.get("items", [])) if isinstance(raw_tracks, dict) else None,
+                "raw_tracks_keys": list(raw_tracks.keys()) if isinstance(raw_tracks, dict) else str(raw_tracks)[:200],
+                "raw_first_item_keys": list(raw_tracks["items"][0].keys())
+                if isinstance(raw_tracks, dict) and raw_tracks.get("items")
+                else None,
+            }
+            result["_debug"] = debug
+        except Exception:
+            pass
         # --- END TEMPORARY DEBUG ---
         return result
 
