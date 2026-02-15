@@ -1,0 +1,52 @@
+{% if active_imports or active_jobs %}
+<div class="card border-info mt-4">
+  <div class="card-header bg-info bg-opacity-10">
+    <strong>Active Operations</strong>
+    <span class="spinner-border spinner-border-sm text-info ms-2" role="status"></span>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr><th>Type</th><th>User</th><th>Status</th><th>Progress</th><th>Started</th><th>Duration</th></tr>
+      </thead>
+      <tbody>
+        {% for imp in active_imports %}
+        <tr>
+          <td><span class="badge bg-primary">import</span></td>
+          <td><a href="/users/{{ imp.user_id }}">{{ imp.user_id }}</a></td>
+          <td>
+            <span class="badge bg-info">
+              {{ imp.format_detected or "detecting" }}
+            </span>
+          </td>
+          <td>
+            <strong>{{ "{:,}".format(imp.records_ingested) }}</strong> records ingested
+          </td>
+          <td>{{ imp.started_at[:19] if imp.started_at else imp.created_at[:19] }}</td>
+          <td>
+            {% if imp.started_at %}
+              <span class="text-muted">running</span>
+            {% else %}
+              <span class="text-muted">pending</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% for job in active_jobs %}
+        <tr>
+          <td><span class="badge bg-warning text-dark">{{ job.job_type }}</span></td>
+          <td><a href="/users/{{ job.user_id }}">{{ job.user_id }}</a></td>
+          <td><span class="badge bg-primary">running</span></td>
+          <td>
+            <strong>{{ "{:,}".format(job.records_inserted) }}</strong> inserted
+            {% if job.records_skipped %}, {{ "{:,}".format(job.records_skipped) }} skipped{% endif %}
+          </td>
+          <td>{{ job.started_at[:19] if job.started_at else "—" }}</td>
+          <td><span class="text-muted">running</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}

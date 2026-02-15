@@ -15,6 +15,22 @@ class DashboardRouter:
         self.router.add_api_route(
             "/partials/sync-status", self.sync_status_partial, methods=["GET"], response_class=HTMLResponse
         )
+        self.router.add_api_route(
+            "/partials/active-operations", self.active_operations_partial, methods=["GET"], response_class=HTMLResponse
+        )
+
+    async def _fetch_active_operations(self, api: AdminApiClient) -> tuple[list[object], list[object]]:
+        """Fetch currently active imports and jobs."""
+        active_imports: list[object] = []
+        active_jobs: list[object] = []
+        try:
+            processing = await api.list_import_jobs(status="processing", limit=10)
+            active_imports = processing.get("items", [])
+            running = await api.list_job_runs(status="running", limit=10)
+            active_jobs = running.get("items", [])
+        except ApiError:
+            pass
+        return active_imports, active_jobs
 
     async def dashboard(self, request: Request) -> HTMLResponse:
         """Render the main dashboard page."""
@@ -33,6 +49,8 @@ class DashboardRouter:
         except ApiError as e:
             error = e.detail
 
+        active_imports, active_jobs = await self._fetch_active_operations(api)
+
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "dashboard.html",
             {
@@ -41,6 +59,8 @@ class DashboardRouter:
                 "sync_status": sync_status,
                 "recent_jobs": recent_jobs,
                 "recent_imports": recent_imports,
+                "active_imports": active_imports,
+                "active_jobs": active_jobs,
                 "error": error,
             },
         )
@@ -56,6 +76,20 @@ class DashboardRouter:
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "partials/_sync_status.html",
             {"request": request, "sync_status": sync_status},
+        )
+
+    async def active_operations_partial(self, request: Request) -> HTMLResponse:
+        """HTMX partial — active operations (polled every 10s)."""
+        api: AdminApiClient = request.app.state.api
+        active_imports, active_jobs = await self._fetch_active_operations(api)
+
+        return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            "partials/_active_operations.html",
+            {
+                "request": request,
+                "active_imports": active_imports,
+                "active_jobs": active_jobs,
+            },
         )
 
 
