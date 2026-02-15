@@ -173,18 +173,25 @@ class PlaylistToolHandlers:
         try:
             from shared.spotify.constants import PLAYLIST_URL
 
+            # Raw request WITHOUT market
             raw_resp = await client._request("GET", f"{PLAYLIST_URL}/{args['playlist_id']}")  # noqa: SLF001
             raw_json = raw_resp.json()
-            raw_tracks = raw_json.get("tracks", {})
+            raw_tracks = raw_json.get("tracks", "_MISSING_")
+            # Raw request WITH market
+            raw_resp2 = await client._request(  # noqa: SLF001
+                "GET", f"{PLAYLIST_URL}/{args['playlist_id']}", params={"market": "from_token"}
+            )
+            raw_json2 = raw_resp2.json()
+            raw_tracks2 = raw_json2.get("tracks", "_MISSING_")
             debug: dict[str, Any] = {
-                "raw_status": raw_resp.status_code,
-                "raw_tracks_type": type(raw_tracks).__name__,
-                "raw_tracks_total": raw_tracks.get("total") if isinstance(raw_tracks, dict) else None,
-                "raw_tracks_items_count": len(raw_tracks.get("items", [])) if isinstance(raw_tracks, dict) else None,
+                "raw_top_keys": sorted(raw_json.keys()),
+                "raw_has_tracks_key": "tracks" in raw_json,
                 "raw_tracks_keys": list(raw_tracks.keys()) if isinstance(raw_tracks, dict) else str(raw_tracks)[:200],
-                "raw_first_item_keys": list(raw_tracks["items"][0].keys())
-                if isinstance(raw_tracks, dict) and raw_tracks.get("items")
-                else None,
+                "with_market_tracks_total": raw_tracks2.get("total") if isinstance(raw_tracks2, dict) else None,
+                "with_market_items_count": len(raw_tracks2.get("items", [])) if isinstance(raw_tracks2, dict) else None,
+                "with_market_tracks_keys": list(raw_tracks2.keys())
+                if isinstance(raw_tracks2, dict)
+                else str(raw_tracks2)[:200],
             }
             result["_debug"] = debug
         except Exception:
