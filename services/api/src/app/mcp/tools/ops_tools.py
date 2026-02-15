@@ -55,7 +55,6 @@ class OpsToolHandlers:
         return [
             {
                 "user_id": u.id,
-                "spotify_user_id": u.spotify_user_id,
                 "display_name": u.display_name,
             }
             for u in users

@@ -55,8 +55,11 @@ class MCPRouter:
         except Exception as exc:
             logger.exception("MCP tool %s failed", request.tool)
             error_type = type(exc).__name__
-            error_detail = str(exc) if str(exc) else "tool execution failed"
-            return MCPCallResponse(tool=request.tool, success=False, error=f"{error_type}: {error_detail}")
+            return MCPCallResponse(
+                tool=request.tool,
+                success=False,
+                error=f"{error_type}: tool execution failed",
+            )
 
 
 _instance = MCPRouter()
