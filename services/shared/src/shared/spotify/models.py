@@ -5,8 +5,9 @@ No DB or auth dependencies.
 """
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Images
@@ -302,11 +303,22 @@ class SpotifyPlaylistOwner(BaseModel):
 
 
 class SpotifyPlaylistTrackItem(BaseModel):
-    """Single item within a playlist's tracks array."""
+    """Single item within a playlist's tracks array.
+
+    Spotify renamed ``track`` to ``item`` in 2025; we normalise to ``track``
+    so callers don't need to handle both.
+    """
 
     track: SpotifyTrack | None = None
     added_at: str | None = None
     added_by: SpotifyPlaylistOwner | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_item_to_track(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "item" in data and "track" not in data:
+            data["track"] = data.pop("item")
+        return data
 
 
 class SpotifyPlaylistTracks(BaseModel):
@@ -321,7 +333,11 @@ class SpotifyPlaylistTracks(BaseModel):
 
 
 class SpotifyPlaylist(BaseModel):
-    """Full playlist object from GET /playlists/{id} or POST /me/playlists."""
+    """Full playlist object from GET /playlists/{id} or POST /me/playlists.
+
+    Spotify renamed the ``tracks`` paging object to ``items`` in 2025;
+    we normalise to ``tracks`` so callers don't need to handle both.
+    """
 
     id: str | None = None
     name: str
@@ -336,9 +352,16 @@ class SpotifyPlaylist(BaseModel):
     href: str | None = None
     external_urls: dict[str, str] = Field(default_factory=dict)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_items_to_tracks(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "items" in data and "tracks" not in data:
+            data["tracks"] = data.pop("items")
+        return data
+
 
 class SpotifyPlaylistSimplified(BaseModel):
-    """Simplified playlist from list endpoints (tracks has only total)."""
+    """Simplified playlist from list endpoints (tracks/items has href + total)."""
 
     id: str | None = None
     name: str
@@ -347,11 +370,18 @@ class SpotifyPlaylistSimplified(BaseModel):
     collaborative: bool | None = None
     owner: SpotifyPlaylistOwner | None = None
     images: list[SpotifyImage] = Field(default_factory=list)
-    tracks: dict[str, int] | None = None
+    tracks: dict[str, Any] | None = None
     snapshot_id: str | None = None
     uri: str | None = None
     href: str | None = None
     external_urls: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_items_to_tracks(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "items" in data and "tracks" not in data:
+            data["tracks"] = data.pop("items")
+        return data
 
 
 class UserPlaylistsResponse(BaseModel):

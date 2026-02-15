@@ -158,7 +158,7 @@ class PlaylistToolHandlers:
                             "added_at": item.added_at,
                         }
                     )
-        result = {
+        return {
             "id": pl.id,
             "name": pl.name,
             "description": pl.description,
@@ -169,35 +169,6 @@ class PlaylistToolHandlers:
             "snapshot_id": pl.snapshot_id,
             "external_urls": pl.external_urls,
         }
-        # --- TEMPORARY DEBUG: raw Spotify response info ---
-        try:
-            from shared.spotify.constants import PLAYLIST_URL
-
-            # Raw request WITHOUT market
-            raw_resp = await client._request("GET", f"{PLAYLIST_URL}/{args['playlist_id']}")  # noqa: SLF001
-            raw_json = raw_resp.json()
-            raw_tracks = raw_json.get("tracks", "_MISSING_")
-            # Raw request WITH market
-            raw_resp2 = await client._request(  # noqa: SLF001
-                "GET", f"{PLAYLIST_URL}/{args['playlist_id']}", params={"market": "from_token"}
-            )
-            raw_json2 = raw_resp2.json()
-            raw_tracks2 = raw_json2.get("tracks", "_MISSING_")
-            debug: dict[str, Any] = {
-                "raw_top_keys": sorted(raw_json.keys()),
-                "raw_has_tracks_key": "tracks" in raw_json,
-                "raw_tracks_keys": list(raw_tracks.keys()) if isinstance(raw_tracks, dict) else str(raw_tracks)[:200],
-                "with_market_tracks_total": raw_tracks2.get("total") if isinstance(raw_tracks2, dict) else None,
-                "with_market_items_count": len(raw_tracks2.get("items", [])) if isinstance(raw_tracks2, dict) else None,
-                "with_market_tracks_keys": list(raw_tracks2.keys())
-                if isinstance(raw_tracks2, dict)
-                else str(raw_tracks2)[:200],
-            }
-            result["_debug"] = debug
-        except Exception:
-            pass
-        # --- END TEMPORARY DEBUG ---
-        return result
 
     async def create_playlist(self, args: dict[str, Any], session: AsyncSession) -> Any:
         scope_error = await self._check_write_scopes(args["user_id"], session)
