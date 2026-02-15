@@ -15,6 +15,9 @@ AUDIO_FEATURES_URL = f"{SPOTIFY_API_BASE}/audio-features"
 TOP_ARTISTS_URL = f"{SPOTIFY_API_BASE}/me/top/artists"
 TOP_TRACKS_URL = f"{SPOTIFY_API_BASE}/me/top/tracks"
 SEARCH_URL = f"{SPOTIFY_API_BASE}/search"
+ALBUMS_URL = f"{SPOTIFY_API_BASE}/albums"
+USER_PLAYLISTS_URL = f"{SPOTIFY_API_BASE}/me/playlists"
+PLAYLIST_URL = f"{SPOTIFY_API_BASE}/playlists"
 
 # Retry defaults
 DEFAULT_MAX_RETRIES = 3

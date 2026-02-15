@@ -1,5 +1,8 @@
 """Tests for SpotifyClient."""
 
+import json
+from typing import Any
+
 import httpx
 import pytest
 import respx
@@ -277,3 +280,309 @@ async def test_search() -> None:
     result = await client.search("test query")
     assert result.tracks is not None
     assert len(result.tracks.items) == 1
+
+
+# ---------------------------------------------------------------------------
+# Single-resource info methods
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_get_track() -> None:
+    """get_track returns parsed SpotifyTrack."""
+    respx.get("https://api.spotify.com/v1/tracks/abc123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "abc123",
+                "name": "Test Track",
+                "duration_ms": 210000,
+                "popularity": 75,
+                "artists": [{"id": "a1", "name": "Artist 1"}],
+                "album": {"id": "alb1", "name": "Test Album"},
+            },
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.get_track("abc123")
+    assert result.id == "abc123"
+    assert result.name == "Test Track"
+    assert result.duration_ms == 210000
+    assert len(result.artists) == 1
+
+
+@respx.mock
+async def test_get_artist() -> None:
+    """get_artist returns parsed SpotifyArtistFull."""
+    respx.get("https://api.spotify.com/v1/artists/art1").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "art1",
+                "name": "Test Artist",
+                "genres": ["rock", "indie"],
+                "popularity": 80,
+                "followers": {"total": 50000},
+                "images": [{"url": "https://img.example.com/1.jpg", "height": 300, "width": 300}],
+            },
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.get_artist("art1")
+    assert result.id == "art1"
+    assert result.name == "Test Artist"
+    assert result.genres == ["rock", "indie"]
+    assert result.popularity == 80
+
+
+@respx.mock
+async def test_get_album() -> None:
+    """get_album returns parsed SpotifyAlbumFull with tracks."""
+    respx.get("https://api.spotify.com/v1/albums/alb1").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "alb1",
+                "name": "Test Album",
+                "album_type": "album",
+                "release_date": "2024-06-15",
+                "total_tracks": 12,
+                "label": "Test Label",
+                "genres": ["rock"],
+                "popularity": 70,
+                "artists": [{"id": "a1", "name": "Artist 1"}],
+                "tracks": {
+                    "items": [
+                        {
+                            "id": "t1",
+                            "name": "Track 1",
+                            "track_number": 1,
+                            "duration_ms": 180000,
+                            "artists": [{"id": "a1", "name": "Artist 1"}],
+                        },
+                        {
+                            "id": "t2",
+                            "name": "Track 2",
+                            "track_number": 2,
+                            "duration_ms": 200000,
+                            "artists": [{"id": "a1", "name": "Artist 1"}],
+                        },
+                    ],
+                    "total": 12,
+                },
+                "images": [{"url": "https://img.example.com/album.jpg"}],
+            },
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.get_album("alb1")
+    assert result.id == "alb1"
+    assert result.name == "Test Album"
+    assert result.total_tracks == 12
+    assert result.label == "Test Label"
+    assert result.tracks is not None
+    assert len(result.tracks.items) == 2
+    assert result.tracks.items[0].name == "Track 1"
+
+
+# ---------------------------------------------------------------------------
+# Playlist read methods
+# ---------------------------------------------------------------------------
+
+
+def _playlist_json(playlist_id: str = "pl1", name: str = "My Playlist") -> dict[str, Any]:
+    """Helper to build a playlist JSON response."""
+    return {
+        "id": playlist_id,
+        "name": name,
+        "description": "A test playlist",
+        "public": True,
+        "collaborative": False,
+        "owner": {"id": "user1", "display_name": "Test User"},
+        "snapshot_id": "snap1",
+        "tracks": {
+            "items": [
+                {
+                    "track": {"id": "t1", "name": "Track 1", "artists": [{"id": "a1", "name": "Artist 1"}]},
+                    "added_at": "2024-01-15T10:00:00Z",
+                }
+            ],
+            "total": 1,
+        },
+        "images": [],
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/pl1"},
+    }
+
+
+@respx.mock
+async def test_get_user_playlists() -> None:
+    """get_user_playlists returns parsed UserPlaylistsResponse."""
+    respx.get("https://api.spotify.com/v1/me/playlists").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "items": [
+                    {
+                        "id": "pl1",
+                        "name": "Playlist 1",
+                        "public": True,
+                        "owner": {"id": "user1", "display_name": "Test User"},
+                        "tracks": {"total": 25},
+                    },
+                    {
+                        "id": "pl2",
+                        "name": "Playlist 2",
+                        "public": False,
+                        "owner": {"id": "user1", "display_name": "Test User"},
+                        "tracks": {"total": 10},
+                    },
+                ],
+                "total": 2,
+                "limit": 50,
+                "offset": 0,
+            },
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.get_user_playlists()
+    assert len(result.items) == 2
+    assert result.items[0].name == "Playlist 1"
+    assert result.items[0].tracks == {"total": 25}
+    assert result.total == 2
+
+
+@respx.mock
+async def test_get_playlist() -> None:
+    """get_playlist returns parsed SpotifyPlaylist with tracks."""
+    respx.get("https://api.spotify.com/v1/playlists/pl1").mock(return_value=httpx.Response(200, json=_playlist_json()))
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.get_playlist("pl1")
+    assert result.id == "pl1"
+    assert result.name == "My Playlist"
+    assert result.tracks is not None
+    assert result.tracks.total == 1
+    assert result.tracks.items[0].track is not None
+    assert result.tracks.items[0].track.name == "Track 1"
+
+
+# ---------------------------------------------------------------------------
+# Playlist write methods
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_create_playlist() -> None:
+    """create_playlist sends POST with JSON body and returns parsed playlist."""
+    route = respx.post("https://api.spotify.com/v1/me/playlists").mock(
+        return_value=httpx.Response(
+            201,
+            json=_playlist_json("new_pl", "New Playlist"),
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.create_playlist("New Playlist", description="Desc", public=False)
+    assert result.name == "New Playlist"
+    assert route.called
+    request = route.calls[0].request
+    body = json.loads(request.content)
+    assert body["name"] == "New Playlist"
+    assert body["public"] is False
+
+
+@respx.mock
+async def test_add_tracks_to_playlist() -> None:
+    """add_tracks_to_playlist sends POST with URIs in JSON body."""
+    route = respx.post("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+        return_value=httpx.Response(200, json={"snapshot_id": "snap2"})
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.add_tracks_to_playlist("pl1", ["spotify:track:t1", "spotify:track:t2"])
+    assert result.snapshot_id == "snap2"
+    assert route.called
+    request = route.calls[0].request
+    body = request.content.decode()
+    assert "spotify:track:t1" in body
+    assert "spotify:track:t2" in body
+
+
+@respx.mock
+async def test_add_tracks_with_position() -> None:
+    """add_tracks_to_playlist with position includes it in the body."""
+    route = respx.post("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+        return_value=httpx.Response(200, json={"snapshot_id": "snap3"})
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    await client.add_tracks_to_playlist("pl1", ["spotify:track:t1"], position=5)
+    request = route.calls[0].request
+    body = json.loads(request.content)
+    assert body["position"] == 5
+
+
+@respx.mock
+async def test_remove_tracks_from_playlist() -> None:
+    """remove_tracks_from_playlist sends DELETE with track URIs."""
+    route = respx.delete("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+        return_value=httpx.Response(200, json={"snapshot_id": "snap4"})
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.remove_tracks_from_playlist("pl1", ["spotify:track:t1"])
+    assert result.snapshot_id == "snap4"
+    assert route.called
+    request = route.calls[0].request
+    body = request.content.decode()
+    assert "spotify:track:t1" in body
+
+
+@respx.mock
+async def test_update_playlist_details() -> None:
+    """update_playlist_details sends PUT with JSON body."""
+    route = respx.put("https://api.spotify.com/v1/playlists/pl1").mock(return_value=httpx.Response(200))
+
+    client = SpotifyClient("test-token", max_retries=0)
+    await client.update_playlist_details("pl1", name="New Name", description="New Desc", public=False)
+    assert route.called
+    request = route.calls[0].request
+    body = json.loads(request.content)
+    assert body["name"] == "New Name"
+    assert body["public"] is False
+
+
+@respx.mock
+async def test_update_playlist_partial() -> None:
+    """update_playlist_details only sends provided fields."""
+    route = respx.put("https://api.spotify.com/v1/playlists/pl1").mock(return_value=httpx.Response(200))
+
+    client = SpotifyClient("test-token", max_retries=0)
+    await client.update_playlist_details("pl1", name="Just Name")
+    request = route.calls[0].request
+    body = json.loads(request.content)
+    assert body["name"] == "Just Name"
+    assert "description" not in body
+    assert "public" not in body
+
+
+@respx.mock
+async def test_post_with_401_refreshes_token() -> None:
+    """POST requests also trigger token refresh on 401."""
+    respx.post("https://api.spotify.com/v1/me/playlists").mock(
+        side_effect=[
+            httpx.Response(401, json={"error": {"message": "expired"}}),
+            httpx.Response(201, json=_playlist_json("pl_new", "Refreshed Playlist")),
+        ]
+    )
+
+    async def mock_refresh() -> str:
+        return "new-token"
+
+    client = SpotifyClient("old-token", on_token_expired=mock_refresh, max_retries=1)
+    result = await client.create_playlist("Refreshed Playlist")
+    assert result.name == "Refreshed Playlist"
