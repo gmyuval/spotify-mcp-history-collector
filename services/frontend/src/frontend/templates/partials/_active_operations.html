@@ -20,9 +20,9 @@
             </span>
           </td>
           <td>
-            <strong>{{ "{:,}".format(imp.records_ingested) }}</strong> records ingested
+            <strong>{{ "{:,}".format(imp.records_ingested if imp.records_ingested is not none else 0) }}</strong> records ingested
           </td>
-          <td>{{ imp.started_at[:19] if imp.started_at else imp.created_at[:19] }}</td>
+          <td>{{ imp.started_at[:19] if imp.started_at else (imp.created_at[:19] if imp.created_at else "—") }}</td>
           <td>
             {% if imp.started_at %}
               <span class="text-muted">running</span>
@@ -38,8 +38,8 @@
           <td><a href="/users/{{ job.user_id }}">{{ job.user_id }}</a></td>
           <td><span class="badge bg-primary">running</span></td>
           <td>
-            <strong>{{ "{:,}".format(job.records_inserted) }}</strong> inserted
-            {% if job.records_skipped %}, {{ "{:,}".format(job.records_skipped) }} skipped{% endif %}
+            <strong>{{ "{:,}".format(job.records_inserted if job.records_inserted is not none else 0) }}</strong> inserted
+            {% if job.records_skipped %}, {{ "{:,}".format(job.records_skipped if job.records_skipped is not none else 0) }} skipped{% endif %}
           </td>
           <td>{{ job.started_at[:19] if job.started_at else "—" }}</td>
           <td><span class="text-muted">running</span></td>
