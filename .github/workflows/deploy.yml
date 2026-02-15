@@ -4,29 +4,101 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch to deploy (default: main)'
+        required: false
+        default: 'main'
 
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: |
+          pip install -e services/shared
+          pip install -e "services/api[dev]"
+          pip install -e "services/collector[dev]"
+          pip install -e "services/frontend[dev]"
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Type check
+        run: mypy services/shared/src services/api/src services/collector/src services/frontend/src
+
+      - name: Test API
+        run: pytest services/api/tests/
+
+      - name: Test Collector
+        working-directory: services/collector
+        run: pytest tests/
+
+      - name: Test Frontend
+        run: pytest services/frontend/tests/
+
   deploy:
     name: Deploy
+    needs: test
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 15
 
     steps:
+      - name: Determine deploy ref
+        id: ref
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            REF="${{ github.event.inputs.ref }}"
+          else
+            REF="main"
+          fi
+          echo "deploy_ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Deploying ref: $REF"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_REF: ${{ steps.ref.outputs.deploy_ref }}
         with:
           host: ${{ secrets.DROPLET_IP }}
           username: deploy
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_REF
           script_stop: true
           script: |
             set -euo pipefail
             cd /opt/spotify-mcp
 
-            echo "=== Pulling latest code ==="
-            git fetch origin main
-            git reset --hard origin/main
+            echo "=== Deploying ref: $DEPLOY_REF ==="
+            git fetch origin "$DEPLOY_REF"
+            git checkout "$DEPLOY_REF"
+            git reset --hard "origin/$DEPLOY_REF"
+
+            if [ "$DEPLOY_REF" != "main" ]; then
+              echo ""
+              echo "============================================"
+              echo "  WARNING: Deployed non-main branch"
+              echo "  Branch: $DEPLOY_REF"
+              echo "  To rollback: re-run workflow with ref=main"
+              echo "============================================"
+              echo ""
+            fi
 
             echo "=== Building and deploying ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml build --pull
@@ -62,4 +134,15 @@ jobs:
             echo "=== Cleaning up old images ==="
             docker image prune -af --filter "until=24h"
             echo ""
-            echo "=== Deployment complete ==="
+            echo "=== Deployment complete: $DEPLOY_REF ==="
+
+      - name: Write summary
+        run: |
+          REF="${{ steps.ref.outputs.deploy_ref }}"
+          if [ "$REF" = "main" ]; then
+            echo "### Deployed \`main\` to production" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ⚠️ Deployed branch \`$REF\` to production" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "To rollback, re-run this workflow with \`ref=main\`." >> "$GITHUB_STEP_SUMMARY"
+          fi
