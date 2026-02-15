@@ -229,7 +229,10 @@ def test_call_tool_exception_redacts_sensitive_data(client: TestClient, seeded_u
         mock_client = AsyncMock()
         mock_client.get_track = AsyncMock(
             side_effect=RuntimeError(
-                "Auth failed: Bearer BQD1234_abcXYZ.token_here for user@example.com from 192.168.1.100"
+                "Auth failed: Bearer BQD1234_abcXYZ.token_here "
+                "for user@example.com from 192.168.1.100 "
+                'body: {"refresh_token": "secret123", "access_token": "tok456"} '
+                "ipv6: 2001:0db8:85a3:0000:0000:8a2e:0370:7334"
             )
         )
         mock_get_client.return_value = mock_client
@@ -241,10 +244,18 @@ def test_call_tool_exception_redacts_sensitive_data(client: TestClient, seeded_u
         data = resp.json()
         assert data["success"] is False
         assert "RuntimeError" in data["error"]
-        # Sensitive data should be redacted
+        # Bearer token redacted
         assert "BQD1234" not in data["error"]
         assert "Bearer [redacted]" in data["error"]
+        # Email redacted
         assert "user@example.com" not in data["error"]
         assert "[redacted email]" in data["error"]
+        # IPv4 redacted
         assert "192.168.1.100" not in data["error"]
         assert "[redacted ip]" in data["error"]
+        # JSON-style tokens redacted
+        assert "secret123" not in data["error"]
+        assert "tok456" not in data["error"]
+        # IPv6 redacted
+        assert "2001:0db8" not in data["error"]
+        assert "[redacted ipv6]" in data["error"]

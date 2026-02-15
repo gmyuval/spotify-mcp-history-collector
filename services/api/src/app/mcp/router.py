@@ -20,8 +20,11 @@ _SENSITIVE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"Bearer\s+[A-Za-z0-9._-]+"), "Bearer [redacted]"),
     (re.compile(r"(?i)refresh_token=\S+"), "refresh_token=[redacted]"),
     (re.compile(r"(?i)access_token=\S+"), "access_token=[redacted]"),
+    (re.compile(r'(?i)"refresh_token"\s*:\s*"[^"]*"'), '"refresh_token": "[redacted]"'),
+    (re.compile(r'(?i)"access_token"\s*:\s*"[^"]*"'), '"access_token": "[redacted]"'),
     (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[redacted email]"),
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "[redacted ip]"),
+    (re.compile(r"(?i)([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}"), "[redacted ipv6]"),
 ]
 
 
@@ -70,7 +73,7 @@ class MCPRouter:
             return MCPCallResponse(tool=request.tool, success=True, result=result)
         except ValueError as exc:
             logger.warning("MCP tool %s validation error: %s", request.tool, exc)
-            return MCPCallResponse(tool=request.tool, success=False, error=str(exc))
+            return MCPCallResponse(tool=request.tool, success=False, error=_redact_sensitive(str(exc)))
         except Exception as exc:
             logger.exception("MCP tool %s failed", request.tool)
             error_type = type(exc).__name__
