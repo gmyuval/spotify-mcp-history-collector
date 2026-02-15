@@ -85,7 +85,8 @@ jobs:
             cd /opt/spotify-mcp
 
             echo "=== Fixing repo ownership ==="
-            sudo chown -R deploy:deploy /opt/spotify-mcp/.git
+            sudo -n chown -R deploy:deploy /opt/spotify-mcp/.git \
+              || { echo "ERROR: sudo requires a password for deploy"; exit 1; }
 
             echo "=== Deploying ref: $DEPLOY_REF ==="
             git fetch origin "$DEPLOY_REF"
