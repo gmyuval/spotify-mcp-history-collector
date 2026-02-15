@@ -147,3 +147,29 @@ def test_call_ops_sync_status_no_checkpoint(client: TestClient, seeded_user: int
     data = resp.json()
     assert data["success"] is True
     assert data["result"]["status"] == "no_checkpoint"
+
+
+def test_call_flat_args(client: TestClient, seeded_user: int) -> None:
+    """ChatGPT may send args at the top level instead of nested in 'args'."""
+    resp = client.post(
+        "/mcp/call",
+        json={"tool": "history.top_artists", "user_id": seeded_user, "days": 3650},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert isinstance(data["result"], list)
+    assert len(data["result"]) == 1
+
+
+def test_call_flat_args_explicit_args_win(client: TestClient, seeded_user: int) -> None:
+    """When both flat and nested args are present, nested 'args' take priority."""
+    resp = client.post(
+        "/mcp/call",
+        json={"tool": "history.top_artists", "args": {"user_id": seeded_user, "days": 3650}, "days": 1},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    # days=3650 from explicit args should win over days=1 from flat
+    assert len(data["result"]) == 1
