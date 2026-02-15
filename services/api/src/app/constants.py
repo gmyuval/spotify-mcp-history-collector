@@ -7,7 +7,7 @@ SPOTIFY_AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_ME_URL = "https://api.spotify.com/v1/me"
 
 # Spotify OAuth scopes required by this application
-SPOTIFY_SCOPES = "user-read-recently-played user-top-read user-read-email user-read-private"
+SPOTIFY_SCOPES = "user-read-recently-played user-top-read user-read-email user-read-private playlist-read-private"
 
 # Default configuration values
 DEFAULT_SPOTIFY_REDIRECT_URI = "http://localhost:8000/auth/callback"

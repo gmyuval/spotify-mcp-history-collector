@@ -37,6 +37,11 @@
                       "history.coverage",
                       "spotify.get_top",
                       "spotify.search",
+                      "spotify.get_track",
+                      "spotify.get_artist",
+                      "spotify.get_album",
+                      "spotify.list_playlists",
+                      "spotify.get_playlist",
                       "ops.sync_status",
                       "ops.latest_job_runs",
                       "ops.latest_import_jobs"
@@ -72,6 +77,22 @@
                     "type": "string",
                     "description": "For spotify.search only: type of search. Default 'track'.",
                     "enum": ["track", "artist", "album"]
+                  },
+                  "track_id": {
+                    "type": "string",
+                    "description": "Spotify track ID. For spotify.get_track."
+                  },
+                  "artist_id": {
+                    "type": "string",
+                    "description": "Spotify artist ID. For spotify.get_artist."
+                  },
+                  "album_id": {
+                    "type": "string",
+                    "description": "Spotify album ID. For spotify.get_album."
+                  },
+                  "playlist_id": {
+                    "type": "string",
+                    "description": "Spotify playlist ID. For spotify.get_playlist."
                   }
                 }
               }

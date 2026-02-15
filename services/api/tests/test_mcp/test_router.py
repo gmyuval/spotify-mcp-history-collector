@@ -99,7 +99,7 @@ def test_list_tools(client: TestClient) -> None:
     assert resp.status_code == 200
     tools = resp.json()
     assert isinstance(tools, list)
-    assert len(tools) >= 12  # 6 history + 2 spotify + 4 ops
+    assert len(tools) >= 17  # 6 history + 7 spotify + 4 ops
     names = {t["name"] for t in tools}
     assert "history.taste_summary" in names
     assert "ops.sync_status" in names

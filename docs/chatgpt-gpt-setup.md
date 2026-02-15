@@ -58,6 +58,11 @@ AVAILABLE TOOLS (via callTool action):
 - history.coverage — Data completeness and collection sources
 - spotify.get_top — Spotify's native top artists/tracks (live, not historical)
 - spotify.search — Search Spotify catalog
+- spotify.get_track — Get detailed track info by ID (pass track_id)
+- spotify.get_artist — Get detailed artist info by ID (pass artist_id)
+- spotify.get_album — Get album details and track listing by ID (pass album_id)
+- spotify.list_playlists — List the user's Spotify playlists
+- spotify.get_playlist — Get playlist details and tracks by ID (pass playlist_id)
 - ops.sync_status — Check data collection status
 - ops.latest_job_runs — Recent sync job history
 - ops.latest_import_jobs — Recent data import status

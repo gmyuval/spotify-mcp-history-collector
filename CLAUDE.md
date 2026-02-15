@@ -178,6 +178,11 @@ When ZIP imports lack Spotify URIs:
 ### Spotify Live Tools
 - `spotify.get_top(entity, time_range, limit, user_id)` - Spotify's native "top" API
 - `spotify.search(q, type, limit, user_id)` - Search tracks/artists/albums
+- `spotify.get_track(track_id, user_id)` - Detailed track info (artists, album, duration, popularity)
+- `spotify.get_artist(artist_id, user_id)` - Detailed artist info (genres, popularity, followers)
+- `spotify.get_album(album_id, user_id)` - Album details with full track listing
+- `spotify.list_playlists(limit, user_id)` - List user's Spotify playlists
+- `spotify.get_playlist(playlist_id, user_id)` - Playlist details with tracks
 
 ### Ops Tools
 - `ops.list_users()` - List all registered users
