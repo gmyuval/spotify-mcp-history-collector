@@ -23,8 +23,9 @@ def test_dashboard_page(client: TestClient, mock_api: AsyncMock) -> None:
     assert response.status_code == 200
     assert "Dashboard" in response.text
     mock_api.get_sync_status.assert_called_once()
-    mock_api.list_job_runs.assert_called_once_with(limit=5)
-    mock_api.list_import_jobs.assert_called_once_with(limit=5)
+    mock_api.list_job_runs.assert_any_call(limit=5)
+    mock_api.list_job_runs.assert_any_call(status="running", limit=10)
+    mock_api.list_import_jobs.assert_any_call(limit=5)
 
 
 def test_dashboard_sync_status_partial(client: TestClient, mock_api: AsyncMock) -> None:

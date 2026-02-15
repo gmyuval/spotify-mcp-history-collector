@@ -44,6 +44,10 @@ paths:
                     - spotify.get_album
                     - spotify.list_playlists
                     - spotify.get_playlist
+                    - spotify.create_playlist
+                    - spotify.add_tracks
+                    - spotify.remove_tracks
+                    - spotify.update_playlist
                     - ops.sync_status
                     - ops.latest_job_runs
                     - ops.latest_import_jobs
@@ -88,7 +92,21 @@ paths:
                   description: "Spotify album ID. For spotify.get_album."
                 playlist_id:
                   type: string
-                  description: "Spotify playlist ID. For spotify.get_playlist."
+                  description: "Spotify playlist ID. For playlist tools."
+                name:
+                  type: string
+                  description: "Playlist name. For spotify.create_playlist and spotify.update_playlist."
+                description:
+                  type: string
+                  description: "Playlist description. For spotify.create_playlist and spotify.update_playlist."
+                public:
+                  type: boolean
+                  description: "Whether the playlist is public. For spotify.create_playlist and spotify.update_playlist."
+                track_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: "List of Spotify track IDs. For spotify.add_tracks and spotify.remove_tracks (max 100)."
       responses:
         "200":
           description: Tool result

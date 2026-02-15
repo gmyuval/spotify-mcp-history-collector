@@ -63,6 +63,10 @@ AVAILABLE TOOLS (via callTool action):
 - spotify.get_album — Get album details and track listing by ID (pass album_id)
 - spotify.list_playlists — List the user's Spotify playlists
 - spotify.get_playlist — Get playlist details and tracks by ID (pass playlist_id)
+- spotify.create_playlist — Create a new playlist (pass name, optional description, public)
+- spotify.add_tracks — Add tracks to a playlist (pass playlist_id, track_ids list, max 100)
+- spotify.remove_tracks — Remove tracks from a playlist (pass playlist_id, track_ids list, max 100)
+- spotify.update_playlist — Update playlist name/description/visibility (pass playlist_id)
 - ops.sync_status — Check data collection status
 - ops.latest_job_runs — Recent sync job history
 - ops.latest_import_jobs — Recent data import status

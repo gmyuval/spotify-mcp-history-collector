@@ -183,6 +183,10 @@ When ZIP imports lack Spotify URIs:
 - `spotify.get_album(album_id, user_id)` - Album details with full track listing
 - `spotify.list_playlists(limit, user_id)` - List user's Spotify playlists
 - `spotify.get_playlist(playlist_id, user_id)` - Playlist details with tracks
+- `spotify.create_playlist(name, description, public, user_id)` - Create new playlist
+- `spotify.add_tracks(playlist_id, track_ids, user_id)` - Add tracks to playlist (max 100)
+- `spotify.remove_tracks(playlist_id, track_ids, user_id)` - Remove tracks from playlist (max 100)
+- `spotify.update_playlist(playlist_id, name, description, public, user_id)` - Update playlist details
 
 ### Ops Tools
 - `ops.list_users()` - List all registered users
