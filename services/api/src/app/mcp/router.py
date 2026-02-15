@@ -52,6 +52,9 @@ class MCPRouter:
         try:
             result = await registry.invoke(request.tool, request.arguments, session)
             return MCPCallResponse(tool=request.tool, success=True, result=result)
+        except ValueError as exc:
+            logger.warning("MCP tool %s validation error: %s", request.tool, exc)
+            return MCPCallResponse(tool=request.tool, success=False, error=str(exc))
         except Exception as exc:
             logger.exception("MCP tool %s failed", request.tool)
             error_type = type(exc).__name__

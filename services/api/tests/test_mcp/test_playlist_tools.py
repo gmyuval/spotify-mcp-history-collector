@@ -1,4 +1,4 @@
-"""Tests for spotify info + playlist read tools invoked through the MCP dispatcher."""
+"""Tests for spotify info + playlist tools invoked through the MCP dispatcher."""
 
 from collections.abc import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, patch
@@ -12,7 +12,7 @@ from app.dependencies import db_manager
 from app.main import app
 from app.settings import AppSettings, get_settings
 from shared.db.base import Base
-from shared.db.models.user import User
+from shared.db.models.user import SpotifyToken, User
 from shared.spotify.models import (
     SpotifyAlbumFull,
     SpotifyAlbumSimplified,
@@ -25,12 +25,18 @@ from shared.spotify.models import (
     SpotifyPlaylistSimplified,
     SpotifyPlaylistTrackItem,
     SpotifyPlaylistTracks,
+    SpotifySnapshotResponse,
     SpotifyTrack,
     SpotifyTrackSimplified,
     UserPlaylistsResponse,
 )
 
 TEST_FERNET_KEY = Fernet.generate_key().decode()
+
+_FULL_SCOPES = (
+    "user-read-recently-played user-top-read user-read-email user-read-private "
+    "playlist-read-private playlist-modify-public playlist-modify-private"
+)
 
 
 def _test_settings() -> AppSettings:
@@ -82,6 +88,50 @@ async def seeded_user(async_engine: AsyncEngine) -> int:
     async with factory() as session:
         user = User(spotify_user_id="pluser", display_name="Playlist User")
         session.add(user)
+        await session.flush()
+        uid = user.id
+        await session.commit()
+    return uid
+
+
+@pytest.fixture
+async def seeded_user_with_scopes(async_engine: AsyncEngine) -> int:
+    """User with a SpotifyToken that has full playlist write scopes."""
+    encryptor = Fernet(TEST_FERNET_KEY.encode())
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        user = User(spotify_user_id="plwriter", display_name="Playlist Writer")
+        session.add(user)
+        await session.flush()
+        token = SpotifyToken(
+            user_id=user.id,
+            encrypted_refresh_token=encryptor.encrypt(b"fake-refresh").decode(),
+            access_token="fake-access",
+            scope=_FULL_SCOPES,
+        )
+        session.add(token)
+        await session.flush()
+        uid = user.id
+        await session.commit()
+    return uid
+
+
+@pytest.fixture
+async def seeded_user_no_write_scopes(async_engine: AsyncEngine) -> int:
+    """User with a SpotifyToken that has only read scopes (no playlist-modify)."""
+    encryptor = Fernet(TEST_FERNET_KEY.encode())
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        user = User(spotify_user_id="plreader", display_name="Playlist Reader")
+        session.add(user)
+        await session.flush()
+        token = SpotifyToken(
+            user_id=user.id,
+            encrypted_refresh_token=encryptor.encrypt(b"fake-refresh").decode(),
+            access_token="fake-access",
+            scope="user-read-recently-played playlist-read-private",
+        )
+        session.add(token)
         await session.flush()
         uid = user.id
         await session.commit()
@@ -340,12 +390,252 @@ def test_get_playlist(client: TestClient, seeded_user: int) -> None:
 
 
 # ---------------------------------------------------------------------------
+# spotify.create_playlist
+# ---------------------------------------------------------------------------
+
+
+def test_create_playlist(client: TestClient, seeded_user_with_scopes: int) -> None:
+    mock_playlist = SpotifyPlaylist(
+        id="newpl1",
+        name="New Playlist",
+        description="Created by ChatGPT",
+        public=False,
+        external_urls={"spotify": "https://open.spotify.com/playlist/newpl1"},
+    )
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.create_playlist = AsyncMock(return_value=mock_playlist)
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={
+                "tool": "spotify.create_playlist",
+                "user_id": seeded_user_with_scopes,
+                "name": "New Playlist",
+                "description": "Created by ChatGPT",
+                "public": False,
+            },
+        )
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["id"] == "newpl1"
+        assert data["result"]["name"] == "New Playlist"
+        assert data["result"]["public"] is False
+        mock_client.create_playlist.assert_called_once_with(
+            name="New Playlist",
+            description="Created by ChatGPT",
+            public=False,
+        )
+
+
+def test_create_playlist_missing_scopes(client: TestClient, seeded_user_no_write_scopes: int) -> None:
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "spotify.create_playlist",
+            "user_id": seeded_user_no_write_scopes,
+            "name": "Should Fail",
+        },
+    )
+    data = resp.json()
+    assert data["success"] is False
+    assert "Missing required scopes" in data["error"]
+    assert "re-authorize" in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# spotify.add_tracks
+# ---------------------------------------------------------------------------
+
+
+def test_add_tracks(client: TestClient, seeded_user_with_scopes: int) -> None:
+    mock_snap = SpotifySnapshotResponse(snapshot_id="snap456")
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.add_tracks_to_playlist = AsyncMock(return_value=mock_snap)
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={
+                "tool": "spotify.add_tracks",
+                "user_id": seeded_user_with_scopes,
+                "playlist_id": "pl1",
+                "track_ids": ["t1", "t2", "t3"],
+            },
+        )
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["snapshot_id"] == "snap456"
+        assert data["result"]["tracks_added"] == 3
+        # Verify IDs were converted to URIs
+        mock_client.add_tracks_to_playlist.assert_called_once_with(
+            "pl1",
+            ["spotify:track:t1", "spotify:track:t2", "spotify:track:t3"],
+        )
+
+
+def test_add_tracks_empty_list(client: TestClient, seeded_user_with_scopes: int) -> None:
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "spotify.add_tracks",
+            "user_id": seeded_user_with_scopes,
+            "playlist_id": "pl1",
+            "track_ids": [],
+        },
+    )
+    data = resp.json()
+    assert data["success"] is False
+    assert "must not be empty" in data["error"]
+
+
+def test_add_tracks_over_100(client: TestClient, seeded_user_with_scopes: int) -> None:
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "spotify.add_tracks",
+            "user_id": seeded_user_with_scopes,
+            "playlist_id": "pl1",
+            "track_ids": [f"t{i}" for i in range(101)],
+        },
+    )
+    data = resp.json()
+    assert data["success"] is False
+    assert "Maximum 100" in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# spotify.remove_tracks
+# ---------------------------------------------------------------------------
+
+
+def test_remove_tracks(client: TestClient, seeded_user_with_scopes: int) -> None:
+    mock_snap = SpotifySnapshotResponse(snapshot_id="snap789")
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.remove_tracks_from_playlist = AsyncMock(return_value=mock_snap)
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={
+                "tool": "spotify.remove_tracks",
+                "user_id": seeded_user_with_scopes,
+                "playlist_id": "pl1",
+                "track_ids": ["t1"],
+            },
+        )
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["snapshot_id"] == "snap789"
+        assert data["result"]["tracks_removed"] == 1
+        mock_client.remove_tracks_from_playlist.assert_called_once_with(
+            "pl1",
+            ["spotify:track:t1"],
+        )
+
+
+def test_remove_tracks_missing_scopes(client: TestClient, seeded_user_no_write_scopes: int) -> None:
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "spotify.remove_tracks",
+            "user_id": seeded_user_no_write_scopes,
+            "playlist_id": "pl1",
+            "track_ids": ["t1"],
+        },
+    )
+    data = resp.json()
+    assert data["success"] is False
+    assert "Missing required scopes" in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# spotify.update_playlist
+# ---------------------------------------------------------------------------
+
+
+def test_update_playlist(client: TestClient, seeded_user_with_scopes: int) -> None:
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.update_playlist_details = AsyncMock(return_value=None)
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={
+                "tool": "spotify.update_playlist",
+                "user_id": seeded_user_with_scopes,
+                "playlist_id": "pl1",
+                "name": "Renamed Playlist",
+                "description": "New description",
+            },
+        )
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["updated"] is True
+        assert data["result"]["playlist_id"] == "pl1"
+        mock_client.update_playlist_details.assert_called_once_with(
+            "pl1",
+            name="Renamed Playlist",
+            description="New description",
+            public=None,
+        )
+
+
+def test_update_playlist_no_fields(client: TestClient, seeded_user_with_scopes: int) -> None:
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "spotify.update_playlist",
+            "user_id": seeded_user_with_scopes,
+            "playlist_id": "pl1",
+        },
+    )
+    data = resp.json()
+    assert data["success"] is False
+    assert "At least one of" in data["error"]
+
+
+def test_create_playlist_no_token(client: TestClient, seeded_user: int) -> None:
+    """User without any SpotifyToken at all gets a clear error."""
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "spotify.create_playlist",
+            "user_id": seeded_user,
+            "name": "Should Fail",
+        },
+    )
+    data = resp.json()
+    assert data["success"] is False
+    assert "No token found" in data["error"]
+
+
+# ---------------------------------------------------------------------------
 # Tool registration check
 # ---------------------------------------------------------------------------
 
 
-def test_new_tools_registered(client: TestClient) -> None:
-    """All 5 new read tools appear in the tool catalog."""
+def test_all_tools_registered(client: TestClient) -> None:
+    """All 9 playlist/info tools appear in the tool catalog."""
     resp = client.get("/mcp/tools")
     names = {t["name"] for t in resp.json()}
     expected = {
@@ -354,5 +644,9 @@ def test_new_tools_registered(client: TestClient) -> None:
         "spotify.get_album",
         "spotify.list_playlists",
         "spotify.get_playlist",
+        "spotify.create_playlist",
+        "spotify.add_tracks",
+        "spotify.remove_tracks",
+        "spotify.update_playlist",
     }
     assert expected.issubset(names), f"Missing tools: {expected - names}"
