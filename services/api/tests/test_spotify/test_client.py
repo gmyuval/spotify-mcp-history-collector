@@ -419,7 +419,7 @@ def _playlist_json(playlist_id: str = "pl1", name: str = "My Playlist") -> dict[
 
 @respx.mock
 async def test_get_user_playlists() -> None:
-    """get_user_playlists returns parsed UserPlaylistsResponse."""
+    """get_user_playlists returns parsed UserPlaylistsResponse with href+total tracks."""
     respx.get("https://api.spotify.com/v1/me/playlists").mock(
         return_value=httpx.Response(
             200,
@@ -430,14 +430,14 @@ async def test_get_user_playlists() -> None:
                         "name": "Playlist 1",
                         "public": True,
                         "owner": {"id": "user1", "display_name": "Test User"},
-                        "tracks": {"total": 25},
+                        "tracks": {"href": "https://api.spotify.com/v1/playlists/pl1/tracks", "total": 25},
                     },
                     {
                         "id": "pl2",
                         "name": "Playlist 2",
                         "public": False,
                         "owner": {"id": "user1", "display_name": "Test User"},
-                        "tracks": {"total": 10},
+                        "tracks": {"href": "https://api.spotify.com/v1/playlists/pl2/tracks", "total": 10},
                     },
                 ],
                 "total": 2,
@@ -451,7 +451,8 @@ async def test_get_user_playlists() -> None:
     result = await client.get_user_playlists()
     assert len(result.items) == 2
     assert result.items[0].name == "Playlist 1"
-    assert result.items[0].tracks == {"total": 25}
+    assert result.items[0].tracks == {"href": "https://api.spotify.com/v1/playlists/pl1/tracks", "total": 25}
+    assert result.items[0].tracks.get("total") == 25
     assert result.total == 2
 
 
@@ -468,6 +469,43 @@ async def test_get_playlist() -> None:
     assert result.tracks.total == 1
     assert result.tracks.items[0].track is not None
     assert result.tracks.items[0].track.name == "Track 1"
+
+
+@respx.mock
+async def test_get_playlist_new_api_format() -> None:
+    """get_playlist handles Spotify's new format (items/item instead of tracks/track)."""
+    new_format_json = {
+        "id": "pl2",
+        "name": "New Format Playlist",
+        "description": "",
+        "public": True,
+        "collaborative": False,
+        "owner": {"id": "user1", "display_name": "Test User"},
+        "snapshot_id": "snap2",
+        "items": {
+            "items": [
+                {
+                    "item": {"id": "t2", "name": "New Track", "artists": [{"id": "a1", "name": "Artist 1"}]},
+                    "added_at": "2025-01-15T10:00:00Z",
+                }
+            ],
+            "total": 1,
+            "limit": 100,
+            "offset": 0,
+        },
+        "images": [],
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/pl2"},
+    }
+    respx.get("https://api.spotify.com/v1/playlists/pl2").mock(return_value=httpx.Response(200, json=new_format_json))
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.get_playlist("pl2")
+    assert result.id == "pl2"
+    assert result.name == "New Format Playlist"
+    assert result.tracks is not None
+    assert result.tracks.total == 1
+    assert result.tracks.items[0].track is not None
+    assert result.tracks.items[0].track.name == "New Track"
 
 
 # ---------------------------------------------------------------------------
