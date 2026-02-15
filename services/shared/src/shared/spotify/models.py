@@ -243,3 +243,129 @@ class SpotifySearchResponse(BaseModel):
     tracks: SpotifySearchTracks | None = None
     artists: SpotifySearchArtists | None = None
     albums: SpotifySearchAlbums | None = None
+
+
+# ---------------------------------------------------------------------------
+# Albums (full)
+# ---------------------------------------------------------------------------
+
+
+class SpotifyTrackSimplified(BaseModel):
+    """Simplified track object (no album field, used in album track listings)."""
+
+    id: str | None = None
+    name: str
+    uri: str | None = None
+    duration_ms: int | None = None
+    explicit: bool | None = None
+    track_number: int | None = None
+    disc_number: int | None = None
+    artists: list[SpotifyArtistSimplified] = Field(default_factory=list)
+    external_urls: dict[str, str] = Field(default_factory=dict)
+    href: str | None = None
+
+
+class SpotifyAlbumTracksPage(BaseModel):
+    """Paging object for tracks within an album."""
+
+    items: list[SpotifyTrackSimplified] = Field(default_factory=list)
+    total: int | None = None
+    limit: int | None = None
+    offset: int | None = None
+    next: str | None = None
+
+
+class SpotifyAlbumFull(SpotifyAlbumSimplified):
+    """Full album object from GET /albums/{id}."""
+
+    genres: list[str] = Field(default_factory=list)
+    popularity: int | None = None
+    label: str | None = None
+    total_tracks: int | None = None
+    tracks: SpotifyAlbumTracksPage | None = None
+    artists: list[SpotifyArtistSimplified] = Field(default_factory=list)
+    copyrights: list[dict[str, str]] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Playlists
+# ---------------------------------------------------------------------------
+
+
+class SpotifyPlaylistOwner(BaseModel):
+    """Playlist owner object."""
+
+    id: str | None = None
+    display_name: str | None = None
+    uri: str | None = None
+    external_urls: dict[str, str] = Field(default_factory=dict)
+
+
+class SpotifyPlaylistTrackItem(BaseModel):
+    """Single item within a playlist's tracks array."""
+
+    track: SpotifyTrack | None = None
+    added_at: str | None = None
+    added_by: SpotifyPlaylistOwner | None = None
+
+
+class SpotifyPlaylistTracks(BaseModel):
+    """Paging object for tracks within a playlist."""
+
+    items: list[SpotifyPlaylistTrackItem] = Field(default_factory=list)
+    total: int | None = None
+    limit: int | None = None
+    offset: int | None = None
+    next: str | None = None
+    href: str | None = None
+
+
+class SpotifyPlaylist(BaseModel):
+    """Full playlist object from GET /playlists/{id} or POST /me/playlists."""
+
+    id: str | None = None
+    name: str
+    description: str | None = None
+    public: bool | None = None
+    collaborative: bool | None = None
+    owner: SpotifyPlaylistOwner | None = None
+    images: list[SpotifyImage] = Field(default_factory=list)
+    tracks: SpotifyPlaylistTracks | None = None
+    snapshot_id: str | None = None
+    uri: str | None = None
+    href: str | None = None
+    external_urls: dict[str, str] = Field(default_factory=dict)
+
+
+class SpotifyPlaylistSimplified(BaseModel):
+    """Simplified playlist from list endpoints (tracks has only total)."""
+
+    id: str | None = None
+    name: str
+    description: str | None = None
+    public: bool | None = None
+    collaborative: bool | None = None
+    owner: SpotifyPlaylistOwner | None = None
+    images: list[SpotifyImage] = Field(default_factory=list)
+    tracks: dict[str, int] | None = None
+    snapshot_id: str | None = None
+    uri: str | None = None
+    href: str | None = None
+    external_urls: dict[str, str] = Field(default_factory=dict)
+
+
+class UserPlaylistsResponse(BaseModel):
+    """Response from GET /me/playlists."""
+
+    items: list[SpotifyPlaylistSimplified] = Field(default_factory=list)
+    total: int | None = None
+    limit: int | None = None
+    offset: int | None = None
+    next: str | None = None
+    href: str | None = None
+
+
+class SpotifySnapshotResponse(BaseModel):
+    """Response from add/remove tracks operations."""
+
+    snapshot_id: str

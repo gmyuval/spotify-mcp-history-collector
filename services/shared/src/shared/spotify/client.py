@@ -3,21 +3,25 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 import httpx
 
 from shared.spotify.constants import (
+    ALBUMS_URL,
     ARTISTS_URL,
     AUDIO_FEATURES_URL,
     DEFAULT_CONCURRENCY_LIMIT,
     DEFAULT_MAX_RETRIES,
     DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_RETRY_BASE_DELAY,
+    PLAYLIST_URL,
     RECENTLY_PLAYED_URL,
     SEARCH_URL,
     TOP_ARTISTS_URL,
     TOP_TRACKS_URL,
     TRACKS_URL,
+    USER_PLAYLISTS_URL,
 )
 from shared.spotify.exceptions import (
     SpotifyAuthError,
@@ -30,9 +34,15 @@ from shared.spotify.models import (
     BatchAudioFeaturesResponse,
     BatchTracksResponse,
     RecentlyPlayedResponse,
+    SpotifyAlbumFull,
+    SpotifyArtistFull,
+    SpotifyPlaylist,
     SpotifySearchResponse,
+    SpotifySnapshotResponse,
+    SpotifyTrack,
     TopArtistsResponse,
     TopTracksResponse,
+    UserPlaylistsResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +79,7 @@ class SpotifyClient:
         url: str,
         *,
         params: dict[str, str | int] | None = None,
+        json_body: dict[str, Any] | None = None,
     ) -> httpx.Response:
         """Send an HTTP request with retry logic for 429/5xx and 401 callback.
 
@@ -91,6 +102,7 @@ class SpotifyClient:
                         method,
                         url,
                         params=params,
+                        json=json_body,
                         headers={"Authorization": f"Bearer {self._access_token}"},
                     )
 
@@ -238,3 +250,118 @@ class SpotifyClient:
             params={"q": query, "type": search_type, "limit": limit, "offset": offset},
         )
         return SpotifySearchResponse.model_validate(response.json())
+
+    # -------------------------------------------------------------------
+    # Single-resource info methods
+    # -------------------------------------------------------------------
+
+    async def get_track(self, track_id: str) -> SpotifyTrack:
+        """GET /tracks/{id}."""
+        response = await self._request("GET", f"{TRACKS_URL}/{track_id}")
+        return SpotifyTrack.model_validate(response.json())
+
+    async def get_artist(self, artist_id: str) -> SpotifyArtistFull:
+        """GET /artists/{id}."""
+        response = await self._request("GET", f"{ARTISTS_URL}/{artist_id}")
+        return SpotifyArtistFull.model_validate(response.json())
+
+    async def get_album(self, album_id: str) -> SpotifyAlbumFull:
+        """GET /albums/{id}."""
+        response = await self._request("GET", f"{ALBUMS_URL}/{album_id}")
+        return SpotifyAlbumFull.model_validate(response.json())
+
+    # -------------------------------------------------------------------
+    # Playlist read methods
+    # -------------------------------------------------------------------
+
+    async def get_user_playlists(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> UserPlaylistsResponse:
+        """GET /me/playlists."""
+        response = await self._request(
+            "GET",
+            USER_PLAYLISTS_URL,
+            params={"limit": limit, "offset": offset},
+        )
+        return UserPlaylistsResponse.model_validate(response.json())
+
+    async def get_playlist(self, playlist_id: str) -> SpotifyPlaylist:
+        """GET /playlists/{id}."""
+        response = await self._request("GET", f"{PLAYLIST_URL}/{playlist_id}")
+        return SpotifyPlaylist.model_validate(response.json())
+
+    # -------------------------------------------------------------------
+    # Playlist write methods
+    # -------------------------------------------------------------------
+
+    async def create_playlist(
+        self,
+        name: str,
+        *,
+        description: str = "",
+        public: bool = True,
+    ) -> SpotifyPlaylist:
+        """POST /me/playlists."""
+        response = await self._request(
+            "POST",
+            USER_PLAYLISTS_URL,
+            json_body={"name": name, "description": description, "public": public},
+        )
+        return SpotifyPlaylist.model_validate(response.json())
+
+    async def add_tracks_to_playlist(
+        self,
+        playlist_id: str,
+        uris: list[str],
+        *,
+        position: int | None = None,
+    ) -> SpotifySnapshotResponse:
+        """POST /playlists/{id}/tracks."""
+        body: dict[str, Any] = {"uris": uris}
+        if position is not None:
+            body["position"] = position
+        response = await self._request(
+            "POST",
+            f"{PLAYLIST_URL}/{playlist_id}/tracks",
+            json_body=body,
+        )
+        return SpotifySnapshotResponse.model_validate(response.json())
+
+    async def remove_tracks_from_playlist(
+        self,
+        playlist_id: str,
+        uris: list[str],
+    ) -> SpotifySnapshotResponse:
+        """DELETE /playlists/{id}/tracks."""
+        body: dict[str, Any] = {"tracks": [{"uri": uri} for uri in uris]}
+        response = await self._request(
+            "DELETE",
+            f"{PLAYLIST_URL}/{playlist_id}/tracks",
+            json_body=body,
+        )
+        return SpotifySnapshotResponse.model_validate(response.json())
+
+    async def update_playlist_details(
+        self,
+        playlist_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        public: bool | None = None,
+    ) -> None:
+        """PUT /playlists/{id} — returns 200 with empty body on success."""
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if public is not None:
+            body["public"] = public
+        await self._request(
+            "PUT",
+            f"{PLAYLIST_URL}/{playlist_id}",
+            json_body=body,
+        )
