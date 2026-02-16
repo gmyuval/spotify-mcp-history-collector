@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # --- Pagination ---
 
@@ -77,6 +77,8 @@ class UserDetail(BaseModel):
     last_poll_completed_at: datetime | None
     last_poll_latest_played_at: datetime | None
     token_expires_at: datetime | None
+    has_custom_credentials: bool
+    custom_spotify_client_id: str | None
     error_message: str | None
     created_at: datetime
     updated_at: datetime
@@ -148,3 +150,20 @@ class ActionResponse(BaseModel):
 
     success: bool
     message: str
+
+
+# --- User Spotify Credentials ---
+
+
+class SetUserCredentialsRequest(BaseModel):
+    """Request to set custom Spotify app credentials for a user."""
+
+    client_id: str = Field(..., min_length=1, max_length=255, description="Spotify app Client ID")
+    client_secret: str = Field(..., min_length=1, max_length=255, description="Spotify app Client Secret")
+
+
+class UserCredentialStatus(BaseModel):
+    """Status of a user's custom Spotify app credentials."""
+
+    has_custom_credentials: bool
+    custom_client_id: str | None

@@ -16,26 +16,49 @@ class OAuthStateManager:
         self._key = key
         self._ttl_seconds = ttl_seconds
 
-    def generate(self) -> str:
-        """Generate a signed state parameter containing the current timestamp."""
+    def generate(self, payload: str = "") -> str:
+        """Generate a signed state parameter, optionally embedding *payload*.
+
+        The state format is ``{timestamp}:{payload}.{signature}`` when a payload
+        is provided, or ``{timestamp}.{signature}`` without one.  The HMAC
+        covers the data portion (everything before the dot), ensuring the
+        payload cannot be tampered with.
+        """
         ts = str(int(time.time()))
-        sig = self._sign(ts)
-        return f"{ts}.{sig}"
+        data = f"{ts}:{payload}" if payload else ts
+        sig = self._sign(data)
+        return f"{data}.{sig}"
 
     def verify(self, state: str) -> bool:
         """Verify the HMAC signature and TTL of a state parameter."""
         parts = state.split(".", 1)
         if len(parts) != 2:
             return False
-        ts_str, sig = parts
-        if not hmac.compare_digest(sig, self._sign(ts_str)):
+        data, sig = parts
+        if not hmac.compare_digest(sig, self._sign(data)):
             return False
+        ts_str = data.split(":", 1)[0]
         try:
             ts = int(ts_str)
         except ValueError:
             return False
         return (time.time() - ts) <= self._ttl_seconds
 
-    def _sign(self, timestamp: str) -> str:
-        """Create an HMAC-SHA256 signature for the given timestamp."""
-        return hmac.new(self._key.encode(), timestamp.encode(), hashlib.sha256).hexdigest()
+    def extract_payload(self, state: str) -> str | None:
+        """Extract the embedded payload from a verified state token.
+
+        Returns ``None`` if the state has no payload or is invalid.
+        Callers should call :meth:`verify` first to ensure the state is valid.
+        """
+        parts = state.split(".", 1)
+        if len(parts) != 2:
+            return None
+        data = parts[0]
+        if ":" in data:
+            payload = data.split(":", 1)[1]
+            return payload or None
+        return None
+
+    def _sign(self, data: str) -> str:
+        """Create an HMAC-SHA256 signature for the given data."""
+        return hmac.new(self._key.encode(), data.encode(), hashlib.sha256).hexdigest()
