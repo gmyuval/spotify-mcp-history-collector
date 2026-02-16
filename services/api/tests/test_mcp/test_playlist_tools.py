@@ -341,27 +341,30 @@ def test_get_playlist(client: TestClient, seeded_user: int) -> None:
         snapshot_id="snap123",
         external_urls={"spotify": "https://open.spotify.com/playlist/pl1"},
         tracks=SpotifyPlaylistTracks(
-            items=[
-                SpotifyPlaylistTrackItem(
-                    track=SpotifyTrack(
-                        id="t1",
-                        name="Track 1",
-                        artists=[SpotifyArtistSimplified(id="a1", name="Artist One")],
-                    ),
-                    added_at="2025-01-15T10:00:00Z",
-                ),
-                SpotifyPlaylistTrackItem(
-                    track=SpotifyTrack(
-                        id="t2",
-                        name="Track 2",
-                        artists=[SpotifyArtistSimplified(id="a2", name="Artist Two")],
-                    ),
-                    added_at="2025-01-16T12:00:00Z",
-                ),
-            ],
+            items=[],
             total=2,
         ),
     )
+
+    # get_playlist_all_tracks returns the full paginated track list
+    mock_all_tracks = [
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(
+                id="t1",
+                name="Track 1",
+                artists=[SpotifyArtistSimplified(id="a1", name="Artist One")],
+            ),
+            added_at="2025-01-15T10:00:00Z",
+        ),
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(
+                id="t2",
+                name="Track 2",
+                artists=[SpotifyArtistSimplified(id="a2", name="Artist Two")],
+            ),
+            added_at="2025-01-16T12:00:00Z",
+        ),
+    ]
 
     with patch(
         "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
@@ -369,6 +372,7 @@ def test_get_playlist(client: TestClient, seeded_user: int) -> None:
     ) as mock_get_client:
         mock_client = AsyncMock()
         mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
+        mock_client.get_playlist_all_tracks = AsyncMock(return_value=mock_all_tracks)
         mock_get_client.return_value = mock_client
 
         resp = client.post(
@@ -387,6 +391,53 @@ def test_get_playlist(client: TestClient, seeded_user: int) -> None:
         assert data["result"]["tracks"][0]["id"] == "t1"
         assert data["result"]["tracks"][0]["artists"][0]["name"] == "Artist One"
         assert data["result"]["snapshot_id"] == "snap123"
+        mock_client.get_playlist_all_tracks.assert_called_once_with("pl1")
+
+
+def test_get_playlist_large_paginated(client: TestClient, seeded_user: int) -> None:
+    """get_playlist returns all tracks even when the playlist has more than one page."""
+    mock_playlist = SpotifyPlaylist(
+        id="bigpl",
+        name="Big Playlist",
+        public=True,
+        owner=SpotifyPlaylistOwner(id="pluser", display_name="Playlist User"),
+        snapshot_id="snap_big",
+        external_urls={},
+        tracks=SpotifyPlaylistTracks(items=[], total=150),
+    )
+
+    # Simulate 150 tracks returned by paginated fetch
+    mock_all_tracks = [
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(
+                id=f"t{i}",
+                name=f"Track {i}",
+                artists=[SpotifyArtistSimplified(id="a1", name="Artist")],
+            ),
+            added_at="2025-01-01T00:00:00Z",
+        )
+        for i in range(150)
+    ]
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
+        mock_client.get_playlist_all_tracks = AsyncMock(return_value=mock_all_tracks)
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "bigpl"},
+        )
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["tracks_total"] == 150
+        assert len(data["result"]["tracks"]) == 150
+        assert data["result"]["tracks"][0]["id"] == "t0"
+        assert data["result"]["tracks"][149]["id"] == "t149"
 
 
 # ---------------------------------------------------------------------------

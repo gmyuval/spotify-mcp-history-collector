@@ -37,6 +37,8 @@ from shared.spotify.models import (
     SpotifyAlbumFull,
     SpotifyArtistFull,
     SpotifyPlaylist,
+    SpotifyPlaylistTrackItem,
+    SpotifyPlaylistTracks,
     SpotifySearchResponse,
     SpotifySnapshotResponse,
     SpotifyTrack,
@@ -296,6 +298,39 @@ class SpotifyClient:
         """GET /playlists/{id}."""
         response = await self._request("GET", f"{PLAYLIST_URL}/{playlist_id}")
         return SpotifyPlaylist.model_validate(response.json())
+
+    async def get_playlist_all_tracks(
+        self,
+        playlist_id: str,
+        *,
+        page_size: int = 100,
+        max_tracks: int = 10_000,
+    ) -> list[SpotifyPlaylistTrackItem]:
+        """Fetch all tracks for a playlist, following pagination.
+
+        Args:
+            playlist_id: Spotify playlist ID.
+            page_size: Number of tracks per API request (max 100).
+            max_tracks: Safety cap to prevent runaway loops (Spotify's
+                own limit is 10,000 tracks per playlist).
+
+        Returns:
+            Complete list of playlist track items across all pages.
+        """
+        all_items: list[SpotifyPlaylistTrackItem] = []
+        url: str | None = f"{PLAYLIST_URL}/{playlist_id}/tracks"
+        params: dict[str, str | int] | None = {"limit": min(page_size, 100), "offset": 0}
+
+        while url and len(all_items) < max_tracks:
+            response = await self._request("GET", url, params=params)
+            page = SpotifyPlaylistTracks.model_validate(response.json())
+            all_items.extend(page.items)
+
+            # Spotify's `next` is a full absolute URL with limit/offset baked in.
+            url = page.next
+            params = None  # subsequent requests use the full `next` URL as-is
+
+        return all_items[:max_tracks]
 
     # -------------------------------------------------------------------
     # Playlist write methods

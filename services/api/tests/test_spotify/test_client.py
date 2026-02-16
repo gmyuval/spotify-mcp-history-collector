@@ -525,6 +525,101 @@ async def test_get_playlist_new_api_format() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Playlist track pagination
+# ---------------------------------------------------------------------------
+
+
+def _playlist_tracks_page(
+    track_ids: list[str],
+    total: int,
+    next_url: str | None = None,
+) -> dict[str, Any]:
+    """Helper to build a playlist tracks paging response."""
+    return {
+        "items": [
+            {
+                "track": {"id": tid, "name": f"Track {tid}", "artists": [{"id": "a1", "name": "Artist"}]},
+                "added_at": "2025-01-01T00:00:00Z",
+            }
+            for tid in track_ids
+        ],
+        "total": total,
+        "limit": len(track_ids),
+        "offset": 0,
+        "next": next_url,
+    }
+
+
+@respx.mock
+async def test_get_playlist_all_tracks_single_page() -> None:
+    """Playlist with fewer tracks than page size returns all in one request."""
+    respx.get("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+        return_value=httpx.Response(
+            200,
+            json=_playlist_tracks_page(["t1", "t2", "t3"], total=3),
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    items = await client.get_playlist_all_tracks("pl1")
+    assert len(items) == 3
+    assert items[0].track is not None
+    assert items[0].track.id == "t1"
+    assert items[2].track is not None
+    assert items[2].track.id == "t3"
+
+
+@respx.mock
+async def test_get_playlist_all_tracks_multi_page() -> None:
+    """Playlist spanning multiple pages fetches all tracks by following next URLs."""
+    page2_url = "https://api.spotify.com/v1/playlists/pl1/tracks?offset=2&limit=2"
+
+    # Use side_effect to return different responses on successive calls.
+    # respx matches the base URL regardless of query params, so both the
+    # initial request and the `next` URL hit the same route.
+    responses = iter(
+        [
+            httpx.Response(200, json=_playlist_tracks_page(["t1", "t2"], total=3, next_url=page2_url)),
+            httpx.Response(200, json=_playlist_tracks_page(["t3"], total=3)),
+        ]
+    )
+    respx.get("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+        side_effect=lambda _request: next(responses),
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    items = await client.get_playlist_all_tracks("pl1", page_size=2)
+    assert len(items) == 3
+    assert [it.track.id for it in items if it.track] == ["t1", "t2", "t3"]
+
+
+@respx.mock
+async def test_get_playlist_all_tracks_respects_max_tracks() -> None:
+    """Pagination stops when max_tracks cap is reached."""
+    page2_url = "https://api.spotify.com/v1/playlists/pl1/tracks?offset=3&limit=3"
+
+    respx.get("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+        return_value=httpx.Response(
+            200,
+            json=_playlist_tracks_page(["t1", "t2", "t3"], total=100, next_url=page2_url),
+        )
+    )
+
+    # Page 2 should NOT be fetched because max_tracks=3 is already met
+    page2_route = respx.get(page2_url).mock(
+        return_value=httpx.Response(
+            200,
+            json=_playlist_tracks_page(["t4", "t5"], total=100),
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    items = await client.get_playlist_all_tracks("pl1", page_size=3, max_tracks=3)
+    assert len(items) == 3
+    assert not page2_route.called
+
+
+# ---------------------------------------------------------------------------
 # Playlist write methods
 # ---------------------------------------------------------------------------
 
