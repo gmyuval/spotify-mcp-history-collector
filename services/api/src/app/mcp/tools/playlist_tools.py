@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import TokenManager
+from app.cache.service import SpotifyCacheService
 from app.mcp.registry import registry
 from app.mcp.schemas import MCPToolParam
 from app.settings import get_settings
@@ -21,9 +22,21 @@ _PLAYLIST_WRITE_SCOPES = {"playlist-modify-public", "playlist-modify-private"}
 
 
 class PlaylistToolHandlers:
-    """Registers and handles playlist-related MCP tools."""
+    """Registers and handles playlist-related MCP tools.
+
+    Integrates a :class:`SpotifyCacheService` for playlist caching:
+
+    - **list_playlists:** Always fetches fresh from API, caches summaries
+      (including snapshot_ids) for use by ``get_playlist``.
+    - **get_playlist:** Compares live snapshot_id against cached value;
+      serves from cache on match, re-fetches on mismatch.
+    - **Write operations:** Always hit the API, then invalidate the
+      affected playlist's cache.
+    """
 
     def __init__(self) -> None:
+        settings = get_settings()
+        self._cache = SpotifyCacheService(cache_ttl_hours=settings.SPOTIFY_CACHE_TTL_HOURS)
         self._register()
 
     def _register(self) -> None:
@@ -132,20 +145,44 @@ class PlaylistToolHandlers:
         client = await self._get_client(args["user_id"], session)
         limit = max(1, min(args.get("limit", 50), 50))
         resp = await client.get_user_playlists(limit=limit)
-        return [
+        playlists = [
             {
                 "id": p.id,
                 "name": p.name,
                 "public": p.public,
                 "tracks_total": p.tracks.get("total") if p.tracks else None,
                 "owner": p.owner.display_name if p.owner else None,
+                "snapshot_id": p.snapshot_id,
             }
             for p in resp.items
         ]
 
+        # Update cache with latest playlist summaries (stores snapshot_ids)
+        await self._cache.put_playlist_list(args["user_id"], playlists, session)
+
+        # Strip snapshot_id from client response (internal use only)
+        return [{k: v for k, v in pl.items() if k != "snapshot_id"} for pl in playlists]
+
     async def get_playlist(self, args: dict[str, Any], session: AsyncSession) -> Any:
-        client = await self._get_client(args["user_id"], session)
-        pl = await client.get_playlist(args["playlist_id"])
+        user_id: int = args["user_id"]
+        playlist_id: str = args["playlist_id"]
+
+        # Check if we have a cached version with a matching snapshot_id
+        cached_snapshots = await self._cache.get_cached_playlist_snapshot_ids(user_id, session)
+        cached_snapshot = cached_snapshots.get(playlist_id)
+
+        # Always fetch from API (we need the live snapshot_id to compare)
+        client = await self._get_client(user_id, session)
+        pl = await client.get_playlist(playlist_id)
+
+        if cached_snapshot and pl.snapshot_id == cached_snapshot:
+            # Snapshot matches — try serving from cache
+            cached_data = await self._cache.get_cached_playlist(user_id, playlist_id, session)
+            if cached_data is not None:
+                logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
+                return cached_data
+
+        # Cache miss or snapshot changed — build result from API response
         tracks = []
         if pl.tracks:
             for item in pl.tracks.items:
@@ -158,7 +195,7 @@ class PlaylistToolHandlers:
                             "added_at": item.added_at,
                         }
                     )
-        return {
+        result = {
             "id": pl.id,
             "name": pl.name,
             "description": pl.description,
@@ -170,6 +207,10 @@ class PlaylistToolHandlers:
             "external_urls": pl.external_urls,
         }
 
+        # Cache the full playlist with tracks
+        await self._cache.put_playlist(user_id, result, tracks, session)
+        return result
+
     async def create_playlist(self, args: dict[str, Any], session: AsyncSession) -> Any:
         scope_error = await self._check_write_scopes(args["user_id"], session)
         if scope_error:
@@ -180,6 +221,9 @@ class PlaylistToolHandlers:
             description=args.get("description", ""),
             public=args.get("public", True),
         )
+        # Invalidate playlist list cache so next list_playlists picks up the new one
+        await self._cache.invalidate_all_playlists(args["user_id"], session)
+
         return {
             "id": pl.id,
             "name": pl.name,
@@ -200,6 +244,10 @@ class PlaylistToolHandlers:
         uris = [f"spotify:track:{tid}" for tid in track_ids]
         client = await self._get_client(args["user_id"], session)
         result = await client.add_tracks_to_playlist(args["playlist_id"], uris)
+
+        # Invalidate this playlist's cache
+        await self._cache.invalidate_playlist(args["user_id"], args["playlist_id"], session)
+
         return {"snapshot_id": result.snapshot_id, "tracks_added": len(track_ids)}
 
     async def remove_tracks(self, args: dict[str, Any], session: AsyncSession) -> Any:
@@ -214,6 +262,10 @@ class PlaylistToolHandlers:
         uris = [f"spotify:track:{tid}" for tid in track_ids]
         client = await self._get_client(args["user_id"], session)
         result = await client.remove_tracks_from_playlist(args["playlist_id"], uris)
+
+        # Invalidate this playlist's cache
+        await self._cache.invalidate_playlist(args["user_id"], args["playlist_id"], session)
+
         return {"snapshot_id": result.snapshot_id, "tracks_removed": len(track_ids)}
 
     async def update_playlist(self, args: dict[str, Any], session: AsyncSession) -> Any:
@@ -232,6 +284,9 @@ class PlaylistToolHandlers:
             description=description,
             public=public,
         )
+        # Invalidate this playlist's cache
+        await self._cache.invalidate_playlist(args["user_id"], args["playlist_id"], session)
+
         return {"updated": True, "playlist_id": args["playlist_id"]}
 
 

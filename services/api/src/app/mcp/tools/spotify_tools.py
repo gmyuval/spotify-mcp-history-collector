@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import TokenManager
+from app.cache.service import SpotifyCacheService
 from app.mcp.registry import registry
 from app.mcp.schemas import MCPToolParam
 from app.settings import get_settings
@@ -17,9 +18,17 @@ _USER_PARAM = MCPToolParam(name="user_id", type="int", description="User ID (mus
 
 
 class SpotifyToolHandlers:
-    """Registers and handles live Spotify API MCP tools."""
+    """Registers and handles live Spotify API MCP tools.
+
+    Integrates a :class:`SpotifyCacheService` so that ``get_track``,
+    ``get_artist``, and ``get_album`` serve cached data when available
+    (within the configured TTL) and fall through to the Spotify API on
+    cache miss.
+    """
 
     def __init__(self) -> None:
+        settings = get_settings()
+        self._cache = SpotifyCacheService(cache_ttl_hours=settings.SPOTIFY_CACHE_TTL_HOURS)
         self._register()
 
     def _register(self) -> None:
@@ -149,9 +158,17 @@ class SpotifyToolHandlers:
         return results
 
     async def get_track(self, args: dict[str, Any], session: AsyncSession) -> Any:
+        track_id: str = args["track_id"]
+
+        # Check cache first
+        cached = await self._cache.get_entity("track", track_id, session)
+        if cached is not None:
+            return cached
+
+        # Cache miss — fetch from API
         client = await self._get_client(args["user_id"], session)
-        track = await client.get_track(args["track_id"])
-        return {
+        track = await client.get_track(track_id)
+        result = {
             "id": track.id,
             "name": track.name,
             "artists": [{"id": a.id, "name": a.name} for a in track.artists],
@@ -162,10 +179,19 @@ class SpotifyToolHandlers:
             "external_urls": track.external_urls,
         }
 
+        await self._cache.put_entity("track", track_id, result, session)
+        return result
+
     async def get_artist(self, args: dict[str, Any], session: AsyncSession) -> Any:
+        artist_id: str = args["artist_id"]
+
+        cached = await self._cache.get_entity("artist", artist_id, session)
+        if cached is not None:
+            return cached
+
         client = await self._get_client(args["user_id"], session)
-        artist = await client.get_artist(args["artist_id"])
-        return {
+        artist = await client.get_artist(artist_id)
+        result = {
             "id": artist.id,
             "name": artist.name,
             "genres": artist.genres,
@@ -175,9 +201,18 @@ class SpotifyToolHandlers:
             "external_urls": artist.external_urls,
         }
 
+        await self._cache.put_entity("artist", artist_id, result, session)
+        return result
+
     async def get_album(self, args: dict[str, Any], session: AsyncSession) -> Any:
+        album_id: str = args["album_id"]
+
+        cached = await self._cache.get_entity("album", album_id, session)
+        if cached is not None:
+            return cached
+
         client = await self._get_client(args["user_id"], session)
-        album = await client.get_album(args["album_id"])
+        album = await client.get_album(album_id)
         tracks_list = []
         if album.tracks:
             for t in album.tracks.items:
@@ -190,7 +225,7 @@ class SpotifyToolHandlers:
                         "artists": [{"id": a.id, "name": a.name} for a in t.artists],
                     }
                 )
-        return {
+        result = {
             "id": album.id,
             "name": album.name,
             "album_type": album.album_type,
@@ -204,6 +239,9 @@ class SpotifyToolHandlers:
             "images": [{"url": img.url} for img in album.images],
             "external_urls": album.external_urls,
         }
+
+        await self._cache.put_entity("album", album_id, result, session)
+        return result
 
 
 _instance = SpotifyToolHandlers()
