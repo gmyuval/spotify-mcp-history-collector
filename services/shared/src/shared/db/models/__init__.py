@@ -4,6 +4,7 @@ from shared.db.models.cache import CachedPlaylist, CachedPlaylistTrack, SpotifyE
 from shared.db.models.log import Log
 from shared.db.models.music import Artist, AudioFeatures, Play, Track, TrackArtist
 from shared.db.models.operations import ImportJob, JobRun, SyncCheckpoint
+from shared.db.models.rbac import Permission, Role, RolePermission, UserRole
 from shared.db.models.user import SpotifyToken, User
 
 __all__ = [
@@ -14,11 +15,15 @@ __all__ = [
     "ImportJob",
     "JobRun",
     "Log",
+    "Permission",
     "Play",
+    "Role",
+    "RolePermission",
     "SpotifyEntityCache",
     "SpotifyToken",
     "SyncCheckpoint",
     "Track",
     "TrackArtist",
     "User",
+    "UserRole",
 ]
