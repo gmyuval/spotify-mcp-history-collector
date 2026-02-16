@@ -42,7 +42,7 @@ class SpotifyArtistFull(SpotifyArtistSimplified):
 
     genres: list[str] = Field(default_factory=list)
     popularity: int | None = None
-    images: list[SpotifyImage] = Field(default_factory=list)
+    images: list[SpotifyImage] | None = None
     followers: dict[str, object] | None = None
 
 
@@ -59,7 +59,7 @@ class SpotifyAlbumSimplified(BaseModel):
     uri: str | None = None
     album_type: str | None = None
     release_date: str | None = None
-    images: list[SpotifyImage] = Field(default_factory=list)
+    images: list[SpotifyImage] | None = None
     external_urls: dict[str, str] = Field(default_factory=dict)
 
 
@@ -345,7 +345,7 @@ class SpotifyPlaylist(BaseModel):
     public: bool | None = None
     collaborative: bool | None = None
     owner: SpotifyPlaylistOwner | None = None
-    images: list[SpotifyImage] = Field(default_factory=list)
+    images: list[SpotifyImage] | None = None
     tracks: SpotifyPlaylistTracks | None = None
     snapshot_id: str | None = None
     uri: str | None = None
@@ -369,7 +369,7 @@ class SpotifyPlaylistSimplified(BaseModel):
     public: bool | None = None
     collaborative: bool | None = None
     owner: SpotifyPlaylistOwner | None = None
-    images: list[SpotifyImage] = Field(default_factory=list)
+    images: list[SpotifyImage] | None = None
     tracks: dict[str, Any] | None = None
     snapshot_id: str | None = None
     uri: str | None = None

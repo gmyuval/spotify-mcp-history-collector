@@ -197,7 +197,7 @@ class SpotifyToolHandlers:
             "genres": artist.genres,
             "popularity": artist.popularity,
             "followers": artist.followers,
-            "images": [{"url": img.url, "height": img.height, "width": img.width} for img in artist.images],
+            "images": [{"url": img.url, "height": img.height, "width": img.width} for img in (artist.images or [])],
             "external_urls": artist.external_urls,
         }
 
@@ -236,7 +236,7 @@ class SpotifyToolHandlers:
             "popularity": album.popularity,
             "label": album.label,
             "tracks": tracks_list,
-            "images": [{"url": img.url} for img in album.images],
+            "images": [{"url": img.url} for img in (album.images or [])],
             "external_urls": album.external_urls,
         }
 
