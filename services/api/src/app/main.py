@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.admin import router as admin_router
 from app.auth import router as auth_router
+from app.auth.middleware import JWTAuthMiddleware
 from app.dependencies import db_manager
 from app.history import router as history_router
 from app.logging.formatter import JSONLogFormatter
@@ -74,6 +75,9 @@ class SpotifyMCPApp:
             auth_limit=settings.RATE_LIMIT_AUTH_PER_MINUTE,
             mcp_limit=settings.RATE_LIMIT_MCP_PER_MINUTE,
         )
+
+        # JWT authentication (extracts user context from tokens)
+        self.app.add_middleware(JWTAuthMiddleware)
 
         # Security headers
         self.app.add_middleware(SecurityHeadersMiddleware)

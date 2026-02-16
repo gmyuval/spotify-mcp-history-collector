@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.crypto import TokenEncryptor
 from app.auth.exceptions import InvalidStateError, SpotifyAPIError
+from app.auth.permissions import PermissionChecker
 from app.auth.schemas import (
     AuthCallbackResponse,
     SpotifyProfile,
@@ -45,6 +46,7 @@ class OAuthService:
             ttl_seconds=settings.OAUTH_STATE_TTL_SECONDS,
         )
         self._encryptor = TokenEncryptor(settings.TOKEN_ENCRYPTION_KEY)
+        self._permission_checker = PermissionChecker()
 
     def get_authorization_url(self, client_id: str | None = None, user_id: int | None = None) -> str:
         """Build the full Spotify authorization redirect URL.
@@ -68,8 +70,10 @@ class OAuthService:
         }
         return f"{SPOTIFY_AUTHORIZE_URL}?{urlencode(params)}"
 
-    async def handle_callback(self, code: str, state: str, session: AsyncSession) -> AuthCallbackResponse:
+    async def handle_callback(self, code: str, state: str, session: AsyncSession) -> tuple[AuthCallbackResponse, int]:
         """Process the OAuth callback: validate state, exchange code, upsert user.
+
+        Returns a tuple of (response, user_id) so the router can issue a JWT.
 
         If the state contains an embedded ``user_id`` (from a re-auth flow),
         per-user credentials are used for the token exchange.
@@ -91,8 +95,9 @@ class OAuthService:
 
         if is_new:
             await self._create_sync_checkpoint(user.id, session)
+            await self._assign_default_role(user.id, session)
 
-        return AuthCallbackResponse(
+        response = AuthCallbackResponse(
             message="Authorization successful",
             user=SpotifyProfileSummary(
                 spotify_user_id=profile.id,
@@ -100,6 +105,7 @@ class OAuthService:
             ),
             is_new_user=is_new,
         )
+        return response, user.id
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -251,3 +257,11 @@ class OAuthService:
         """Create an initial SyncCheckpoint for a newly registered user."""
         checkpoint = SyncCheckpoint(user_id=user_id, status=SyncStatus.IDLE)
         session.add(checkpoint)
+
+    async def _assign_default_role(self, user_id: int, session: AsyncSession) -> None:
+        """Assign the 'user' role to a newly created user."""
+        try:
+            await self._permission_checker.assign_role(user_id, "user", session)
+            logger.info("Assigned default 'user' role to new user %d", user_id)
+        except ValueError:
+            logger.warning("Default 'user' role not found — skipping role assignment for user %d", user_id)

@@ -36,3 +36,20 @@ class AuthCallbackResponse(BaseModel):
     message: str
     user: SpotifyProfileSummary
     is_new_user: bool
+    access_token: str | None = None
+    refresh_token: str | None = None
+    expires_in: int | None = None
+
+
+class JWTTokenResponse(BaseModel):
+    """Response for the token refresh endpoint."""
+
+    access_token: str
+    expires_in: int
+    token_type: str = "Bearer"
+
+
+class RefreshTokenRequest(BaseModel):
+    """Request body for POST /auth/refresh (API clients)."""
+
+    refresh_token: str

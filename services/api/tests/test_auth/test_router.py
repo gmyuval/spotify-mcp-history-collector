@@ -54,6 +54,22 @@ def override_deps(async_engine):  # type: ignore[no-untyped-def]
 
     app.dependency_overrides[db_manager.dependency] = _override_session
     app.dependency_overrides[get_settings] = _test_settings
+
+    # Reset in-memory rate limiter to avoid 429s from accumulated test hits.
+    from app.middleware import RateLimitMiddleware
+
+    for mw in app.user_middleware:
+        if mw.cls is RateLimitMiddleware:
+            mw.kwargs.setdefault("auth_limit", 10)
+            break
+    # Walk the ASGI app stack to find the live middleware instance.
+    current = app.middleware_stack
+    while current is not None:
+        if isinstance(current, RateLimitMiddleware):
+            current._hits.clear()
+            break
+        current = getattr(current, "app", None)
+
     yield
     app.dependency_overrides.clear()
 
@@ -114,6 +130,10 @@ def test_callback_success(client: TestClient) -> None:
     assert data["message"] == "Authorization successful"
     assert data["user"]["spotify_user_id"] == "testuser123"
     assert data["is_new_user"] is True
+    # JWT fields present in response
+    assert data["access_token"] is not None
+    assert data["refresh_token"] is not None
+    assert data["expires_in"] is not None
 
     # Call again to test upsert (existing user)
     respx.post("https://accounts.spotify.com/api/token").mock(

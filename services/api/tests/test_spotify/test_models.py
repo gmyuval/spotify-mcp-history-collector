@@ -9,10 +9,12 @@ from shared.spotify.models import (
     RecentlyPlayedResponse,
     SpotifyArtistFull,
     SpotifyArtistSimplified,
+    SpotifyPlaylistSimplified,
     SpotifySearchResponse,
     SpotifyTrack,
     TopArtistsResponse,
     TopTracksResponse,
+    UserPlaylistsResponse,
 )
 
 
@@ -237,3 +239,35 @@ def test_search_response_partial() -> None:
     response = SpotifySearchResponse.model_validate(data)
     assert response.tracks is not None
     assert response.artists is None
+
+
+def test_artist_full_images_null() -> None:
+    """SpotifyArtistFull accepts images: null from Spotify API."""
+    data = {"id": "a1", "name": "No Image Artist", "images": None}
+    artist = SpotifyArtistFull.model_validate(data)
+    assert artist.images is None
+
+
+def test_playlist_simplified_images_null() -> None:
+    """SpotifyPlaylistSimplified accepts images: null from Spotify API."""
+    data = {"id": "p1", "name": "Empty Playlist", "images": None}
+    playlist = SpotifyPlaylistSimplified.model_validate(data)
+    assert playlist.images is None
+
+
+def test_user_playlists_response_with_null_images() -> None:
+    """UserPlaylistsResponse handles playlists with images: null."""
+    data = {
+        "items": [
+            {"id": "p1", "name": "With Images", "images": [{"url": "https://example.com/img.jpg"}]},
+            {"id": "p2", "name": "No Images", "images": None},
+            {"id": "p3", "name": "Missing Images"},
+        ],
+        "total": 3,
+    }
+    response = UserPlaylistsResponse.model_validate(data)
+    assert len(response.items) == 3
+    assert response.items[0].images is not None
+    assert len(response.items[0].images) == 1
+    assert response.items[1].images is None
+    assert response.items[2].images is None

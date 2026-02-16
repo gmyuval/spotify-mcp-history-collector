@@ -31,6 +31,12 @@ class AppSettings(BaseSettings):
     ADMIN_USERNAME: str = ""  # For basic auth mode
     ADMIN_PASSWORD: str = ""  # For basic auth mode
 
+    # JWT Authentication
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    JWT_COOKIE_SECURE: bool = True  # Set False for local dev over HTTP
+    JWT_COOKIE_DOMAIN: str = ""  # Empty = no domain restriction
+
     # CORS
     CORS_ALLOWED_ORIGINS: str = "http://localhost:8001"  # comma-separated origins
 
