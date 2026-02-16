@@ -13,13 +13,17 @@ from shared.db.models import (
     ImportJob,
     JobRun,
     Log,
+    Permission,
     Play,
+    Role,
+    RolePermission,
     SpotifyEntityCache,
     SpotifyToken,
     SyncCheckpoint,
     Track,
     TrackArtist,
     User,
+    UserRole,
 )
 from shared.db.operations import MusicRepository
 from shared.db.session import DatabaseManager
@@ -42,13 +46,17 @@ __all__ = [
     "ImportJob",
     "JobRun",
     "Log",
+    "Permission",
     "Play",
+    "Role",
+    "RolePermission",
     "SpotifyEntityCache",
     "SpotifyToken",
     "SyncCheckpoint",
     "Track",
     "TrackArtist",
     "User",
+    "UserRole",
     # Session
     "DatabaseManager",
     # Operations
