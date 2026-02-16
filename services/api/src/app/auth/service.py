@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 import httpx
+from cryptography.fernet import InvalidToken
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -126,7 +127,18 @@ class OAuthService:
             )
             row = result.one_or_none()
             if row and row.custom_spotify_client_id and row.encrypted_custom_client_secret:
-                client_secret = self._encryptor.decrypt(row.encrypted_custom_client_secret)
+                try:
+                    client_secret = self._encryptor.decrypt(row.encrypted_custom_client_secret)
+                except InvalidToken:
+                    logger.warning(
+                        "Failed to decrypt custom Spotify credentials for user %d; encryption key may have rotated",
+                        user_id,
+                    )
+                    raise SpotifyAPIError(
+                        action="resolve credentials",
+                        status_code=500,
+                        detail="Stored custom Spotify credentials are invalid. Please reconfigure.",
+                    ) from None
                 logger.debug("Using custom Spotify credentials for re-auth of user %d", user_id)
                 return row.custom_spotify_client_id, client_secret
         return self._settings.SPOTIFY_CLIENT_ID, self._settings.SPOTIFY_CLIENT_SECRET
