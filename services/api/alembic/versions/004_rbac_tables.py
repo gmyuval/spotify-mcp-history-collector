@@ -116,6 +116,16 @@ def upgrade() -> None:
         [{"id": i + 1, "codename": code, "description": desc} for i, (code, desc) in enumerate(_DEFAULT_PERMISSIONS)],
     )
 
+    # Reset PostgreSQL sequence so future auto-generated IDs don't collide with seeded IDs.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            sa.text(
+                "SELECT setval(pg_get_serial_sequence('permissions', 'id'), "
+                "COALESCE((SELECT MAX(id) FROM permissions), 1))"
+            )
+        )
+
     # -- Seed default roles (all system roles) --
     roles_table = sa.table(
         "roles",
@@ -131,6 +141,12 @@ def upgrade() -> None:
             for i, (name, desc, _perms) in enumerate(_DEFAULT_ROLES)
         ],
     )
+
+    # Reset PostgreSQL sequence for roles.
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            sa.text("SELECT setval(pg_get_serial_sequence('roles', 'id'), COALESCE((SELECT MAX(id) FROM roles), 1))")
+        )
 
     # -- Seed role-permission links --
     # Build a codename → id lookup from the seeded permissions.

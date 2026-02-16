@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db.models.rbac import Permission, Role, RolePermission, UserRole
@@ -73,20 +74,23 @@ class PermissionChecker:
         """Assign a role to a user by role name. Returns ``True`` if newly assigned.
 
         Returns ``False`` if the user already had the role (idempotent).
+        Uses a nested transaction to atomically attempt the insert, avoiding
+        race conditions where two concurrent callers both pass an existence
+        check and one fails on the unique constraint.
         Raises ``ValueError`` if the role does not exist.
         """
         role = await self._get_role_by_name(role_name, session)
         if role is None:
             raise ValueError(f"Role not found: {role_name}")
 
-        existing = await session.execute(
-            select(UserRole).where(UserRole.user_id == user_id, UserRole.role_id == role.id)
-        )
-        if existing.scalar_one_or_none() is not None:
+        try:
+            async with session.begin_nested():
+                session.add(UserRole(user_id=user_id, role_id=role.id))
+                await session.flush()
+        except IntegrityError:
+            # Row already exists — unique constraint violation is expected for idempotent calls.
             return False
 
-        session.add(UserRole(user_id=user_id, role_id=role.id))
-        await session.flush()
         logger.info("Assigned role '%s' to user %d", role_name, user_id)
         return True
 
