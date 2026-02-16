@@ -13,6 +13,7 @@ from app.admin.schemas import (
     JobRunResponse,
     LogEntry,
     RecentError,
+    UserCredentialStatus,
     UserDetail,
     UserSummary,
 )
@@ -74,6 +75,7 @@ class AdminService:
             return None
 
         cp = u.sync_checkpoint
+        has_custom = bool(u.custom_spotify_client_id and u.encrypted_custom_client_secret)
         return UserDetail(
             id=u.id,
             spotify_user_id=u.spotify_user_id,
@@ -89,6 +91,8 @@ class AdminService:
             last_poll_completed_at=cp.last_poll_completed_at if cp else None,
             last_poll_latest_played_at=cp.last_poll_latest_played_at if cp else None,
             token_expires_at=u.token.token_expires_at if u.token else None,
+            has_custom_credentials=has_custom,
+            custom_spotify_client_id=u.custom_spotify_client_id if has_custom else None,
             error_message=cp.error_message if cp else None,
             created_at=u.created_at,
             updated_at=u.updated_at,
@@ -151,6 +155,59 @@ class AdminService:
         stmt = select(SyncCheckpoint).where(SyncCheckpoint.user_id == user_id)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
+
+    # --- User Spotify Credentials ---
+
+    async def get_credential_status(self, user_id: int, session: AsyncSession) -> UserCredentialStatus | None:
+        """Return credential status for a user, or None if user not found."""
+        stmt = select(User).where(User.id == user_id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user is None:
+            return None
+        has_custom = bool(user.custom_spotify_client_id and user.encrypted_custom_client_secret)
+        return UserCredentialStatus(
+            has_custom_credentials=has_custom,
+            custom_client_id=user.custom_spotify_client_id if has_custom else None,
+        )
+
+    async def set_credentials(
+        self,
+        user_id: int,
+        client_id: str,
+        encrypted_client_secret: str,
+        session: AsyncSession,
+    ) -> ActionResponse:
+        """Set custom Spotify credentials for a user."""
+        stmt = select(User).where(User.id == user_id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user is None:
+            return ActionResponse(success=False, message=f"User {user_id} not found")
+        user.custom_spotify_client_id = client_id
+        user.encrypted_custom_client_secret = encrypted_client_secret
+        await session.flush()
+        return ActionResponse(
+            success=True,
+            message=f"Custom Spotify credentials set for user {user_id}. "
+            "User must re-authorize via /auth/login?user_id={} to use new credentials.".format(user_id),
+        )
+
+    async def clear_credentials(self, user_id: int, session: AsyncSession) -> ActionResponse:
+        """Remove custom Spotify credentials for a user."""
+        stmt = select(User).where(User.id == user_id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user is None:
+            return ActionResponse(success=False, message=f"User {user_id} not found")
+        user.custom_spotify_client_id = None
+        user.encrypted_custom_client_secret = None
+        await session.flush()
+        return ActionResponse(
+            success=True,
+            message=f"Custom Spotify credentials removed for user {user_id}. "
+            "User must re-authorize via /auth/login to revert to system credentials.",
+        )
 
     # --- Global Sync Status ---
 

@@ -24,6 +24,11 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(255))
     country: Mapped[str | None] = mapped_column(String(10))
     product: Mapped[str | None] = mapped_column(String(50))
+
+    # Per-user Spotify app credentials (optional override of system defaults)
+    custom_spotify_client_id: Mapped[str | None] = mapped_column(String(255))
+    encrypted_custom_client_secret: Mapped[str | None] = mapped_column(Text)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now

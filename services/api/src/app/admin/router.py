@@ -20,10 +20,13 @@ from app.admin.schemas import (
     JobRunResponse,
     LogEntry,
     PaginatedResponse,
+    SetUserCredentialsRequest,
+    UserCredentialStatus,
     UserDetail,
     UserSummary,
 )
 from app.admin.service import AdminService
+from app.auth.crypto import TokenEncryptor
 from app.dependencies import db_manager
 from app.settings import AppSettings, get_settings
 from shared.db.enums import ImportStatus
@@ -51,6 +54,26 @@ class AdminRouter:
             "/users/{user_id}/trigger-sync", self.trigger_sync, methods=["POST"], response_model=ActionResponse
         )
         r.add_api_route("/users/{user_id}", self.delete_user, methods=["DELETE"], response_model=ActionResponse)
+
+        # User Spotify credentials
+        r.add_api_route(
+            "/users/{user_id}/spotify-credentials",
+            self.get_credentials,
+            methods=["GET"],
+            response_model=UserCredentialStatus,
+        )
+        r.add_api_route(
+            "/users/{user_id}/spotify-credentials",
+            self.set_credentials,
+            methods=["PUT"],
+            response_model=ActionResponse,
+        )
+        r.add_api_route(
+            "/users/{user_id}/spotify-credentials",
+            self.clear_credentials,
+            methods=["DELETE"],
+            response_model=ActionResponse,
+        )
 
         # Import endpoints
         r.add_api_route(
@@ -139,6 +162,41 @@ class AdminRouter:
         if not result.success:
             raise HTTPException(status_code=404, detail=result.message)
         return result
+
+    # --- User Spotify Credentials ---
+
+    async def get_credentials(
+        self,
+        user_id: int,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> UserCredentialStatus:
+        """Get custom Spotify credential status for a user."""
+        status = await self._service.get_credential_status(user_id, session)
+        if status is None:
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+        return status
+
+    async def set_credentials(
+        self,
+        user_id: int,
+        body: SetUserCredentialsRequest,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+        settings: Annotated[AppSettings, Depends(get_settings)],
+    ) -> ActionResponse:
+        """Set custom Spotify app credentials for a user."""
+        await self._ensure_user_exists(user_id, session)
+        encryptor = TokenEncryptor(settings.TOKEN_ENCRYPTION_KEY)
+        encrypted_secret = encryptor.encrypt(body.client_secret)
+        return await self._service.set_credentials(user_id, body.client_id, encrypted_secret, session)
+
+    async def clear_credentials(
+        self,
+        user_id: int,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> ActionResponse:
+        """Remove custom Spotify app credentials for a user."""
+        await self._ensure_user_exists(user_id, session)
+        return await self._service.clear_credentials(user_id, session)
 
     # --- Import Endpoints ---
 

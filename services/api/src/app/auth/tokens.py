@@ -1,5 +1,6 @@
 """Token lifecycle management — retrieval and refresh of Spotify access tokens."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -11,11 +12,17 @@ from app.auth.exceptions import TokenNotFoundError, TokenRefreshError
 from app.auth.schemas import SpotifyTokenResponse
 from app.constants import SPOTIFY_TOKEN_URL
 from app.settings import AppSettings
-from shared.db.models.user import SpotifyToken
+from shared.db.models.user import SpotifyToken, User
+
+logger = logging.getLogger(__name__)
 
 
 class TokenManager:
-    """Manages the Spotify access-token lifecycle, including transparent refresh."""
+    """Manages the Spotify access-token lifecycle, including transparent refresh.
+
+    When refreshing tokens, automatically resolves per-user Spotify app
+    credentials (if configured) and falls back to system defaults.
+    """
 
     def __init__(self, settings: AppSettings) -> None:
         self._settings = settings
@@ -43,12 +50,16 @@ class TokenManager:
     async def refresh_access_token(self, user_id: int, session: AsyncSession) -> str:
         """Force-refresh the Spotify access token for a user.
 
+        Uses per-user Spotify app credentials when available, falling back
+        to the system defaults from :class:`AppSettings`.
+
         Raises:
             TokenNotFoundError: If no token record exists for the user.
             TokenRefreshError: If the Spotify token endpoint returns an error.
         """
         token_record = await self._load_token(user_id, session)
         refresh_token = self._encryptor.decrypt(token_record.encrypted_refresh_token)
+        client_id, client_secret = await self._resolve_credentials(user_id, session)
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -56,8 +67,8 @@ class TokenManager:
                 data={
                     "grant_type": "refresh_token",
                     "refresh_token": refresh_token,
-                    "client_id": self._settings.SPOTIFY_CLIENT_ID,
-                    "client_secret": self._settings.SPOTIFY_CLIENT_SECRET,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
                 },
             )
             try:
@@ -77,6 +88,21 @@ class TokenManager:
             token_record.encrypted_refresh_token = self._encryptor.encrypt(token_data.refresh_token)
 
         return token_data.access_token
+
+    async def _resolve_credentials(self, user_id: int, session: AsyncSession) -> tuple[str, str]:
+        """Resolve Spotify client credentials for a user.
+
+        Returns per-user credentials if configured, otherwise system defaults.
+        """
+        result = await session.execute(
+            select(User.custom_spotify_client_id, User.encrypted_custom_client_secret).where(User.id == user_id)
+        )
+        row = result.one_or_none()
+        if row and row.custom_spotify_client_id and row.encrypted_custom_client_secret:
+            client_secret = self._encryptor.decrypt(row.encrypted_custom_client_secret)
+            logger.debug("Using custom Spotify credentials for user %d", user_id)
+            return row.custom_spotify_client_id, client_secret
+        return self._settings.SPOTIFY_CLIENT_ID, self._settings.SPOTIFY_CLIENT_SECRET
 
     async def _load_token(self, user_id: int, session: AsyncSession) -> SpotifyToken:
         """Load the SpotifyToken record for a user or raise."""
