@@ -37,7 +37,10 @@ class JWTService:
     ALGORITHM = "HS256"
 
     def __init__(self, settings: AppSettings) -> None:
-        self._secret = settings.TOKEN_ENCRYPTION_KEY
+        secret = settings.TOKEN_ENCRYPTION_KEY
+        if not secret or not secret.strip():
+            raise ValueError("TOKEN_ENCRYPTION_KEY must be set to a non-empty value for JWT signing")
+        self._secret = secret
         self._access_expire_minutes = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
         self._refresh_expire_days = settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
         self._cookie_secure = settings.JWT_COOKIE_SECURE
@@ -79,7 +82,7 @@ class JWTService:
         payload = self._decode(token)
         if payload.get("type") != "access":
             raise JWTInvalidError("Token is not an access token")
-        return int(payload["sub"])
+        return self._parse_sub(payload["sub"])
 
     def decode_refresh_token(self, token: str) -> int:
         """Decode and validate a refresh token. Returns user_id.
@@ -91,7 +94,15 @@ class JWTService:
         payload = self._decode(token)
         if payload.get("type") != "refresh":
             raise JWTInvalidError("Token is not a refresh token")
-        return int(payload["sub"])
+        return self._parse_sub(payload["sub"])
+
+    @staticmethod
+    def _parse_sub(sub: str) -> int:
+        """Convert the ``sub`` claim to an integer user ID."""
+        try:
+            return int(sub)
+        except (ValueError, TypeError) as exc:
+            raise JWTInvalidError(f"Invalid 'sub' claim: {sub!r}") from exc
 
     @property
     def access_expire_seconds(self) -> int:

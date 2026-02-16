@@ -142,3 +142,40 @@ def test_cookie_domain_set() -> None:
     """Non-empty JWT_COOKIE_DOMAIN is returned."""
     svc = _service(JWT_COOKIE_DOMAIN=".example.com")
     assert svc.cookie_domain == ".example.com"
+
+
+def test_empty_encryption_key_raises() -> None:
+    """JWTService rejects empty TOKEN_ENCRYPTION_KEY at init time."""
+    with pytest.raises(ValueError, match="TOKEN_ENCRYPTION_KEY must be set"):
+        JWTService(
+            AppSettings(
+                SPOTIFY_CLIENT_ID="test",
+                SPOTIFY_CLIENT_SECRET="test",
+                TOKEN_ENCRYPTION_KEY="",
+            )
+        )
+
+
+def test_whitespace_only_encryption_key_raises() -> None:
+    """JWTService rejects whitespace-only TOKEN_ENCRYPTION_KEY."""
+    with pytest.raises(ValueError, match="TOKEN_ENCRYPTION_KEY must be set"):
+        JWTService(
+            AppSettings(
+                SPOTIFY_CLIENT_ID="test",
+                SPOTIFY_CLIENT_SECRET="test",
+                TOKEN_ENCRYPTION_KEY="   ",
+            )
+        )
+
+
+def test_non_numeric_sub_raises_invalid() -> None:
+    """Token with non-numeric 'sub' claim raises JWTInvalidError."""
+    svc = _service()
+    payload = {
+        "sub": "not-a-number",
+        "type": "access",
+        "exp": datetime.now(UTC) + timedelta(hours=1),
+    }
+    token = pyjwt.encode(payload, TEST_KEY, algorithm="HS256")
+    with pytest.raises(JWTInvalidError, match="Invalid 'sub' claim"):
+        svc.decode_access_token(token)

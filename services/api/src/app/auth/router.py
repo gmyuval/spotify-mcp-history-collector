@@ -147,8 +147,8 @@ class AuthRouter:
     ) -> Response:
         """Clear authentication cookies."""
         response = JSONResponse(content={"message": "Logged out"})
-        response.delete_cookie("access_token", path="/")
-        response.delete_cookie("refresh_token", path="/auth/refresh")
+        response.delete_cookie("access_token", path="/", domain=jwt_service.cookie_domain)
+        response.delete_cookie("refresh_token", path="/auth/refresh", domain=jwt_service.cookie_domain)
         return response
 
     @staticmethod
@@ -167,6 +167,7 @@ class AuthRouter:
             secure=jwt_service.cookie_secure,
             samesite="lax",
             path="/",
+            domain=jwt_service.cookie_domain,
         )
         response.set_cookie(
             key="refresh_token",
@@ -176,6 +177,7 @@ class AuthRouter:
             secure=jwt_service.cookie_secure,
             samesite="lax",
             path="/auth/refresh",
+            domain=jwt_service.cookie_domain,
         )
 
     @staticmethod

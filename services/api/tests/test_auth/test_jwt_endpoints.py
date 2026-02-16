@@ -1,6 +1,6 @@
 """Tests for JWT auth endpoints — callback JWT issuance, refresh, logout."""
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 
 import httpx
 import pytest
@@ -43,7 +43,7 @@ async def async_engine() -> AsyncGenerator[AsyncEngine]:
 
 
 @pytest.fixture
-def override_deps(async_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+def override_deps(async_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
     session_factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _override_session() -> AsyncGenerator[AsyncSession]:
@@ -234,7 +234,7 @@ def test_refresh_with_deleted_user(override_deps: None, async_engine: AsyncEngin
             await session.delete(user)
             await session.commit()
 
-    asyncio.get_event_loop().run_until_complete(_delete_user())
+    asyncio.run(_delete_user())
 
     resp = client.post("/auth/refresh", json={"refresh_token": refresh_token})
     assert resp.status_code == 401
