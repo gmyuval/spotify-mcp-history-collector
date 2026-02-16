@@ -1,6 +1,7 @@
 """JWT authentication middleware — extracts user context from tokens."""
 
 import logging
+import sys
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -74,7 +75,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             request.state.db_session = None
-            await session_cm.__aexit__(None, None, None)
+            await session_cm.__aexit__(*sys.exc_info())
 
     @staticmethod
     def _should_skip(path: str) -> bool:
