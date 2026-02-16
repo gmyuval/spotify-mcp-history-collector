@@ -182,19 +182,19 @@ class PlaylistToolHandlers:
                 logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
                 return cached_data
 
-        # Cache miss or snapshot changed — build result from API response
+        # Cache miss or snapshot changed — fetch all tracks via pagination
+        all_track_items = await client.get_playlist_all_tracks(playlist_id)
         tracks = []
-        if pl.tracks:
-            for item in pl.tracks.items:
-                if item.track:
-                    tracks.append(
-                        {
-                            "id": item.track.id,
-                            "name": item.track.name,
-                            "artists": [{"id": a.id, "name": a.name} for a in item.track.artists],
-                            "added_at": item.added_at,
-                        }
-                    )
+        for item in all_track_items:
+            if item.track:
+                tracks.append(
+                    {
+                        "id": item.track.id,
+                        "name": item.track.name,
+                        "artists": [{"id": a.id, "name": a.name} for a in item.track.artists],
+                        "added_at": item.added_at,
+                    }
+                )
         result = {
             "id": pl.id,
             "name": pl.name,
