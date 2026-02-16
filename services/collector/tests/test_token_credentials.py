@@ -1,5 +1,6 @@
 """Tests for CollectorTokenManager per-user credential resolution."""
 
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs
 
@@ -7,7 +8,7 @@ import httpx
 import pytest
 import respx
 from cryptography.fernet import Fernet
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from collector.settings import CollectorSettings
 from collector.tokens import CollectorTokenManager
@@ -27,7 +28,7 @@ def _test_settings() -> CollectorSettings:
 
 
 @pytest.fixture
-async def async_engine():  # type: ignore[no-untyped-def]
+async def async_engine() -> AsyncGenerator[AsyncEngine]:
     engine = create_async_engine("sqlite+aiosqlite://", echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -38,7 +39,7 @@ async def async_engine():  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture
-async def async_session(async_engine):  # type: ignore[no-untyped-def]
+async def async_session(async_engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
     session_factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         yield session
@@ -134,3 +135,28 @@ async def test_refresh_uses_custom_credentials(async_session: AsyncSession) -> N
     body = parse_qs(request.content.decode())
     assert body["client_id"] == ["custom-client-id"]
     assert body["client_secret"] == ["custom-client-secret"]
+
+
+@respx.mock
+async def test_refresh_falls_back_when_only_client_id_set(async_session: AsyncSession) -> None:
+    """If only client_id is set (no secret), falls back to system defaults."""
+    user, _token = await _create_user_with_token(
+        async_session,
+        access_token="expired-token",
+        expires_at=datetime.now(UTC) - timedelta(minutes=5),
+        custom_client_id="custom-client-id",
+        # custom_client_secret is NOT set — left as None
+    )
+    manager = CollectorTokenManager(_test_settings())
+
+    route = respx.post("https://accounts.spotify.com/api/token").mock(return_value=_mock_token_response())
+
+    result = await manager.refresh_access_token(user.id, async_session)
+    assert result == "new-access-token"
+
+    # Verify the request body falls back to system credentials
+    assert route.called
+    request = route.calls[0].request
+    body = parse_qs(request.content.decode())
+    assert body["client_id"] == ["system-client-id"]
+    assert body["client_secret"] == ["system-client-secret"]

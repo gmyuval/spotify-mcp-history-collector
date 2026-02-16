@@ -127,7 +127,7 @@ class OAuthService:
             row = result.one_or_none()
             if row and row.custom_spotify_client_id and row.encrypted_custom_client_secret:
                 client_secret = self._encryptor.decrypt(row.encrypted_custom_client_secret)
-                logger.info("Using custom Spotify credentials for re-auth of user %d", user_id)
+                logger.debug("Using custom Spotify credentials for re-auth of user %d", user_id)
                 return row.custom_spotify_client_id, client_secret
         return self._settings.SPOTIFY_CLIENT_ID, self._settings.SPOTIFY_CLIENT_SECRET
 
