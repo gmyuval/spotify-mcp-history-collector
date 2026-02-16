@@ -594,6 +594,7 @@ async def test_remove_tracks_from_playlist() -> None:
     request = route.calls[0].request
     body = request.content.decode()
     assert "spotify:track:t1" in body
+    assert '"items"' in body
 
 
 @respx.mock

@@ -340,7 +340,7 @@ class SpotifyClient:
         uris: list[str],
     ) -> SpotifySnapshotResponse:
         """DELETE /playlists/{id}/items."""
-        body: dict[str, Any] = {"tracks": [{"uri": uri} for uri in uris]}
+        body: dict[str, Any] = {"items": [{"uri": uri} for uri in uris]}
         response = await self._request(
             "DELETE",
             f"{PLAYLIST_URL}/{playlist_id}/items",

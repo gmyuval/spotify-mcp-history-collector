@@ -41,6 +41,9 @@ class AppSettings(BaseSettings):
     # Logging
     LOG_RETENTION_DAYS: int = 30
 
+    # Spotify cache
+    SPOTIFY_CACHE_TTL_HOURS: int = 24
+
     model_config = {"env_prefix": ""}
 
 
