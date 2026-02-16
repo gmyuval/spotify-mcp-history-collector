@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from shared.db.base import Base, utc_now
@@ -77,5 +77,3 @@ class UserRole(Base):
 
     # Relationships
     role: Mapped[Role] = relationship("Role", back_populates="user_roles")
-
-    __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_user_role"),)

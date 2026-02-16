@@ -101,7 +101,6 @@ def upgrade() -> None:
         sa.Column("user_id", sa.BigInteger(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("role_id", sa.BigInteger(), sa.ForeignKey("roles.id", ondelete="CASCADE"), nullable=False),
         sa.PrimaryKeyConstraint("user_id", "role_id"),
-        sa.UniqueConstraint("user_id", "role_id", name="uq_user_role"),
     )
 
     # -- Seed default permissions --

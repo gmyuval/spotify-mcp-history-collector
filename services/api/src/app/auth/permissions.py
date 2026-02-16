@@ -87,9 +87,13 @@ class PermissionChecker:
             async with session.begin_nested():
                 session.add(UserRole(user_id=user_id, role_id=role.id))
                 await session.flush()
-        except IntegrityError:
-            # Row already exists — unique constraint violation is expected for idempotent calls.
-            return False
+        except IntegrityError as exc:
+            # Only swallow duplicate-key errors (unique/PK constraint on user_roles).
+            # Re-raise unexpected integrity errors (e.g. FK violations for invalid user_id).
+            exc_text = str(exc.orig).lower() if exc.orig else str(exc).lower()
+            if "unique" in exc_text or "duplicate" in exc_text or "user_roles_pkey" in exc_text:
+                return False
+            raise
 
         logger.info("Assigned role '%s' to user %d", role_name, user_id)
         return True
