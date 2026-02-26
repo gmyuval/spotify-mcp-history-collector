@@ -63,11 +63,13 @@ class FrontendApp:
             imports_router,
             jobs_router,
             logs_router,
+            roles_router,
             users_router,
         )
 
         self.app.include_router(dashboard_router)
         self.app.include_router(users_router, prefix="/users", tags=["users"])
+        self.app.include_router(roles_router, prefix="/roles", tags=["roles"])
         self.app.include_router(jobs_router, prefix="/jobs", tags=["jobs"])
         self.app.include_router(imports_router, prefix="/imports", tags=["imports"])
         self.app.include_router(logs_router, prefix="/logs", tags=["logs"])

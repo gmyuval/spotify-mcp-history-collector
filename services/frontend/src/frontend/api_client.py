@@ -179,6 +179,59 @@ class AdminApiClient:
             params["older_than_days"] = older_than_days
         return await self._request("POST", "/admin/maintenance/purge-logs", params=params)
 
+    # --- RBAC ---
+
+    async def list_roles(self) -> list[dict[str, Any]]:
+        """GET /admin/roles — list all roles with permissions."""
+        return await self._request("GET", "/admin/roles")  # type: ignore[return-value]
+
+    async def list_permissions(self) -> list[dict[str, Any]]:
+        """GET /admin/permissions — list all permissions."""
+        return await self._request("GET", "/admin/permissions")  # type: ignore[return-value]
+
+    async def create_role(
+        self,
+        name: str,
+        description: str | None = None,
+        permission_codenames: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """POST /admin/roles — create a new role."""
+        body: dict[str, Any] = {"name": name}
+        if description is not None:
+            body["description"] = description
+        if permission_codenames is not None:
+            body["permission_codenames"] = permission_codenames
+        return await self._request("POST", "/admin/roles", json=body)
+
+    async def update_role(
+        self,
+        role_id: int,
+        name: str | None = None,
+        description: str | None = None,
+        permission_codenames: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """PUT /admin/roles/{role_id} — update a role."""
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        if description is not None:
+            body["description"] = description
+        if permission_codenames is not None:
+            body["permission_codenames"] = permission_codenames
+        return await self._request("PUT", f"/admin/roles/{role_id}", json=body)
+
+    async def delete_role(self, role_id: int) -> dict[str, Any]:
+        """DELETE /admin/roles/{role_id} — delete a non-system role."""
+        return await self._request("DELETE", f"/admin/roles/{role_id}")
+
+    async def get_user_roles(self, user_id: int) -> dict[str, Any]:
+        """GET /admin/users/{user_id}/roles — get user's roles."""
+        return await self._request("GET", f"/admin/users/{user_id}/roles")
+
+    async def set_user_roles(self, user_id: int, role_ids: list[int]) -> dict[str, Any]:
+        """PUT /admin/users/{user_id}/roles — set user's roles."""
+        return await self._request("PUT", f"/admin/users/{user_id}/roles", json={"role_ids": role_ids})
+
     async def close(self) -> None:
         """Close the underlying HTTP client."""
         await self._client.aclose()

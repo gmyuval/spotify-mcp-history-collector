@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Roles{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2>Roles</h2>
+</div>
+
+<div id="roles-alert"></div>
+
+{% for role in roles %}
+{% set role_perm_codenames = role.permissions | map(attribute='codename') | list %}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div>
+      <strong>{{ role.name }}</strong>
+      {% if role.is_system %}<span class="badge bg-secondary ms-2">system</span>{% endif %}
+      {% if role.description %}<small class="text-muted ms-2">{{ role.description }}</small>{% endif %}
+    </div>
+    {% if not role.is_system %}
+    <button class="btn btn-sm btn-outline-danger"
+            hx-post="/roles/{{ role.id }}/delete"
+            hx-target="#roles-alert"
+            hx-swap="innerHTML"
+            hx-confirm="Delete role '{{ role.name }}'?">Delete</button>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <form hx-post="/roles/{{ role.id }}/update" hx-target="#roles-alert" hx-swap="innerHTML">
+      <div class="row mb-2">
+        <div class="col-md-4">
+          <label class="form-label">Name</label>
+          <input type="text" name="name" class="form-control form-control-sm"
+                 value="{{ role.name }}" {% if role.is_system %}disabled{% endif %}>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Description</label>
+          <input type="text" name="description" class="form-control form-control-sm"
+                 value="{{ role.description or '' }}">
+        </div>
+      </div>
+      <div class="mb-2">
+        <label class="form-label">Permissions</label>
+        <div class="row">
+          {% for perm in permissions %}
+          <div class="col-md-4 col-lg-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="permissions"
+                     value="{{ perm.codename }}" id="perm-{{ role.id }}-{{ loop.index }}"
+                     {% if perm.codename in role_perm_codenames %}checked{% endif %}>
+              <label class="form-check-label" for="perm-{{ role.id }}-{{ loop.index }}">
+                <code>{{ perm.codename }}</code>
+              </label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+
+{% if not roles %}
+<div class="alert alert-info">No roles defined yet.</div>
+{% endif %}
+
+<div class="card mt-4">
+  <div class="card-header"><strong>Create New Role</strong></div>
+  <div class="card-body">
+    <form hx-post="/roles/create" hx-target="#roles-alert" hx-swap="innerHTML">
+      <div class="row mb-2">
+        <div class="col-md-4">
+          <label class="form-label">Name</label>
+          <input type="text" name="name" class="form-control form-control-sm" required>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Description</label>
+          <input type="text" name="description" class="form-control form-control-sm">
+        </div>
+      </div>
+      <div class="mb-2">
+        <label class="form-label">Permissions</label>
+        <div class="row">
+          {% for perm in permissions %}
+          <div class="col-md-4 col-lg-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="permissions"
+                     value="{{ perm.codename }}" id="new-perm-{{ loop.index }}">
+              <label class="form-check-label" for="new-perm-{{ loop.index }}">
+                <code>{{ perm.codename }}</code>
+              </label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <button type="submit" class="btn btn-success btn-sm">Create Role</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

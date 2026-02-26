@@ -169,3 +169,82 @@ def test_logs_purge_invalid_days(client: TestClient, mock_api: AsyncMock) -> Non
     assert response.status_code == 200
     assert "Invalid" in response.text
     mock_api.purge_logs.assert_not_called()
+
+
+# --- Roles ---
+
+
+def test_roles_page(client: TestClient, mock_api: AsyncMock) -> None:
+    response = client.get("/roles")
+    assert response.status_code == 200
+    assert "Roles" in response.text
+    assert "admin" in response.text
+    mock_api.list_roles.assert_called_once()
+    mock_api.list_permissions.assert_called_once()
+
+
+def test_roles_create(client: TestClient, mock_api: AsyncMock) -> None:
+    response = client.post(
+        "/roles/create",
+        data={"name": "editor", "description": "Can edit", "permissions": ["admin:access"]},
+    )
+    assert response.status_code == 200
+    mock_api.create_role.assert_called_once_with(
+        name="editor", description="Can edit", permission_codenames=["admin:access"]
+    )
+
+
+def test_roles_create_empty_name(client: TestClient, mock_api: AsyncMock) -> None:
+    response = client.post("/roles/create", data={"name": ""})
+    assert response.status_code == 200
+    assert "required" in response.text.lower()
+    mock_api.create_role.assert_not_called()
+
+
+def test_roles_update(client: TestClient, mock_api: AsyncMock) -> None:
+    response = client.post(
+        "/roles/2/update",
+        data={"name": "viewer", "description": "Updated", "permissions": ["users:read"]},
+    )
+    assert response.status_code == 200
+    mock_api.update_role.assert_called_once_with(
+        role_id=2, name="viewer", description="Updated", permission_codenames=["users:read"]
+    )
+
+
+def test_roles_delete(client: TestClient, mock_api: AsyncMock) -> None:
+    response = client.post("/roles/2/delete")
+    assert response.status_code == 200
+    mock_api.delete_role.assert_called_once_with(2)
+
+
+def test_roles_api_error(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.list_roles.side_effect = ApiError(500, "Internal error")
+    response = client.get("/roles")
+    assert response.status_code == 200
+    assert "Internal error" in response.text
+
+
+# --- User Detail Roles ---
+
+
+def test_user_detail_shows_roles(client: TestClient, mock_api: AsyncMock) -> None:
+    response = client.get("/users/1")
+    assert response.status_code == 200
+    assert "Roles" in response.text
+    mock_api.list_roles.assert_called_once()
+    mock_api.get_user_roles.assert_called_once_with(1)
+
+
+def test_set_user_roles(client: TestClient, mock_api: AsyncMock) -> None:
+    response = client.post("/users/1/set-roles", data={"role_ids": ["1", "2"]})
+    assert response.status_code == 200
+    assert "updated" in response.text.lower()
+    mock_api.set_user_roles.assert_called_once_with(1, [1, 2])
+
+
+def test_set_user_roles_error(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.set_user_roles.side_effect = ApiError(400, "Invalid role")
+    response = client.post("/users/1/set-roles", data={"role_ids": ["999"]})
+    assert response.status_code == 200
+    assert "Invalid role" in response.text

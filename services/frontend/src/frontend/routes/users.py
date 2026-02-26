@@ -25,6 +25,9 @@ class UsersRouter:
             "/{user_id}/trigger-sync", self.trigger_sync, methods=["POST"], response_class=HTMLResponse
         )
         self.router.add_api_route("/{user_id}", self.delete_user, methods=["DELETE"], response_class=HTMLResponse)
+        self.router.add_api_route(
+            "/{user_id}/set-roles", self.set_user_roles, methods=["POST"], response_class=HTMLResponse
+        )
 
     async def list_users(self, request: Request) -> HTMLResponse:
         """Render users list page."""
@@ -83,15 +86,22 @@ class UsersRouter:
         recent_jobs: list[object] = []
         recent_imports: list[object] = []
 
+        all_roles: list[object] = []
+        user_role_ids: list[int] = []
+
         try:
-            user_result, jobs_data, imports_data = await asyncio.gather(
+            user_result, jobs_data, imports_data, roles_list, user_roles_data = await asyncio.gather(
                 api.get_user(user_id),
                 api.list_job_runs(user_id=user_id, limit=10),
                 api.list_import_jobs(user_id=user_id, limit=10),
+                api.list_roles(),
+                api.get_user_roles(user_id),
             )
             user = dict(user_result)
             recent_jobs = list(jobs_data.get("items", []))
             recent_imports = list(imports_data.get("items", []))
+            all_roles = list(roles_list)
+            user_role_ids = [r["id"] for r in user_roles_data.get("roles", [])]
         except ApiError as e:
             error = e.detail
 
@@ -103,6 +113,8 @@ class UsersRouter:
                 "user": user,
                 "recent_jobs": recent_jobs,
                 "recent_imports": recent_imports,
+                "all_roles": all_roles,
+                "user_role_ids": user_role_ids,
                 "error": error,
             },
         )
@@ -131,6 +143,23 @@ class UsersRouter:
                     "alert_type": "success",
                     "message": result.get("message", "User deleted"),
                 },
+            )
+        except ApiError as e:
+            return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                "partials/_alert.html",
+                {"request": request, "alert_type": "danger", "message": e.detail},
+            )
+
+    async def set_user_roles(self, request: Request, user_id: int) -> HTMLResponse:
+        """Assign roles to a user — HTMX form handler."""
+        api: AdminApiClient = request.app.state.api
+        form = await request.form()
+        role_ids = [int(str(v)) for v in form.getlist("role_ids")]
+        try:
+            await api.set_user_roles(user_id, role_ids)
+            return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                "partials/_alert.html",
+                {"request": request, "alert_type": "success", "message": "Roles updated successfully"},
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]

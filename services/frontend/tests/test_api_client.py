@@ -195,3 +195,87 @@ async def test_auth_header_forwarded() -> None:
     await api.get_sync_status()
     assert route.calls[0].request.headers["Authorization"] == "Bearer my-secret"
     await api.close()
+
+
+# --- RBAC ---
+
+
+@respx.mock
+async def test_list_roles() -> None:
+    respx.get(f"{BASE_URL}/admin/roles").mock(return_value=httpx.Response(200, json=[{"id": 1, "name": "admin"}]))
+    api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
+    result = await api.list_roles()
+    assert len(result) == 1
+    assert result[0]["name"] == "admin"
+    await api.close()
+
+
+@respx.mock
+async def test_list_permissions() -> None:
+    respx.get(f"{BASE_URL}/admin/permissions").mock(
+        return_value=httpx.Response(200, json=[{"id": 1, "codename": "admin:access"}])
+    )
+    api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
+    result = await api.list_permissions()
+    assert len(result) == 1
+    assert result[0]["codename"] == "admin:access"
+    await api.close()
+
+
+@respx.mock
+async def test_create_role() -> None:
+    route = respx.post(f"{BASE_URL}/admin/roles").mock(
+        return_value=httpx.Response(201, json={"id": 3, "name": "editor"})
+    )
+    api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
+    result = await api.create_role(name="editor", description="Can edit", permission_codenames=["admin:access"])
+    assert result["name"] == "editor"
+    body = route.calls[0].request.content
+    assert b"editor" in body
+    await api.close()
+
+
+@respx.mock
+async def test_update_role() -> None:
+    route = respx.put(f"{BASE_URL}/admin/roles/2").mock(
+        return_value=httpx.Response(200, json={"id": 2, "name": "viewer"})
+    )
+    api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
+    result = await api.update_role(role_id=2, name="viewer", permission_codenames=["users:read"])
+    assert result["id"] == 2
+    assert route.called
+    await api.close()
+
+
+@respx.mock
+async def test_delete_role() -> None:
+    respx.delete(f"{BASE_URL}/admin/roles/2").mock(return_value=httpx.Response(200, json={"message": "Role deleted"}))
+    api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
+    result = await api.delete_role(2)
+    assert result["message"] == "Role deleted"
+    await api.close()
+
+
+@respx.mock
+async def test_get_user_roles() -> None:
+    respx.get(f"{BASE_URL}/admin/users/1/roles").mock(
+        return_value=httpx.Response(200, json={"user_id": 1, "roles": [{"id": 1, "name": "admin"}]})
+    )
+    api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
+    result = await api.get_user_roles(1)
+    assert result["user_id"] == 1
+    assert len(result["roles"]) == 1
+    await api.close()
+
+
+@respx.mock
+async def test_set_user_roles() -> None:
+    route = respx.put(f"{BASE_URL}/admin/users/1/roles").mock(
+        return_value=httpx.Response(200, json={"message": "Roles updated"})
+    )
+    api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
+    result = await api.set_user_roles(1, [1, 2])
+    assert result["message"] == "Roles updated"
+    body = route.calls[0].request.content
+    assert b"role_ids" in body
+    await api.close()

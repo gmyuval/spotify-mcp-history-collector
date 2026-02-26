@@ -49,6 +49,53 @@ def _default_mock_api() -> AsyncMock:
     api.upload_import.return_value = {"id": 42, "status": "pending"}
     api.purge_logs.return_value = {"message": "Purged 10 logs"}
 
+    # RBAC defaults
+    api.list_roles.return_value = [
+        {
+            "id": 1,
+            "name": "admin",
+            "description": "System administrator",
+            "is_system": True,
+            "permissions": [{"id": 1, "codename": "admin:access", "description": "Admin panel access"}],
+            "created_at": "2024-01-01T00:00:00",
+            "updated_at": "2024-01-01T00:00:00",
+        },
+        {
+            "id": 2,
+            "name": "viewer",
+            "description": "Read-only access",
+            "is_system": False,
+            "permissions": [],
+            "created_at": "2024-01-01T00:00:00",
+            "updated_at": "2024-01-01T00:00:00",
+        },
+    ]
+    api.list_permissions.return_value = [
+        {"id": 1, "codename": "admin:access", "description": "Admin panel access"},
+        {"id": 2, "codename": "users:read", "description": "View users"},
+    ]
+    api.create_role.return_value = {
+        "id": 3,
+        "name": "editor",
+        "description": None,
+        "is_system": False,
+        "permissions": [],
+        "created_at": "2024-01-01T00:00:00",
+        "updated_at": "2024-01-01T00:00:00",
+    }
+    api.update_role.return_value = {
+        "id": 2,
+        "name": "viewer",
+        "description": "Updated",
+        "is_system": False,
+        "permissions": [],
+        "created_at": "2024-01-01T00:00:00",
+        "updated_at": "2024-01-01T00:00:00",
+    }
+    api.delete_role.return_value = {"message": "Role deleted"}
+    api.get_user_roles.return_value = {"user_id": 1, "roles": []}
+    api.set_user_roles.return_value = {"message": "Roles updated"}
+
     return api
 
 
