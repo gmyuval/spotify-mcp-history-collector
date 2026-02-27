@@ -14,7 +14,23 @@ Additionally, there are **bugs to fix first**:
 
 ---
 
-## Phase 0 — PR: MCP Error Message Fix (Quick Win)
+## Implementation Status
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 0 | MCP Error Message Fix | **DONE** |
+| 1 | Spotify Data Caching | **DONE** |
+| 2 | RBAC Foundation | **DONE** |
+| 3 | Per-User Spotify Credentials | **DONE** |
+| 4 | JWT User Authentication | **DONE** |
+| 5 | Admin UI for RBAC & User Management | **NEXT** |
+| 6 | Public Data Exploration Frontend | Pending |
+| 7 | ChatGPT Taste Inference Storage | Pending |
+| 8 | Data Exploration Features & Taste Profile UI | Pending |
+
+---
+
+## Phase 0 — ~~PR: MCP Error Message Fix (Quick Win)~~ ✅ DONE
 
 **Problem:** The MCP router catches all exceptions and returns `f"{error_type}: tool execution failed"`, hiding the actual error. The SpotifyClient also doesn't extract error details from Spotify's response body.
 
@@ -39,7 +55,7 @@ Additionally, there are **bugs to fix first**:
 
 ---
 
-## Phase 1 — PR: Spotify Data Caching (PostgreSQL)
+## Phase 1 — ~~PR: Spotify Data Caching (PostgreSQL)~~ ✅ DONE
 
 **Goal:** Cache Spotify API responses in PostgreSQL so repeated requests for the same track/artist/playlist don't hit the API. Use `snapshot_id` for playlist invalidation (Spotify's built-in change detection).
 
@@ -109,7 +125,7 @@ Additionally, there are **bugs to fix first**:
 
 ---
 
-## Phase 2 — PR: RBAC Foundation (Roles, Permissions, DB Schema)
+## Phase 2 — ~~PR: RBAC Foundation (Roles, Permissions, DB Schema)~~ ✅ DONE
 
 **Goal:** Add a full RBAC system with roles and granular permissions. This phase is DB schema + middleware only — no UI yet.
 
@@ -187,7 +203,7 @@ Migration seeds default roles + permissions.
 
 ---
 
-## Phase 3 — PR: Per-User Spotify App Credentials
+## Phase 3 — ~~PR: Per-User Spotify App Credentials~~ ✅ DONE
 
 **Goal:** Allow some users to use their own Spotify Developer App credentials instead of the system default. This provides rate limit isolation and lets users with their own apps connect.
 
@@ -230,7 +246,7 @@ Migration seeds default roles + permissions.
 
 ---
 
-## Phase 4 — PR: User Authentication (JWT + Spotify Login)
+## Phase 4 — ~~PR: User Authentication (JWT + Spotify Login)~~ ✅ DONE
 
 **Goal:** Allow end users to log in via Spotify OAuth and receive a JWT session token. This is needed for the public frontend (Phase 6) and for per-user MCP access.
 
@@ -531,20 +547,19 @@ services/explorer/
 ## Implementation Order & Dependencies
 
 ```text
-Phase 0 (error fix)           ← standalone, do first
-Phase 1 (caching)             ← standalone
-Phase 2 (RBAC schema)         ← standalone
-Phase 3 (per-user creds)      ← depends on Phase 2 (roles exist)
-Phase 4 (JWT auth)            ← depends on Phase 2 (permissions exist)
-Phase 5 (admin RBAC UI)       ← depends on Phases 2, 3, 4
-Phase 6 (explorer foundation) ← depends on Phases 1, 4
-Phase 7 (taste storage)       ← depends on Phase 1 (cache tables pattern)
+Phase 0 (error fix)           ✅ DONE
+Phase 1 (caching)             ✅ DONE
+Phase 2 (RBAC schema)         ✅ DONE
+Phase 3 (per-user creds)      ✅ DONE
+Phase 4 (JWT auth)            ✅ DONE
+Phase 5 (admin RBAC UI)       ← NEXT — all dependencies satisfied
+Phase 6 (explorer foundation) ← depends on Phases 1, 4 (both done)
+Phase 7 (taste storage)       ← depends on Phase 1 (done)
 Phase 8 (explorer features)   ← depends on Phases 6, 7
 ```
 
-Recommended order: **0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8**
+Remaining order: **5 → 6 → 7 → 8**
 
-Phases 1 and 2 can be done in parallel since they're independent.
 Phases 6 and 7 can be done in parallel since they're independent.
 
 ---

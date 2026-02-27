@@ -7,19 +7,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.admin.schemas import (
+    DEFAULT_PAGE_LIMIT,
     ActionResponse,
     GlobalSyncStatus,
     ImportJobStatusResponse,
     JobRunResponse,
     LogEntry,
+    PaginatedResult,
+    PermissionResponse,
     RecentError,
+    RoleSummary,
     UserCredentialStatus,
     UserDetail,
+    UserRolesResponse,
     UserSummary,
 )
 from shared.db.enums import JobStatus, SyncStatus
 from shared.db.models.log import Log
 from shared.db.models.operations import ImportJob, JobRun, SyncCheckpoint
+from shared.db.models.rbac import Permission, Role, RolePermission, UserRole
 from shared.db.models.user import SpotifyToken, User
 
 
@@ -31,9 +37,9 @@ class AdminService:
     async def list_users(
         self,
         session: AsyncSession,
-        limit: int = 50,
+        limit: int = DEFAULT_PAGE_LIMIT,
         offset: int = 0,
-    ) -> tuple[list[UserSummary], int]:
+    ) -> PaginatedResult[UserSummary]:
         total_q = select(func.count(User.id))
         total = (await session.execute(total_q)).scalar() or 0
 
@@ -48,18 +54,23 @@ class AdminService:
         result = await session.execute(stmt)
         users = result.scalars().unique().all()
 
-        return [
-            UserSummary(
-                id=u.id,
-                spotify_user_id=u.spotify_user_id,
-                display_name=u.display_name,
-                sync_status=u.sync_checkpoint.status.value if u.sync_checkpoint else None,
-                last_poll_completed_at=(u.sync_checkpoint.last_poll_completed_at if u.sync_checkpoint else None),
-                initial_sync_completed_at=(u.sync_checkpoint.initial_sync_completed_at if u.sync_checkpoint else None),
-                created_at=u.created_at,
-            )
-            for u in users
-        ], total
+        return PaginatedResult(
+            [
+                UserSummary(
+                    id=u.id,
+                    spotify_user_id=u.spotify_user_id,
+                    display_name=u.display_name,
+                    sync_status=u.sync_checkpoint.status.value if u.sync_checkpoint else None,
+                    last_poll_completed_at=(u.sync_checkpoint.last_poll_completed_at if u.sync_checkpoint else None),
+                    initial_sync_completed_at=(
+                        u.sync_checkpoint.initial_sync_completed_at if u.sync_checkpoint else None
+                    ),
+                    created_at=u.created_at,
+                )
+                for u in users
+            ],
+            total,
+        )
 
     async def get_user_detail(
         self,
@@ -140,7 +151,7 @@ class AdminService:
         if user is None:
             return ActionResponse(success=False, message=f"User {user_id} not found")
 
-        # Explicit cascade — SQLite doesn't honor FK ON DELETE CASCADE
+        # Bulk delete related rows directly — avoids loading potentially millions of ORM objects
         await session.execute(delete(Log).where(Log.user_id == user_id))
         await session.execute(delete(ImportJob).where(ImportJob.user_id == user_id))
         await session.execute(delete(JobRun).where(JobRun.user_id == user_id))
@@ -252,9 +263,9 @@ class AdminService:
         user_id: int | None = None,
         job_type: str | None = None,
         status: str | None = None,
-        limit: int = 50,
+        limit: int = DEFAULT_PAGE_LIMIT,
         offset: int = 0,
-    ) -> tuple[list[JobRunResponse], int]:
+    ) -> PaginatedResult[JobRunResponse]:
         base = select(JobRun)
         count_base = select(func.count(JobRun.id))
 
@@ -272,21 +283,24 @@ class AdminService:
         stmt = base.order_by(JobRun.started_at.desc()).limit(limit).offset(offset)
         rows = (await session.execute(stmt)).scalars().all()
 
-        return [
-            JobRunResponse(
-                id=j.id,
-                user_id=j.user_id,
-                job_type=j.job_type.value,
-                status=j.status.value,
-                records_fetched=j.records_fetched,
-                records_inserted=j.records_inserted,
-                records_skipped=j.records_skipped,
-                started_at=j.started_at,
-                completed_at=j.completed_at,
-                error_message=j.error_message,
-            )
-            for j in rows
-        ], total
+        return PaginatedResult(
+            [
+                JobRunResponse(
+                    id=j.id,
+                    user_id=j.user_id,
+                    job_type=j.job_type.value,
+                    status=j.status.value,
+                    records_fetched=j.records_fetched,
+                    records_inserted=j.records_inserted,
+                    records_skipped=j.records_skipped,
+                    started_at=j.started_at,
+                    completed_at=j.completed_at,
+                    error_message=j.error_message,
+                )
+                for j in rows
+            ],
+            total,
+        )
 
     # --- Import Jobs ---
 
@@ -295,9 +309,9 @@ class AdminService:
         session: AsyncSession,
         user_id: int | None = None,
         status: str | None = None,
-        limit: int = 50,
+        limit: int = DEFAULT_PAGE_LIMIT,
         offset: int = 0,
-    ) -> tuple[list[ImportJobStatusResponse], int]:
+    ) -> PaginatedResult[ImportJobStatusResponse]:
         base = select(ImportJob)
         count_base = select(func.count(ImportJob.id))
 
@@ -312,22 +326,25 @@ class AdminService:
         stmt = base.order_by(ImportJob.created_at.desc()).limit(limit).offset(offset)
         rows = (await session.execute(stmt)).scalars().all()
 
-        return [
-            ImportJobStatusResponse(
-                id=j.id,
-                user_id=j.user_id,
-                status=j.status.value,
-                format_detected=j.format_detected,
-                records_ingested=j.records_ingested,
-                earliest_played_at=j.earliest_played_at,
-                latest_played_at=j.latest_played_at,
-                started_at=j.started_at,
-                completed_at=j.completed_at,
-                error_message=j.error_message,
-                created_at=j.created_at,
-            )
-            for j in rows
-        ], total
+        return PaginatedResult(
+            [
+                ImportJobStatusResponse(
+                    id=j.id,
+                    user_id=j.user_id,
+                    status=j.status.value,
+                    format_detected=j.format_detected,
+                    records_ingested=j.records_ingested,
+                    earliest_played_at=j.earliest_played_at,
+                    latest_played_at=j.latest_played_at,
+                    started_at=j.started_at,
+                    completed_at=j.completed_at,
+                    error_message=j.error_message,
+                    created_at=j.created_at,
+                )
+                for j in rows
+            ],
+            total,
+        )
 
     # --- Logs ---
 
@@ -339,9 +356,9 @@ class AdminService:
         user_id: int | None = None,
         q: str | None = None,
         since: datetime | None = None,
-        limit: int = 50,
+        limit: int = DEFAULT_PAGE_LIMIT,
         offset: int = 0,
-    ) -> tuple[list[LogEntry], int]:
+    ) -> PaginatedResult[LogEntry]:
         base = select(Log)
         count_base = select(func.count(Log.id))
 
@@ -365,20 +382,23 @@ class AdminService:
         stmt = base.order_by(Log.timestamp.desc()).limit(limit).offset(offset)
         rows = (await session.execute(stmt)).scalars().all()
 
-        return [
-            LogEntry(
-                id=row.id,
-                timestamp=row.timestamp,
-                service=row.service,
-                level=row.level.value if hasattr(row.level, "value") else str(row.level),
-                message=row.message,
-                user_id=row.user_id,
-                job_run_id=row.job_run_id,
-                import_job_id=row.import_job_id,
-                log_metadata=row.log_metadata,
-            )
-            for row in rows
-        ], total
+        return PaginatedResult(
+            [
+                LogEntry(
+                    id=row.id,
+                    timestamp=row.timestamp,
+                    service=row.service,
+                    level=row.level.value if hasattr(row.level, "value") else str(row.level),
+                    message=row.message,
+                    user_id=row.user_id,
+                    job_run_id=row.job_run_id,
+                    import_job_id=row.import_job_id,
+                    log_metadata=row.log_metadata,
+                )
+                for row in rows
+            ],
+            total,
+        )
 
     async def purge_logs(
         self,
@@ -392,6 +412,173 @@ class AdminService:
         deleted: int = cursor.rowcount  # type: ignore[attr-defined]
         return deleted
 
+    # --- RBAC ---
 
-# --- Unique artists count helper (used by global sync) ---
-# Not needed here — kept in history queries module
+    async def list_roles(self, session: AsyncSession) -> list[RoleSummary]:
+        """List all roles with their permissions."""
+        stmt = (
+            select(Role)
+            .options(selectinload(Role.role_permissions).selectinload(RolePermission.permission))
+            .order_by(Role.id)
+        )
+        result = await session.execute(stmt)
+        roles = result.scalars().unique().all()
+        return [self._role_to_summary(r) for r in roles]
+
+    async def list_permissions(self, session: AsyncSession) -> list[PermissionResponse]:
+        """List all available permissions."""
+        result = await session.execute(select(Permission).order_by(Permission.codename))
+        return [
+            PermissionResponse(id=p.id, codename=p.codename, description=p.description) for p in result.scalars().all()
+        ]
+
+    async def create_role(
+        self,
+        name: str,
+        description: str | None,
+        permission_codenames: list[str],
+        session: AsyncSession,
+    ) -> RoleSummary:
+        """Create a new role with specified permissions."""
+        unique_codenames = list(dict.fromkeys(permission_codenames))
+        perm_map = await self._get_permission_map(unique_codenames, session)
+
+        role = Role(name=name, description=description, is_system=False)
+        session.add(role)
+        await session.flush()
+
+        for codename in unique_codenames:
+            session.add(RolePermission(role_id=role.id, permission_id=perm_map[codename]))
+        await session.flush()
+
+        return await self._get_role_summary(role.id, session)
+
+    async def update_role(
+        self,
+        role_id: int,
+        name: str | None,
+        description: str | None,
+        permission_codenames: list[str] | None,
+        session: AsyncSession,
+    ) -> RoleSummary:
+        """Update a role. System roles cannot be renamed."""
+        role = await self._get_role_or_raise(role_id, session)
+
+        if name is not None and name != role.name:
+            if role.is_system:
+                raise ValueError("Cannot rename system roles")
+            role.name = name
+        if description is not None:
+            role.description = description
+
+        if permission_codenames is not None:
+            unique_codenames = list(dict.fromkeys(permission_codenames))
+            perm_map = await self._get_permission_map(unique_codenames, session)
+            await session.execute(delete(RolePermission).where(RolePermission.role_id == role_id))
+            for codename in unique_codenames:
+                session.add(RolePermission(role_id=role_id, permission_id=perm_map[codename]))
+
+        await session.flush()
+        return await self._get_role_summary(role_id, session)
+
+    async def delete_role(self, role_id: int, session: AsyncSession) -> ActionResponse:
+        """Delete a non-system role."""
+        role = await self._get_role_or_raise(role_id, session)
+        if role.is_system:
+            return ActionResponse(success=False, message="Cannot delete system roles")
+
+        await session.delete(role)
+        await session.flush()
+        return ActionResponse(success=True, message=f"Role '{role.name}' deleted")
+
+    async def get_user_roles(self, user_id: int, session: AsyncSession) -> UserRolesResponse:
+        """Get a user's assigned roles with permissions."""
+        stmt = (
+            select(Role)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .where(UserRole.user_id == user_id)
+            .options(selectinload(Role.role_permissions).selectinload(RolePermission.permission))
+        )
+        result = await session.execute(stmt)
+        roles = result.scalars().unique().all()
+        return UserRolesResponse(
+            user_id=user_id,
+            roles=[self._role_to_summary(r) for r in roles],
+        )
+
+    async def set_user_roles(
+        self,
+        user_id: int,
+        role_ids: list[int],
+        session: AsyncSession,
+    ) -> ActionResponse:
+        """Replace a user's role assignments."""
+        await self._get_user_or_raise(user_id, session)
+        unique_role_ids = list(dict.fromkeys(role_ids))
+        for rid in unique_role_ids:
+            await self._get_role_or_raise(rid, session)
+
+        await session.execute(delete(UserRole).where(UserRole.user_id == user_id))
+        for rid in unique_role_ids:
+            session.add(UserRole(user_id=user_id, role_id=rid))
+        await session.flush()
+        return ActionResponse(success=True, message=f"Roles updated for user {user_id}")
+
+    # --- RBAC helpers ---
+
+    @staticmethod
+    def _role_to_summary(role: Role) -> RoleSummary:
+        return RoleSummary(
+            id=role.id,
+            name=role.name,
+            description=role.description,
+            is_system=role.is_system,
+            permissions=[
+                PermissionResponse(
+                    id=rp.permission.id,
+                    codename=rp.permission.codename,
+                    description=rp.permission.description,
+                )
+                for rp in role.role_permissions
+            ],
+            created_at=role.created_at,
+            updated_at=role.updated_at,
+        )
+
+    async def _get_role_summary(self, role_id: int, session: AsyncSession) -> RoleSummary:
+        stmt = (
+            select(Role)
+            .where(Role.id == role_id)
+            .options(selectinload(Role.role_permissions).selectinload(RolePermission.permission))
+        )
+        result = await session.execute(stmt)
+        role = result.scalar_one()
+        return self._role_to_summary(role)
+
+    @staticmethod
+    async def _get_user_or_raise(user_id: int, session: AsyncSession) -> User:
+        result = await session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise ValueError(f"User {user_id} not found")
+        return user
+
+    @staticmethod
+    async def _get_role_or_raise(role_id: int, session: AsyncSession) -> Role:
+        result = await session.execute(select(Role).where(Role.id == role_id))
+        role = result.scalar_one_or_none()
+        if role is None:
+            raise ValueError(f"Role {role_id} not found")
+        return role
+
+    @staticmethod
+    async def _get_permission_map(codenames: list[str], session: AsyncSession) -> dict[str, int]:
+        """Return a codename->id map, raising ValueError for unknown codenames."""
+        if not codenames:
+            return {}
+        result = await session.execute(select(Permission).where(Permission.codename.in_(codenames)))
+        perms = {p.codename: p.id for p in result.scalars().all()}
+        unknown = set(codenames) - perms.keys()
+        if unknown:
+            raise ValueError(f"Unknown permissions: {', '.join(sorted(unknown))}")
+        return perms

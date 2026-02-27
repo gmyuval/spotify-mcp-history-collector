@@ -115,7 +115,9 @@
       "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/python.exe -m pytest:*)",
       "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/python.exe -m ruff check:*)",
       "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/python.exe -m ruff format:*)",
-      "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/python.exe -m mypy:*)"
+      "Bash(/c/Users/yuval/.conda/envs/spotify-mcp/python.exe -m mypy:*)",
+      "Bash(grep -E \"registry.register_tool\\\\\\(\" /d/projects/spotify-mcp-history-collector/services/api/src/app/mcp/tools/*.py)",
+      "Bash(grep -A 1 \"@registry.register_tool\" /d/projects/spotify-mcp-history-collector/services/api/src/app/mcp/tools/*.py)"
     ]
   }
 }

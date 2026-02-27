@@ -9,20 +9,29 @@ from typing import Annotated
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.auth import require_admin
 from app.admin.schemas import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
     ActionResponse,
+    CreateRoleRequest,
     GlobalSyncStatus,
     ImportJobResponse,
     ImportJobStatusResponse,
     JobRunResponse,
     LogEntry,
     PaginatedResponse,
+    PermissionResponse,
+    RoleSummary,
     SetUserCredentialsRequest,
+    UpdateRoleRequest,
     UserCredentialStatus,
     UserDetail,
+    UserRoleAssignment,
+    UserRolesResponse,
     UserSummary,
 )
 from app.admin.service import AdminService
@@ -75,6 +84,19 @@ class AdminRouter:
             response_model=ActionResponse,
         )
 
+        # RBAC — Roles
+        r.add_api_route("/roles", self.list_roles, methods=["GET"], response_model=list[RoleSummary])
+        r.add_api_route("/permissions", self.list_permissions, methods=["GET"], response_model=list[PermissionResponse])
+        r.add_api_route("/roles", self.create_role, methods=["POST"], response_model=RoleSummary, status_code=201)
+        r.add_api_route("/roles/{role_id}", self.update_role, methods=["PUT"], response_model=RoleSummary)
+        r.add_api_route("/roles/{role_id}", self.delete_role, methods=["DELETE"], response_model=ActionResponse)
+
+        # RBAC — User Roles
+        r.add_api_route(
+            "/users/{user_id}/roles", self.get_user_roles, methods=["GET"], response_model=UserRolesResponse
+        )
+        r.add_api_route("/users/{user_id}/roles", self.set_user_roles, methods=["PUT"], response_model=ActionResponse)
+
         # Import endpoints
         r.add_api_route(
             "/users/{user_id}/import", self.upload_import, methods=["POST"], response_model=ImportJobResponse
@@ -107,7 +129,7 @@ class AdminRouter:
     async def list_users(
         self,
         session: Annotated[AsyncSession, Depends(db_manager.dependency)],
-        limit: int = Query(default=50, ge=1, le=200),
+        limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
         offset: int = Query(default=0, ge=0),
     ) -> PaginatedResponse[UserSummary]:
         """List all users with sync status."""
@@ -301,7 +323,7 @@ class AdminRouter:
         user_id: int | None = None,
         job_type: str | None = None,
         status: str | None = None,
-        limit: int = Query(default=50, ge=1, le=200),
+        limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
         offset: int = Query(default=0, ge=0),
     ) -> PaginatedResponse[JobRunResponse]:
         """Paginated job run history with optional filters."""
@@ -315,7 +337,7 @@ class AdminRouter:
         session: Annotated[AsyncSession, Depends(db_manager.dependency)],
         user_id: int | None = None,
         status: str | None = None,
-        limit: int = Query(default=50, ge=1, le=200),
+        limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
         offset: int = Query(default=0, ge=0),
     ) -> PaginatedResponse[ImportJobStatusResponse]:
         """Paginated import job history with optional filters."""
@@ -334,7 +356,7 @@ class AdminRouter:
         user_id: int | None = None,
         q: str | None = None,
         since: datetime | None = None,
-        limit: int = Query(default=50, ge=1, le=200),
+        limit: int = Query(default=DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
         offset: int = Query(default=0, ge=0),
     ) -> PaginatedResponse[LogEntry]:
         """Paginated log viewer with filtering."""
@@ -360,6 +382,88 @@ class AdminRouter:
         days = older_than_days if older_than_days is not None else settings.LOG_RETENTION_DAYS
         count = await self._service.purge_logs(session, older_than_days=days)
         return ActionResponse(success=True, message=f"Purged {count} log entries older than {days} days")
+
+    # --- RBAC ---
+
+    async def list_roles(
+        self,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> list[RoleSummary]:
+        """List all roles with their permissions."""
+        return await self._service.list_roles(session)
+
+    async def list_permissions(
+        self,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> list[PermissionResponse]:
+        """List all available permissions."""
+        return await self._service.list_permissions(session)
+
+    async def create_role(
+        self,
+        body: CreateRoleRequest,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> RoleSummary:
+        """Create a new role."""
+        try:
+            return await self._service.create_role(body.name, body.description, body.permission_codenames, session)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except IntegrityError as e:
+            raise HTTPException(status_code=409, detail=f"Role name already exists: {body.name}") from e
+
+    async def update_role(
+        self,
+        role_id: int,
+        body: UpdateRoleRequest,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> RoleSummary:
+        """Update a role's name, description, and/or permissions."""
+        try:
+            return await self._service.update_role(
+                role_id, body.name, body.description, body.permission_codenames, session
+            )
+        except ValueError as e:
+            status = 404 if "not found" in str(e).lower() else 400
+            raise HTTPException(status_code=status, detail=str(e)) from e
+        except IntegrityError as e:
+            raise HTTPException(status_code=409, detail="Role name already exists") from e
+
+    async def delete_role(
+        self,
+        role_id: int,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> ActionResponse:
+        """Delete a non-system role."""
+        try:
+            result = await self._service.delete_role(role_id, session)
+            if not result.success:
+                raise HTTPException(status_code=400, detail=result.message)
+            return result
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+
+    async def get_user_roles(
+        self,
+        user_id: int,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> UserRolesResponse:
+        """Get a user's assigned roles."""
+        await self._ensure_user_exists(user_id, session)
+        return await self._service.get_user_roles(user_id, session)
+
+    async def set_user_roles(
+        self,
+        user_id: int,
+        body: UserRoleAssignment,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> ActionResponse:
+        """Assign roles to a user (full replacement)."""
+        await self._ensure_user_exists(user_id, session)
+        try:
+            return await self._service.set_user_roles(user_id, body.role_ids, session)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     # --- Helpers ---
 
