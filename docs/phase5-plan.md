@@ -49,7 +49,7 @@ Error mapping: `ValueError` → 400/404, `IntegrityError` → 409.
 ### 4. `services/frontend/src/frontend/api_client.py` — Add 7 API client methods
 - `list_roles()`, `list_permissions()`, `create_role()`, `update_role()`, `delete_role()`
 - `get_user_roles(user_id)`, `set_user_roles(user_id, role_ids)`
-- Widen `_request()` return type from `dict[str, Any]` to `Any` (list endpoints return lists)
+- Keep `_request()` return type as `dict[str, Any]`; list endpoints use `# type: ignore[return-value]`
 
 ### 5. `services/frontend/src/frontend/routes/roles.py` — NEW: Roles page router
 Class-based router (same pattern as `users.py`):

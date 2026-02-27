@@ -424,7 +424,8 @@ class AdminRouter:
                 role_id, body.name, body.description, body.permission_codenames, session
             )
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            status = 404 if "not found" in str(e).lower() else 400
+            raise HTTPException(status_code=status, detail=str(e)) from e
         except IntegrityError as e:
             raise HTTPException(status_code=409, detail="Role name already exists") from e
 

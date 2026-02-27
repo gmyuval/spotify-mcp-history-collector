@@ -189,7 +189,7 @@ def test_update_system_role_permissions_ok(client: TestClient, seeded_rbac: dict
 
 def test_update_role_not_found(client: TestClient, seeded_rbac: dict[str, int]) -> None:
     resp = client.put("/admin/roles/9999", json={"name": "whatever"})
-    assert resp.status_code == 400
+    assert resp.status_code == 404
 
 
 # --- Delete role ---

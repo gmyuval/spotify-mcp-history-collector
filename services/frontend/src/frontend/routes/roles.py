@@ -1,5 +1,6 @@
 """Roles management pages — class-based router for RBAC role CRUD."""
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -26,8 +27,10 @@ class RolesRouter:
         permissions: list[Any] = []
 
         try:
-            roles = await api.list_roles()
-            permissions = await api.list_permissions()
+            roles, permissions = await asyncio.gather(
+                api.list_roles(),
+                api.list_permissions(),
+            )
         except ApiError as e:
             error = e.detail
 

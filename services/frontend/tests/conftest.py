@@ -56,7 +56,7 @@ def _default_mock_api() -> AsyncMock:
             "name": "admin",
             "description": "System administrator",
             "is_system": True,
-            "permissions": [{"id": 1, "codename": "admin:access", "description": "Admin panel access"}],
+            "permissions": [{"id": 1, "codename": "roles.manage", "description": "Manage roles"}],
             "created_at": "2024-01-01T00:00:00",
             "updated_at": "2024-01-01T00:00:00",
         },
@@ -71,8 +71,8 @@ def _default_mock_api() -> AsyncMock:
         },
     ]
     api.list_permissions.return_value = [
-        {"id": 1, "codename": "admin:access", "description": "Admin panel access"},
-        {"id": 2, "codename": "users:read", "description": "View users"},
+        {"id": 1, "codename": "roles.manage", "description": "Manage roles"},
+        {"id": 2, "codename": "users.view_all", "description": "View all users"},
     ]
     api.create_role.return_value = {
         "id": 3,

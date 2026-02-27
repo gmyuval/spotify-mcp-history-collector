@@ -213,12 +213,12 @@ async def test_list_roles() -> None:
 @respx.mock
 async def test_list_permissions() -> None:
     respx.get(f"{BASE_URL}/admin/permissions").mock(
-        return_value=httpx.Response(200, json=[{"id": 1, "codename": "admin:access"}])
+        return_value=httpx.Response(200, json=[{"id": 1, "codename": "roles.manage"}])
     )
     api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
     result = await api.list_permissions()
     assert len(result) == 1
-    assert result[0]["codename"] == "admin:access"
+    assert result[0]["codename"] == "roles.manage"
     await api.close()
 
 
@@ -228,7 +228,7 @@ async def test_create_role() -> None:
         return_value=httpx.Response(201, json={"id": 3, "name": "editor"})
     )
     api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
-    result = await api.create_role(name="editor", description="Can edit", permission_codenames=["admin:access"])
+    result = await api.create_role(name="editor", description="Can edit", permission_codenames=["roles.manage"])
     assert result["name"] == "editor"
     body = route.calls[0].request.content
     assert b"editor" in body
@@ -241,7 +241,7 @@ async def test_update_role() -> None:
         return_value=httpx.Response(200, json={"id": 2, "name": "viewer"})
     )
     api = AdminApiClient(base_url=BASE_URL, auth_headers=AUTH)
-    result = await api.update_role(role_id=2, name="viewer", permission_codenames=["users:read"])
+    result = await api.update_role(role_id=2, name="viewer", permission_codenames=["users.view_all"])
     assert result["id"] == 2
     assert route.called
     await api.close()

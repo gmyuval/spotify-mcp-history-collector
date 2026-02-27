@@ -186,11 +186,11 @@ def test_roles_page(client: TestClient, mock_api: AsyncMock) -> None:
 def test_roles_create(client: TestClient, mock_api: AsyncMock) -> None:
     response = client.post(
         "/roles/create",
-        data={"name": "editor", "description": "Can edit", "permissions": ["admin:access"]},
+        data={"name": "editor", "description": "Can edit", "permissions": ["roles.manage"]},
     )
     assert response.status_code == 200
     mock_api.create_role.assert_called_once_with(
-        name="editor", description="Can edit", permission_codenames=["admin:access"]
+        name="editor", description="Can edit", permission_codenames=["roles.manage"]
     )
 
 
@@ -204,11 +204,11 @@ def test_roles_create_empty_name(client: TestClient, mock_api: AsyncMock) -> Non
 def test_roles_update(client: TestClient, mock_api: AsyncMock) -> None:
     response = client.post(
         "/roles/2/update",
-        data={"name": "viewer", "description": "Updated", "permissions": ["users:read"]},
+        data={"name": "viewer", "description": "Updated", "permissions": ["users.view_all"]},
     )
     assert response.status_code == 200
     mock_api.update_role.assert_called_once_with(
-        role_id=2, name="viewer", description="Updated", permission_codenames=["users:read"]
+        role_id=2, name="viewer", description="Updated", permission_codenames=["users.view_all"]
     )
 
 

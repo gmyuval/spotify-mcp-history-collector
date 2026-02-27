@@ -440,13 +440,14 @@ class AdminService:
         session: AsyncSession,
     ) -> RoleSummary:
         """Create a new role with specified permissions."""
-        perm_map = await self._get_permission_map(permission_codenames, session)
+        unique_codenames = list(dict.fromkeys(permission_codenames))
+        perm_map = await self._get_permission_map(unique_codenames, session)
 
         role = Role(name=name, description=description, is_system=False)
         session.add(role)
         await session.flush()
 
-        for codename in permission_codenames:
+        for codename in unique_codenames:
             session.add(RolePermission(role_id=role.id, permission_id=perm_map[codename]))
         await session.flush()
 
@@ -463,7 +464,7 @@ class AdminService:
         """Update a role. System roles cannot be renamed."""
         role = await self._get_role_or_raise(role_id, session)
 
-        if name is not None:
+        if name is not None and name != role.name:
             if role.is_system:
                 raise ValueError("Cannot rename system roles")
             role.name = name
@@ -471,9 +472,10 @@ class AdminService:
             role.description = description
 
         if permission_codenames is not None:
-            perm_map = await self._get_permission_map(permission_codenames, session)
+            unique_codenames = list(dict.fromkeys(permission_codenames))
+            perm_map = await self._get_permission_map(unique_codenames, session)
             await session.execute(delete(RolePermission).where(RolePermission.role_id == role_id))
-            for codename in permission_codenames:
+            for codename in unique_codenames:
                 session.add(RolePermission(role_id=role_id, permission_id=perm_map[codename]))
 
         await session.flush()
@@ -511,11 +513,13 @@ class AdminService:
         session: AsyncSession,
     ) -> ActionResponse:
         """Replace a user's role assignments."""
-        for rid in role_ids:
+        await self._get_user_or_raise(user_id, session)
+        unique_role_ids = list(dict.fromkeys(role_ids))
+        for rid in unique_role_ids:
             await self._get_role_or_raise(rid, session)
 
         await session.execute(delete(UserRole).where(UserRole.user_id == user_id))
-        for rid in role_ids:
+        for rid in unique_role_ids:
             session.add(UserRole(user_id=user_id, role_id=rid))
         await session.flush()
         return ActionResponse(success=True, message=f"Roles updated for user {user_id}")
@@ -550,6 +554,14 @@ class AdminService:
         result = await session.execute(stmt)
         role = result.scalar_one()
         return self._role_to_summary(role)
+
+    @staticmethod
+    async def _get_user_or_raise(user_id: int, session: AsyncSession) -> User:
+        result = await session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise ValueError(f"User {user_id} not found")
+        return user
 
     @staticmethod
     async def _get_role_or_raise(role_id: int, session: AsyncSession) -> Role:
