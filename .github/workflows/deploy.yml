@@ -133,8 +133,10 @@ jobs:
               exit 1
             fi
 
-            echo "=== Reloading Caddy configuration ==="
-            docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+            echo "=== Restarting Caddy to apply config ==="
+            docker compose --env-file .env.prod -f docker-compose.prod.yml restart caddy
+            echo "Waiting for Caddy to start..."
+            sleep 5
 
             echo "=== Verifying all services ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml ps
