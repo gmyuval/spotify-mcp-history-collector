@@ -1,0 +1,258 @@
+/* Spotify-inspired dark theme */
+:root {
+  --bg-primary: #121212;
+  --bg-card: #1e1e1e;
+  --bg-card-hover: #282828;
+  --bg-nav: #000000;
+  --green: #1DB954;
+  --green-hover: #1ed760;
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --text-muted: #727272;
+  --border: #333333;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  min-height: 100vh;
+}
+
+/* Navbar */
+.navbar {
+  background-color: var(--bg-nav) !important;
+  border-bottom: 1px solid var(--border);
+}
+
+.navbar-brand {
+  color: var(--green) !important;
+  font-weight: 700;
+}
+
+.nav-link {
+  color: var(--text-secondary) !important;
+  transition: color 0.15s;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: var(--text-primary) !important;
+}
+
+.nav-link.active {
+  border-bottom: 2px solid var(--green);
+}
+
+/* Cards */
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.card:hover {
+  background-color: var(--bg-card-hover);
+}
+
+.card-header {
+  background-color: transparent;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+/* Stat cards */
+.stat-card {
+  text-align: center;
+  padding: 1.5rem;
+}
+
+.stat-card .stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.stat-card .stat-label {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Tables */
+.table {
+  color: var(--text-primary);
+  --bs-table-bg: transparent;
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
+  --bs-table-hover-bg: rgba(255, 255, 255, 0.06);
+}
+
+.table th {
+  color: var(--text-secondary);
+  border-bottom-color: var(--border);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.table td {
+  border-bottom-color: var(--border);
+  vertical-align: middle;
+}
+
+/* Buttons */
+.btn-spotify {
+  background-color: var(--green);
+  color: #000;
+  border: none;
+  font-weight: 700;
+  padding: 12px 32px;
+  border-radius: 500px;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  transition: all 0.15s;
+}
+
+.btn-spotify:hover {
+  background-color: var(--green-hover);
+  color: #000;
+  transform: scale(1.04);
+}
+
+.btn-outline-spotify {
+  color: var(--green);
+  border: 1px solid var(--green);
+  background: transparent;
+  border-radius: 500px;
+  font-weight: 600;
+}
+
+.btn-outline-spotify:hover {
+  background-color: var(--green);
+  color: #000;
+}
+
+/* Text */
+.text-green {
+  color: var(--green) !important;
+}
+
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+/* Links */
+a {
+  color: var(--green);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--green-hover);
+  text-decoration: underline;
+}
+
+/* Login page */
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  padding: 3rem;
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+}
+
+.login-card h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.login-card p {
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+}
+
+/* Pagination */
+.page-link {
+  background-color: var(--bg-card);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.page-link:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.page-item.active .page-link {
+  background-color: var(--green);
+  border-color: var(--green);
+  color: #000;
+}
+
+.page-item.disabled .page-link {
+  background-color: var(--bg-card);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+/* Search input */
+.form-control,
+.form-select {
+  background-color: var(--bg-card);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--bg-card-hover);
+  border-color: var(--green);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 0.2rem rgba(29, 185, 84, 0.25);
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+/* Alert overrides */
+.alert {
+  border-radius: 8px;
+}
+
+/* Duration formatting */
+.duration {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Playlist grid */
+.playlist-card {
+  cursor: pointer;
+  transition: transform 0.15s, background-color 0.15s;
+}
+
+.playlist-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Rank number */
+.rank-number {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  font-weight: 700;
+  min-width: 2rem;
+  text-align: right;
+}

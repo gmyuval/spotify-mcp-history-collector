@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h2 class="mb-4">Your Listening Dashboard</h2>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card">
+      <div class="stat-value">{{ data.total_plays | default(0) | int }}</div>
+      <div class="stat-label">Total Plays</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card">
+      <div class="stat-value">{{ data.unique_tracks | default(0) | int }}</div>
+      <div class="stat-label">Unique Tracks</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card">
+      <div class="stat-value">{{ data.unique_artists | default(0) | int }}</div>
+      <div class="stat-label">Unique Artists</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card">
+      <div class="stat-value">{{ "%.1f" | format(data.listening_hours | default(0) | float) }}</div>
+      <div class="stat-label">Hours Listened</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Top Artists -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <strong>Top Artists</strong>
+        <span class="text-muted">Last 30 days</span>
+      </div>
+      <div class="card-body p-0">
+        {% if data.top_artists %}
+        <table class="table table-hover mb-0">
+          <tbody>
+            {% for artist in data.top_artists %}
+            <tr>
+              <td class="rank-number">{{ loop.index }}</td>
+              <td>{{ artist.artist_name }}</td>
+              <td class="text-end text-muted">{{ artist.play_count }} plays</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted text-center py-4 mb-0">No listening data yet</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Tracks -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <strong>Top Tracks</strong>
+        <span class="text-muted">Last 30 days</span>
+      </div>
+      <div class="card-body p-0">
+        {% if data.top_tracks %}
+        <table class="table table-hover mb-0">
+          <tbody>
+            {% for track in data.top_tracks %}
+            <tr>
+              <td class="rank-number">{{ loop.index }}</td>
+              <td>
+                <div>{{ track.track_name }}</div>
+                <small class="text-muted">{{ track.artist_name }}</small>
+              </td>
+              <td class="text-end text-muted">{{ track.play_count }} plays</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted text-center py-4 mb-0">No listening data yet</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

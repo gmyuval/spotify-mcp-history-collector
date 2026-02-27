@@ -18,14 +18,14 @@
     </div>
     {% if not role.is_system %}
     <button class="btn btn-sm btn-outline-danger"
-            hx-post="/roles/{{ role.id }}/delete"
+            hx-post="{{ base_path }}/roles/{{ role.id }}/delete"
             hx-target="#roles-alert"
             hx-swap="innerHTML"
             hx-confirm="Delete role '{{ role.name }}'?">Delete</button>
     {% endif %}
   </div>
   <div class="card-body">
-    <form hx-post="/roles/{{ role.id }}/update" hx-target="#roles-alert" hx-swap="innerHTML">
+    <form hx-post="{{ base_path }}/roles/{{ role.id }}/update" hx-target="#roles-alert" hx-swap="innerHTML">
       <div class="row mb-2">
         <div class="col-md-4">
           <label class="form-label">Name</label>
@@ -68,7 +68,7 @@
 <div class="card mt-4">
   <div class="card-header"><strong>Create New Role</strong></div>
   <div class="card-body">
-    <form hx-post="/roles/create" hx-target="#roles-alert" hx-swap="innerHTML">
+    <form hx-post="{{ base_path }}/roles/create" hx-target="#roles-alert" hx-swap="innerHTML">
       <div class="row mb-2">
         <div class="col-md-4">
           <label class="form-label">Name</label>

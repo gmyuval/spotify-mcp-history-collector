@@ -10,6 +10,7 @@ class FrontendSettings(BaseSettings):
     """Frontend service configuration."""
 
     API_BASE_URL: str = "http://api:8000"
+    BASE_PATH: str = "/admin"
     FRONTEND_AUTH_MODE: Literal["token", "basic", ""] = "token"
     ADMIN_TOKEN: str = ""
     ADMIN_USERNAME: str = ""

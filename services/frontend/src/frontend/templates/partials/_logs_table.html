@@ -11,7 +11,7 @@
   </td>
   <td class="log-message">{{ log.message }}</td>
   <td>
-    {% if log.user_id %}<a href="/users/{{ log.user_id }}">{{ log.user_id }}</a>{% else %}—{% endif %}
+    {% if log.user_id %}<a href="{{ base_path }}/users/{{ log.user_id }}">{{ log.user_id }}</a>{% else %}—{% endif %}
   </td>
   <td>{{ log.job_run_id or log.import_job_id or "—" }}</td>
 </tr>
@@ -22,7 +22,7 @@
 
 {% if total > limit %}
 <div id="logs-pagination" hx-swap-oob="innerHTML">
-  {% with url="/logs/partials/logs-table", target="#logs-tbody" %}
+  {% with url=base_path ~ "/logs/partials/logs-table", target="#logs-tbody" %}
   {% include "partials/_pagination.html" %}
   {% endwith %}
 </div>

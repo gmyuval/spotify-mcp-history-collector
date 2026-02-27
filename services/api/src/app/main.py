@@ -1,7 +1,6 @@
 """Main FastAPI application for Spotify MCP API."""
 
 import logging
-import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -11,10 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.admin import router as admin_router
 from app.auth import router as auth_router
 from app.auth.middleware import JWTAuthMiddleware
+from app.constants import APP_DESCRIPTION, APP_TITLE, APP_VERSION, Routes, ServiceName
 from app.dependencies import db_manager
+from app.explorer.router import router as explorer_router
 from app.history import router as history_router
-from app.logging.formatter import JSONLogFormatter
-from app.logging.handler import DBLogHandler
+from app.logging import DBLogHandler, configure_logging
 from app.mcp import router as mcp_router
 from app.middleware import (
     RateLimitMiddleware,
@@ -24,29 +24,17 @@ from app.middleware import (
 from app.settings import get_settings
 
 
-def _configure_logging() -> None:
-    """Set up structured JSON logging on the root logger."""
-    root = logging.getLogger()
-    root.setLevel(logging.INFO)
-    # Remove any existing handlers (e.g. default StreamHandler)
-    for handler in root.handlers[:]:
-        root.removeHandler(handler)
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JSONLogFormatter(service="api"))
-    root.addHandler(handler)
-
-
 class SpotifyMCPApp:
     """Application container — configures middleware, routers, and lifespan."""
 
     app: FastAPI
 
     def __init__(self) -> None:
-        _configure_logging()
+        configure_logging(ServiceName.API)
         self.app = FastAPI(
-            title="Spotify MCP API",
-            description="Spotify OAuth, MCP tool endpoints, and admin APIs",
-            version="0.1.0",
+            title=APP_TITLE,
+            description=APP_DESCRIPTION,
+            version=APP_VERSION,
             lifespan=self._lifespan,
         )
         self._setup_middleware()
@@ -56,7 +44,7 @@ class SpotifyMCPApp:
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
         """Application lifespan: start DB log handler, clean up on shutdown."""
-        db_log_handler = DBLogHandler(db_manager, service="api")
+        db_log_handler = DBLogHandler(db_manager, service=ServiceName.API)
         await db_log_handler.start()
         logging.getLogger().addHandler(db_log_handler)
         try:
@@ -96,12 +84,13 @@ class SpotifyMCPApp:
         )
 
     def _setup_routers(self) -> None:
-        self.app.include_router(auth_router, prefix="/auth", tags=["auth"])
-        self.app.include_router(admin_router, prefix="/admin", tags=["admin"])
-        self.app.include_router(history_router, prefix="/history", tags=["history"])
-        self.app.include_router(mcp_router, prefix="/mcp", tags=["mcp"])
+        self.app.include_router(auth_router, prefix=Routes.AUTH.prefix, tags=[Routes.AUTH.tag])
+        self.app.include_router(admin_router, prefix=Routes.ADMIN.prefix, tags=[Routes.ADMIN.tag])
+        self.app.include_router(history_router, prefix=Routes.HISTORY.prefix, tags=[Routes.HISTORY.tag])
+        self.app.include_router(mcp_router, prefix=Routes.MCP.prefix, tags=[Routes.MCP.tag])
+        self.app.include_router(explorer_router, prefix=Routes.EXPLORER.prefix, tags=[Routes.EXPLORER.tag])
 
-        @self.app.get("/healthz")
+        @self.app.get(Routes.HEALTH)
         async def health_check() -> dict[str, str]:
             """Health check endpoint."""
             return {"status": "healthy"}
@@ -109,7 +98,7 @@ class SpotifyMCPApp:
         @self.app.get("/")
         async def root() -> dict[str, str]:
             """Root endpoint."""
-            return {"message": "Spotify MCP API", "version": "0.1.0"}
+            return {"message": APP_TITLE, "version": APP_VERSION}
 
 
 _application = SpotifyMCPApp()

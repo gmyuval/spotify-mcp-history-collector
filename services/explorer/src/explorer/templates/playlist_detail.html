@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ playlist.name | default("Playlist") }}{% endblock %}
+{% block content %}
+{% if not playlist %}
+<div class="alert alert-warning">Playlist not found.</div>
+{% else %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="mb-1">{{ playlist.name }}</h2>
+    {% if playlist.description %}
+    <p class="text-muted mb-0">{{ playlist.description }}</p>
+    {% endif %}
+  </div>
+  <a href="/playlists" class="btn btn-outline-spotify btn-sm">Back to Playlists</a>
+</div>
+
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="width: 50px">#</th>
+          <th>Track</th>
+          <th>Artists</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for track in playlist.tracks %}
+        <tr>
+          <td class="rank-number">{{ track.position + 1 }}</td>
+          <td>{{ track.track_name }}</td>
+          <td class="text-muted">
+            {% if track.artists_json %}
+              {% for a in track.artists_json %}{{ a.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not playlist.tracks %}
+        <tr><td colspan="3" class="text-muted text-center py-4">No tracks in this playlist</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

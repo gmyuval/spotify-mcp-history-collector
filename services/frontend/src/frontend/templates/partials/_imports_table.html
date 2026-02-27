@@ -1,7 +1,7 @@
 {% for imp in imports %}
 <tr>
   <td>{{ imp.id }}</td>
-  <td><a href="/users/{{ imp.user_id }}">{{ imp.user_id }}</a></td>
+  <td><a href="{{ base_path }}/users/{{ imp.user_id }}">{{ imp.user_id }}</a></td>
   <td>
     {% if imp.status == "success" %}<span class="badge bg-success">{{ imp.status }}</span>
     {% elif imp.status == "error" %}<span class="badge bg-danger">{{ imp.status }}</span>
@@ -26,7 +26,7 @@
 
 {% if total > limit %}
 <div id="imports-pagination" hx-swap-oob="innerHTML">
-  {% with url="/imports/partials/imports-table", target="#imports-tbody" %}
+  {% with url=base_path ~ "/imports/partials/imports-table", target="#imports-tbody" %}
   {% include "partials/_pagination.html" %}
   {% endwith %}
 </div>

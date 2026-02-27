@@ -50,6 +50,9 @@ class AppSettings(BaseSettings):
     # Spotify cache
     SPOTIFY_CACHE_TTL_HOURS: int = 24
 
+    # Auth redirect whitelist (comma-separated origins)
+    AUTH_ALLOWED_REDIRECT_ORIGINS: str = "http://localhost:8001,http://localhost:8002"
+
     model_config = {"env_prefix": ""}
 
 

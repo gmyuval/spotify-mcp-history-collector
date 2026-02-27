@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import Integer, case, cast, distinct, extract, func, literal, select
+from sqlalchemy import Integer, case, cast, distinct, extract, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db.enums import TrackSource
@@ -175,6 +175,61 @@ class HistoryQueries:
             "import_source_count": row.import_source_count or 0,
             "active_days": row.active_days,
         }
+
+    @staticmethod
+    async def recent_plays(
+        user_id: int,
+        session: AsyncSession,
+        limit: int = 50,
+        offset: int = 0,
+        q: str | None = None,
+    ) -> tuple[list[dict[str, object]], int]:
+        """Paginated recent plays with track and artist details.
+
+        Returns (rows, total_count) for pagination.
+        """
+        # Subquery: primary artist per track (position=0)
+        primary_artist = (
+            select(TrackArtist.track_id, Artist.name.label("artist_name"))
+            .join(Artist, TrackArtist.artist_id == Artist.id)
+            .where(TrackArtist.position == 0)
+            .subquery()
+        )
+
+        base = (
+            select(
+                Play.played_at,
+                Track.id.label("track_id"),
+                Track.name.label("track_name"),
+                func.coalesce(primary_artist.c.artist_name, literal("Unknown")).label("artist_name"),
+                Play.ms_played,
+            )
+            .select_from(Play)
+            .join(Track, Play.track_id == Track.id)
+            .outerjoin(primary_artist, primary_artist.c.track_id == Track.id)
+            .where(Play.user_id == user_id)
+        )
+
+        if q:
+            escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            base = base.where(
+                or_(
+                    Track.name.ilike(pattern),
+                    primary_artist.c.artist_name.ilike(pattern),
+                )
+            )
+
+        # Total count
+        count_stmt = select(func.count()).select_from(base.subquery())
+        total = (await session.execute(count_stmt)).scalar() or 0
+
+        # Paginated results
+        stmt = base.order_by(Play.played_at.desc()).limit(limit).offset(offset)
+        result = await session.execute(stmt)
+        rows = [dict(row._mapping) for row in result.all()]
+
+        return rows, total
 
 
 # Module-level aliases for backward compatibility

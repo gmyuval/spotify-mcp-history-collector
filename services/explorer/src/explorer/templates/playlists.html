@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Playlists{% endblock %}
+{% block content %}
+<h2 class="mb-4">Your Playlists</h2>
+
+{% if playlists %}
+<div class="row g-3">
+  {% for pl in playlists %}
+  <div class="col-sm-6 col-md-4 col-lg-3">
+    <a href="/playlists/{{ pl.spotify_playlist_id }}" class="text-decoration-none">
+      <div class="card playlist-card h-100">
+        <div class="card-body">
+          <h6 class="card-title text-white mb-1">{{ pl.name }}</h6>
+          <small class="text-muted">{{ pl.total_tracks }} tracks</small>
+          {% if pl.description %}
+          <p class="text-muted small mt-2 mb-0">{{ pl.description[:80] }}{% if pl.description | length > 80 %}...{% endif %}</p>
+          {% endif %}
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <p class="text-muted mb-0">No cached playlists found</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

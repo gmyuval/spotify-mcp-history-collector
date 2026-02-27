@@ -12,5 +12,6 @@ dependencies:
     - -e services/api[dev]
     - -e services/collector[dev]
     - -e services/frontend[dev]
+    - -e services/explorer[dev]
 
   - sqlalchemy
