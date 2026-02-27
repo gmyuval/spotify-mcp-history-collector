@@ -23,8 +23,8 @@ Additionally, there are **bugs to fix first**:
 | 2 | RBAC Foundation | **DONE** |
 | 3 | Per-User Spotify Credentials | **DONE** |
 | 4 | JWT User Authentication | **DONE** |
-| 5 | Admin UI for RBAC & User Management | **NEXT** |
-| 6 | Public Data Exploration Frontend | Pending |
+| 5 | Admin UI for RBAC & User Management | **DONE** |
+| 6 | Public Data Exploration Frontend | **NEXT** |
 | 7 | ChatGPT Taste Inference Storage | Pending |
 | 8 | Data Exploration Features & Taste Profile UI | Pending |
 
@@ -552,13 +552,13 @@ Phase 1 (caching)             ✅ DONE
 Phase 2 (RBAC schema)         ✅ DONE
 Phase 3 (per-user creds)      ✅ DONE
 Phase 4 (JWT auth)            ✅ DONE
-Phase 5 (admin RBAC UI)       ← NEXT — all dependencies satisfied
-Phase 6 (explorer foundation) ← depends on Phases 1, 4 (both done)
+Phase 5 (admin RBAC UI)       ✅ DONE
+Phase 6 (explorer foundation) ← NEXT — depends on Phases 1, 4 (both done)
 Phase 7 (taste storage)       ← depends on Phase 1 (done)
 Phase 8 (explorer features)   ← depends on Phases 6, 7
 ```
 
-Remaining order: **5 → 6 → 7 → 8**
+Remaining order: **6 → 7 → 8**
 
 Phases 6 and 7 can be done in parallel since they're independent.
 
