@@ -133,6 +133,9 @@ jobs:
               exit 1
             fi
 
+            echo "=== Reloading Caddy configuration ==="
+            docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+
             echo "=== Verifying all services ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml ps
             docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api curl -sf http://localhost:8000/healthz
