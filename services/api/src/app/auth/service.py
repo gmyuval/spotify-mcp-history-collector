@@ -48,7 +48,12 @@ class OAuthService:
         self._encryptor = TokenEncryptor(settings.TOKEN_ENCRYPTION_KEY)
         self._permission_checker = PermissionChecker()
 
-    def get_authorization_url(self, client_id: str | None = None, user_id: int | None = None) -> str:
+    def get_authorization_url(
+        self,
+        client_id: str | None = None,
+        user_id: int | None = None,
+        next_url: str | None = None,
+    ) -> str:
         """Build the full Spotify authorization redirect URL.
 
         Parameters:
@@ -56,10 +61,14 @@ class OAuthService:
                 Falls back to the system default.
             user_id: If provided, embedded in the OAuth state so the callback
                 can resolve per-user credentials for token exchange.
+            next_url: If provided, the callback will redirect here after
+                successful authentication.
         """
         from urllib.parse import urlencode
 
-        payload = str(user_id) if user_id is not None else ""
+        uid_part = str(user_id) if user_id is not None else ""
+        next_part = next_url or ""
+        payload = f"{uid_part}|{next_part}" if next_part else uid_part
         state = self._state_manager.generate(payload=payload)
         params = {
             "client_id": client_id or self._settings.SPOTIFY_CLIENT_ID,
@@ -70,10 +79,13 @@ class OAuthService:
         }
         return f"{SPOTIFY_AUTHORIZE_URL}?{urlencode(params)}"
 
-    async def handle_callback(self, code: str, state: str, session: AsyncSession) -> tuple[AuthCallbackResponse, int]:
+    async def handle_callback(
+        self, code: str, state: str, session: AsyncSession
+    ) -> tuple[AuthCallbackResponse, int, str | None]:
         """Process the OAuth callback: validate state, exchange code, upsert user.
 
-        Returns a tuple of (response, user_id) so the router can issue a JWT.
+        Returns a tuple of (response, user_id, next_url) so the router can
+        issue a JWT and redirect appropriately.
 
         If the state contains an embedded ``user_id`` (from a re-auth flow),
         per-user credentials are used for the token exchange.
@@ -85,8 +97,8 @@ class OAuthService:
         if not self._state_manager.verify(state):
             raise InvalidStateError("Invalid or expired state parameter")
 
-        # Resolve credentials: per-user (re-auth) or system default.
-        reauth_user_id = self._extract_user_id_from_state(state)
+        # Parse state payload: user_id and/or next_url
+        reauth_user_id, next_url = self._parse_state_payload(state)
         client_id, client_secret = await self._resolve_callback_credentials(reauth_user_id, session)
 
         token_response, profile = await self._exchange_and_fetch_profile(code, client_id, client_secret)
@@ -105,21 +117,29 @@ class OAuthService:
             ),
             is_new_user=is_new,
         )
-        return response, user.id
+        return response, user.id, next_url
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _extract_user_id_from_state(self, state: str) -> int | None:
-        """Extract the embedded user_id from an OAuth state token, if present."""
+    def _parse_state_payload(self, state: str) -> tuple[int | None, str | None]:
+        """Parse user_id and next_url from the OAuth state payload.
+
+        Payload format: ``{user_id}|{next_url}`` where either part may be empty.
+        Legacy format (just ``{user_id}``) is also supported.
+        """
         payload = self._state_manager.extract_payload(state)
         if payload is None:
-            return None
+            return None, None
+        if "|" in payload:
+            uid_str, next_url = payload.split("|", 1)
+            user_id = int(uid_str) if uid_str else None
+            return user_id, next_url or None
         try:
-            return int(payload)
+            return int(payload), None
         except ValueError:
-            return None
+            return None, None
 
     async def _resolve_callback_credentials(self, user_id: int | None, session: AsyncSession) -> tuple[str, str]:
         """Resolve Spotify credentials for the token exchange.

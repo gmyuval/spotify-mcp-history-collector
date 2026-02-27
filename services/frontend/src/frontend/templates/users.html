@@ -33,7 +33,7 @@
 
 {% if total > limit %}
 <div class="mt-3">
-  {% with url="/users/partials/users-table", target="#users-tbody" %}
+  {% with url=base_path ~ "/users/partials/users-table", target="#users-tbody" %}
   {% include "partials/_pagination.html" %}
   {% endwith %}
 </div>

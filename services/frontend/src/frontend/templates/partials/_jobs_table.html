@@ -1,7 +1,7 @@
 {% for job in jobs %}
 <tr>
   <td>{{ job.id }}</td>
-  <td><a href="/users/{{ job.user_id }}">{{ job.user_id }}</a></td>
+  <td><a href="{{ base_path }}/users/{{ job.user_id }}">{{ job.user_id }}</a></td>
   <td><span class="badge bg-secondary">{{ job.job_type }}</span></td>
   <td>
     {% if job.status == "success" %}<span class="badge bg-success">{{ job.status }}</span>
@@ -23,7 +23,7 @@
 
 {% if total > limit %}
 <div id="jobs-pagination" hx-swap-oob="innerHTML">
-  {% with url="/jobs/partials/jobs-table", target="#jobs-tbody" %}
+  {% with url=base_path ~ "/jobs/partials/jobs-table", target="#jobs-tbody" %}
   {% include "partials/_pagination.html" %}
   {% endwith %}
 </div>

@@ -4,7 +4,7 @@
 <h2 class="mb-4">Job Runs</h2>
 
 <!-- Filters -->
-<form hx-get="/jobs/partials/jobs-table"
+<form hx-get="{{ base_path }}/jobs/partials/jobs-table"
       hx-target="#jobs-tbody"
       hx-swap="innerHTML"
       hx-trigger="change from:select, keyup changed delay:500ms from:input"
@@ -51,7 +51,7 @@
 
 <div id="jobs-pagination" class="mt-3">
   {% if total > limit %}
-  {% with url="/jobs/partials/jobs-table", target="#jobs-tbody" %}
+  {% with url=base_path ~ "/jobs/partials/jobs-table", target="#jobs-tbody" %}
   {% include "partials/_pagination.html" %}
   {% endwith %}
   {% endif %}

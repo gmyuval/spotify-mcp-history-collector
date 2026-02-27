@@ -8,14 +8,15 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.types import ASGIApp
 
 from app.auth.jwt import JWTError, JWTService
+from app.constants import Routes
 from app.dependencies import db_manager
 from app.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 # Paths that should never trigger JWT processing
-_SKIP_PREFIXES = ("/healthz", "/docs", "/openapi.json", "/redoc")
-_SKIP_EXACT = frozenset({"/", "/auth/login", "/auth/callback"})
+_SKIP_PREFIXES = (Routes.HEALTH, "/docs", "/openapi.json", "/redoc")
+_SKIP_EXACT = frozenset({"/", f"{Routes.AUTH.prefix}/login", f"{Routes.AUTH.prefix}/callback"})
 
 
 class JWTAuthMiddleware(BaseHTTPMiddleware):

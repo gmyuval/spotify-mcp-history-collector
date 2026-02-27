@@ -2,6 +2,7 @@
 
 import logging
 from typing import Annotated
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -60,18 +61,25 @@ class AuthRouter:
         settings: Annotated[AppSettings, Depends(get_settings)],
         session: Annotated[AsyncSession, Depends(db_manager.dependency)],
         user_id: int | None = Query(default=None, description="User ID for re-auth with custom credentials"),
+        next: str | None = Query(default=None, alias="next", description="URL to redirect to after auth"),
     ) -> RedirectResponse:
         """Redirect user to Spotify authorization page.
 
         When ``user_id`` is provided, the user's custom Spotify app credentials
         (if configured) are used for the authorization URL, and the user_id is
         embedded in the OAuth state for the callback to use.
+
+        When ``next`` is provided, the callback will redirect to that URL
+        after successful authentication (validated against allowed origins).
         """
+        # Validate next URL against allowed origins
+        validated_next = self._validate_next_url(next, settings) if next else None
+
         client_id: str | None = None
         if user_id is not None:
             client_id = await self._resolve_custom_client_id(user_id, settings, session)
 
-        url = service.get_authorization_url(client_id=client_id, user_id=user_id)
+        url = service.get_authorization_url(client_id=client_id, user_id=user_id, next_url=validated_next)
         return RedirectResponse(url=url)
 
     async def callback(
@@ -82,10 +90,11 @@ class AuthRouter:
         session: Annotated[AsyncSession, Depends(db_manager.dependency)],
         service: Annotated[OAuthService, Depends(AuthRouter._get_oauth_service)],
         jwt_service: Annotated[JWTService, Depends(AuthRouter._get_jwt_service)],
+        settings: Annotated[AppSettings, Depends(get_settings)],
     ) -> Response:
         """Handle Spotify OAuth callback: exchange code, upsert user, issue JWT."""
         try:
-            result, user_id = await service.handle_callback(code, state, session)
+            result, user_id, next_url = await service.handle_callback(code, state, session)
         except InvalidStateError as exc:
             raise HTTPException(status_code=400, detail="Invalid or expired state parameter") from exc
         except SpotifyAPIError as exc:
@@ -93,9 +102,12 @@ class AuthRouter:
 
         access_token, refresh_token = jwt_service.create_token_pair(user_id)
 
+        # Re-validate next_url from state (defense in depth)
+        redirect_url = self._validate_next_url(next_url, settings) if next_url else None
+
         accept = request.headers.get("accept", "")
         if "text/html" in accept:
-            redirect = RedirectResponse(url="/users", status_code=303)
+            redirect = RedirectResponse(url=redirect_url or "/admin", status_code=303)
             self._set_auth_cookies(redirect, access_token, refresh_token, jwt_service)
             return redirect
 
@@ -186,6 +198,22 @@ class AuthRouter:
         if body is not None:
             return body.refresh_token
         return request.cookies.get("refresh_token")
+
+    @staticmethod
+    def _validate_next_url(url: str | None, settings: AppSettings) -> str | None:
+        """Validate a redirect URL against the allowed origins whitelist.
+
+        Returns the URL if valid, None otherwise.
+        """
+        if not url:
+            return None
+        allowed = [o.strip() for o in settings.AUTH_ALLOWED_REDIRECT_ORIGINS.split(",") if o.strip()]
+        parsed = urlparse(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        if origin in allowed:
+            return url
+        logger.warning("Rejected redirect to disallowed origin: %s", origin)
+        return None
 
     @staticmethod
     async def _resolve_custom_client_id(user_id: int, settings: AppSettings, session: AsyncSession) -> str | None:

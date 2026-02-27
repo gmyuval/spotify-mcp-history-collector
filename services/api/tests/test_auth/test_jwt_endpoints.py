@@ -143,7 +143,7 @@ def test_callback_sets_cookies_for_browser(override_deps: None) -> None:
         headers={"Accept": "text/html"},
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/users"
+    assert response.headers["location"] == "/admin"
 
     # Check cookies are set
     assert "access_token" in response.cookies

@@ -18,8 +18,16 @@
         reverse_proxy api:8000
     }
 
-    # All other routes — require Google OAuth via forward_auth
-    handle {
+    # Auth + API endpoints — JWT auth, no Google OAuth needed
+    handle /auth/* {
+        reverse_proxy api:8000
+    }
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    # Admin frontend — requires Google OAuth via forward_auth
+    handle /admin/* {
         forward_auth oauth2-proxy:4180 {
             uri /oauth2/auth
             header_up X-Real-IP {remote_host}
@@ -31,21 +39,12 @@
             }
         }
 
-        # API routes (after auth check passed)
-        handle /auth/* {
-            reverse_proxy api:8000
-        }
-        handle /admin/* {
-            reverse_proxy api:8000
-        }
-        handle /history/* {
-            reverse_proxy api:8000
-        }
+        reverse_proxy frontend:8001
+    }
 
-        # Frontend (everything else, after auth check passed)
-        handle {
-            reverse_proxy frontend:8001
-        }
+    # Explorer frontend — JWT auth (handled by app), no Google OAuth
+    handle {
+        reverse_proxy explorer:8002
     }
 
     log {

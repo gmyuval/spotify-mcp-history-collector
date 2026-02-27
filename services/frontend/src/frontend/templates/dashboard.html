@@ -5,7 +5,7 @@
 
 <!-- Sync status cards — auto-refresh every 30s -->
 <div id="sync-status-cards"
-     hx-get="/partials/sync-status"
+     hx-get="{{ base_path }}/partials/sync-status"
      hx-trigger="every 30s"
      hx-swap="innerHTML">
   {% include "partials/_sync_status.html" %}
@@ -13,7 +13,7 @@
 
 <!-- Active operations — auto-refresh every 10s -->
 <div id="active-operations"
-     hx-get="/partials/active-operations"
+     hx-get="{{ base_path }}/partials/active-operations"
      hx-trigger="every 10s"
      hx-swap="innerHTML">
   {% include "partials/_active_operations.html" %}
@@ -32,7 +32,7 @@
         {% for err in sync_status.recent_errors %}
         <tr>
           <td>{{ err.job_run_id }}</td>
-          <td><a href="/users/{{ err.user_id }}">{{ err.user_id }}</a></td>
+          <td><a href="{{ base_path }}/users/{{ err.user_id }}">{{ err.user_id }}</a></td>
           <td><span class="badge bg-secondary">{{ err.job_type }}</span></td>
           <td class="log-message">{{ err.error_message or "—" }}</td>
           <td>{{ err.started_at[:19] if err.started_at else "—" }}</td>
@@ -50,7 +50,7 @@
     <div class="card">
       <div class="card-header d-flex justify-content-between">
         <strong>Recent Job Runs</strong>
-        <a href="/jobs" class="btn btn-sm btn-outline-primary">View all</a>
+        <a href="{{ base_path }}/jobs" class="btn btn-sm btn-outline-primary">View all</a>
       </div>
       <div class="card-body p-0">
         <table class="table table-sm table-striped mb-0">
@@ -82,7 +82,7 @@
     <div class="card">
       <div class="card-header d-flex justify-content-between">
         <strong>Recent Imports</strong>
-        <a href="/imports" class="btn btn-sm btn-outline-primary">View all</a>
+        <a href="{{ base_path }}/imports" class="btn btn-sm btn-outline-primary">View all</a>
       </div>
       <div class="card-body p-0">
         <table class="table table-sm table-striped mb-0">
@@ -91,7 +91,7 @@
             {% for imp in recent_imports %}
             <tr>
               <td>{{ imp.id }}</td>
-              <td><a href="/users/{{ imp.user_id }}">{{ imp.user_id }}</a></td>
+              <td><a href="{{ base_path }}/users/{{ imp.user_id }}">{{ imp.user_id }}</a></td>
               <td>
                 {% if imp.status == "success" %}<span class="badge bg-success">{{ imp.status }}</span>
                 {% elif imp.status == "error" %}<span class="badge bg-danger">{{ imp.status }}</span>

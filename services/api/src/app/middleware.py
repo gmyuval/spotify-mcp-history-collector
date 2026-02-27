@@ -9,6 +9,8 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
+from app.constants import Routes
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,10 +49,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
 
-        if path.startswith("/auth/"):
+        if path.startswith(f"{Routes.AUTH.prefix}/"):
             key = f"auth:{self._client_ip(request)}"
             limit = self.auth_limit
-        elif path == "/mcp/call" and request.method == "POST":
+        elif path == f"{Routes.MCP.prefix}/call" and request.method == "POST":
             token = request.headers.get("authorization", "anon")
             key = f"mcp:{token}"
             limit = self.mcp_limit

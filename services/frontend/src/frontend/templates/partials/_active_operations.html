@@ -13,7 +13,7 @@
         {% for imp in active_imports %}
         <tr>
           <td><span class="badge bg-primary">import</span></td>
-          <td><a href="/users/{{ imp.user_id }}">{{ imp.user_id }}</a></td>
+          <td><a href="{{ base_path }}/users/{{ imp.user_id }}">{{ imp.user_id }}</a></td>
           <td>
             <span class="badge bg-info">
               {{ imp.format_detected or "detecting" }}
@@ -35,7 +35,7 @@
         {% for job in active_jobs %}
         <tr>
           <td><span class="badge bg-warning text-dark">{{ job.job_type }}</span></td>
-          <td><a href="/users/{{ job.user_id }}">{{ job.user_id }}</a></td>
+          <td><a href="{{ base_path }}/users/{{ job.user_id }}">{{ job.user_id }}</a></td>
           <td><span class="badge bg-primary">running</span></td>
           <td>
             <strong>{{ "{:,}".format(job.records_inserted if job.records_inserted is not none else 0) }}</strong> inserted

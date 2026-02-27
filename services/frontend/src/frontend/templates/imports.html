@@ -7,7 +7,7 @@
 <div class="card mb-4">
   <div class="card-header"><strong>Upload ZIP Import</strong></div>
   <div class="card-body">
-    <form hx-post="/imports/upload"
+    <form hx-post="{{ base_path }}/imports/upload"
           hx-encoding="multipart/form-data"
           hx-target="#upload-result"
           hx-swap="innerHTML"
@@ -34,7 +34,7 @@
 </div>
 
 <!-- Filters -->
-<form hx-get="/imports/partials/imports-table"
+<form hx-get="{{ base_path }}/imports/partials/imports-table"
       hx-target="#imports-tbody"
       hx-swap="innerHTML"
       hx-trigger="change from:select, keyup changed delay:500ms from:input"
@@ -72,7 +72,7 @@
 
 <div id="imports-pagination" class="mt-3">
   {% if total > limit %}
-  {% with url="/imports/partials/imports-table", target="#imports-tbody" %}
+  {% with url=base_path ~ "/imports/partials/imports-table", target="#imports-tbody" %}
   {% include "partials/_pagination.html" %}
   {% endwith %}
   {% endif %}

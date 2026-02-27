@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Admin{% endblock %} — Spotify MCP</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="{{ base_path }}/static/css/style.css">
 </head>
 <body>
   <div class="d-flex">
@@ -14,22 +14,28 @@
       <h5 class="mb-4">Spotify MCP</h5>
       <ul class="nav flex-column">
         <li class="nav-item">
-          <a class="nav-link text-white {% if active_page == 'dashboard' %}fw-bold active-link{% endif %}" href="/">Dashboard</a>
+          <a class="nav-link text-white {% if active_page == 'dashboard' %}fw-bold active-link{% endif %}" href="{{ base_path }}/">Dashboard</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link text-white {% if active_page == 'users' %}fw-bold active-link{% endif %}" href="/users">Users</a>
+          <a class="nav-link text-white {% if active_page == 'users' %}fw-bold active-link{% endif %}" href="{{ base_path }}/users">Users</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link text-white {% if active_page == 'roles' %}fw-bold active-link{% endif %}" href="/roles">Roles</a>
+          <a class="nav-link text-white {% if active_page == 'roles' %}fw-bold active-link{% endif %}" href="{{ base_path }}/roles">Roles</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link text-white {% if active_page == 'jobs' %}fw-bold active-link{% endif %}" href="/jobs">Job Runs</a>
+          <a class="nav-link text-white {% if active_page == 'jobs' %}fw-bold active-link{% endif %}" href="{{ base_path }}/jobs">Job Runs</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link text-white {% if active_page == 'imports' %}fw-bold active-link{% endif %}" href="/imports">Imports</a>
+          <a class="nav-link text-white {% if active_page == 'imports' %}fw-bold active-link{% endif %}" href="{{ base_path }}/imports">Imports</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link text-white {% if active_page == 'logs' %}fw-bold active-link{% endif %}" href="/logs">Logs</a>
+          <a class="nav-link text-white {% if active_page == 'logs' %}fw-bold active-link{% endif %}" href="{{ base_path }}/logs">Logs</a>
+        </li>
+      </ul>
+      <hr class="text-secondary my-3">
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a class="nav-link text-white-50" href="/">Explorer</a>
         </li>
       </ul>
     </nav>

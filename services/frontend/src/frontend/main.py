@@ -51,11 +51,15 @@ class FrontendApp:
 
     def _setup_static_files(self) -> None:
         static_dir = Path(__file__).parent / "static"
-        self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        settings = get_settings()
+        self.app.mount(f"{settings.BASE_PATH}/static", StaticFiles(directory=str(static_dir)), name="static")
 
     def _setup_templates(self) -> None:
         templates_dir = Path(__file__).parent / "templates"
-        self.app.state.templates = Jinja2Templates(directory=str(templates_dir))
+        templates = Jinja2Templates(directory=str(templates_dir))
+        settings = get_settings()
+        templates.env.globals["base_path"] = settings.BASE_PATH
+        self.app.state.templates = templates
 
     def _setup_routers(self) -> None:
         from frontend.routes import (
@@ -67,12 +71,15 @@ class FrontendApp:
             users_router,
         )
 
-        self.app.include_router(dashboard_router)
-        self.app.include_router(users_router, prefix="/users", tags=["users"])
-        self.app.include_router(roles_router, prefix="/roles", tags=["roles"])
-        self.app.include_router(jobs_router, prefix="/jobs", tags=["jobs"])
-        self.app.include_router(imports_router, prefix="/imports", tags=["imports"])
-        self.app.include_router(logs_router, prefix="/logs", tags=["logs"])
+        settings = get_settings()
+        bp = settings.BASE_PATH
+
+        self.app.include_router(dashboard_router, prefix=bp)
+        self.app.include_router(users_router, prefix=f"{bp}/users", tags=["users"])
+        self.app.include_router(roles_router, prefix=f"{bp}/roles", tags=["roles"])
+        self.app.include_router(jobs_router, prefix=f"{bp}/jobs", tags=["jobs"])
+        self.app.include_router(imports_router, prefix=f"{bp}/imports", tags=["imports"])
+        self.app.include_router(logs_router, prefix=f"{bp}/logs", tags=["logs"])
 
         @self.app.get("/healthz")
         async def health_check() -> dict[str, str]:
