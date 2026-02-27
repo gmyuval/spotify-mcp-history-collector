@@ -8,7 +8,7 @@ Phases 0-5 are complete. Phase 6 creates a Spotify-themed **explorer** frontend 
 
 ## Routing Layout (Production)
 
-```
+```text
 /healthz                → api:8000           (open)
 /oauth2/*               → oauth2-proxy:4180  (Google OAuth infra)
 /mcp/*                  → api:8000           (Bearer token only)

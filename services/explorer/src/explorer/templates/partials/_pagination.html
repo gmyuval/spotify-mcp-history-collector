@@ -33,6 +33,8 @@
     </li>
   </ul>
 </nav>
+{% if total > 0 %}
 <p class="text-center text-muted mt-2 mb-0">
   <small>Showing {{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total }}</small>
 </p>
+{% endif %}

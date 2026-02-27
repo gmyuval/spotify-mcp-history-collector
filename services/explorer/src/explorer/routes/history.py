@@ -65,7 +65,9 @@ class HistoryRouter:
 
         try:
             data = await api.get_history(token, limit=limit, offset=offset, q=q or None)
-        except ApiError:
+        except ApiError as e:
+            if e.status_code == 401:
+                return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
             data = {"items": [], "total": 0}
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]

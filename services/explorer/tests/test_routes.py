@@ -41,7 +41,7 @@ def test_login_redirect(client: TestClient) -> None:
 
 
 def test_logout(client: TestClient) -> None:
-    response = client.get("/logout", follow_redirects=False)
+    response = client.post("/logout", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/login"
 

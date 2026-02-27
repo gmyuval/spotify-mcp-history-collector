@@ -211,7 +211,8 @@ class HistoryQueries:
         )
 
         if q:
-            pattern = f"%{q}%"
+            escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
             base = base.where(
                 or_(
                     Track.name.ilike(pattern),

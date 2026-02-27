@@ -21,11 +21,13 @@ async def test_get_dashboard(api_client: ExplorerApiClient) -> None:
 
 @respx.mock
 async def test_get_history(api_client: ExplorerApiClient) -> None:
-    respx.get("http://test-api:8000/api/me/history").mock(
+    route = respx.get("http://test-api:8000/api/me/history").mock(
         return_value=httpx.Response(200, json={"items": [], "total": 0})
     )
     result = await api_client.get_history("token123", limit=10, offset=5)
     assert result["total"] == 0
+    assert route.calls[0].request.url.params["limit"] == "10"
+    assert route.calls[0].request.url.params["offset"] == "5"
 
 
 @respx.mock
@@ -70,3 +72,12 @@ async def test_401_raises_api_error(api_client: ExplorerApiClient) -> None:
     with pytest.raises(ApiError) as exc_info:
         await api_client.get_dashboard("bad-token")
     assert exc_info.value.status_code == 401
+
+
+@respx.mock
+async def test_transport_error_raises_api_error(api_client: ExplorerApiClient) -> None:
+    respx.get("http://test-api:8000/api/me/dashboard").mock(side_effect=httpx.ConnectError("Connection refused"))
+    with pytest.raises(ApiError) as exc_info:
+        await api_client.get_dashboard("token123")
+    assert exc_info.value.status_code == 503
+    assert "API unavailable" in exc_info.value.detail

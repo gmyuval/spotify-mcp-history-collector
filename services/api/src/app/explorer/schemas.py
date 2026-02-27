@@ -54,7 +54,7 @@ class PlaylistSummary(BaseModel):
 
 class PlaylistTrackItem(BaseModel):
     position: int
-    spotify_track_id: str
+    spotify_track_id: str | None
     track_name: str
     artists_json: str | None
     added_at: str | None

@@ -28,7 +28,10 @@ class ExplorerApiClient:
     async def _request(self, method: str, path: str, access_token: str, **kwargs: Any) -> Any:
         """Make an authenticated API request."""
         headers = {"Authorization": f"Bearer {access_token}"}
-        resp = await self._client.request(method, path, headers=headers, **kwargs)
+        try:
+            resp = await self._client.request(method, path, headers=headers, **kwargs)
+        except httpx.TransportError as exc:
+            raise ApiError(503, f"API unavailable: {exc}") from exc
         if resp.status_code == 401:
             raise ApiError(401, "Authentication required")
         if resp.status_code >= 400:

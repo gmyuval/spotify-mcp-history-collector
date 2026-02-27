@@ -1,5 +1,7 @@
 """Auth routes — login redirect and logout."""
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
@@ -13,7 +15,7 @@ class AuthRouter:
         self.router = APIRouter()
         self.router.add_api_route("/login", self.login_page, methods=["GET"], response_class=HTMLResponse)
         self.router.add_api_route("/login/redirect", self.login_redirect, methods=["GET"])
-        self.router.add_api_route("/logout", self.logout, methods=["POST", "GET"], response_model=None)
+        self.router.add_api_route("/logout", self.logout, methods=["POST"], response_model=None)
 
     async def login_page(self, request: Request) -> HTMLResponse:
         """Show login page."""
@@ -28,7 +30,7 @@ class AuthRouter:
         """Redirect to API's Spotify OAuth with next= back to explorer."""
         settings: ExplorerSettings = request.app.state.settings
         next_url = f"{settings.EXPLORER_BASE_URL}/"
-        login_url = f"{settings.API_PUBLIC_URL}/auth/login?next={next_url}"
+        login_url = f"{settings.API_PUBLIC_URL}/auth/login?next={quote(next_url, safe='')}"
         return RedirectResponse(url=login_url, status_code=303)
 
     async def logout(self, request: Request) -> Response:

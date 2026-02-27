@@ -4,7 +4,7 @@
   <td>{{ item.track_name }}</td>
   <td class="text-muted">{{ item.artist_name }}</td>
   <td class="text-end duration">
-    {% if item.ms_played %}
+    {% if item.ms_played is not none %}
       {{ "%d:%02d" | format((item.ms_played // 60000), ((item.ms_played % 60000) // 1000)) }}
     {% else %}—{% endif %}
   </td>
@@ -14,8 +14,8 @@
 <tr><td colspan="4" class="text-muted text-center py-4">No plays found</td></tr>
 {% endif %}
 
-{% if total > limit %}
 <div id="history-pagination" hx-swap-oob="innerHTML">
+{% if total > limit %}
   {% include "partials/_pagination.html" %}
-</div>
 {% endif %}
+</div>
