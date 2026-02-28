@@ -194,19 +194,21 @@ class AuthRouter:
 
         if user is None:
             # Fallback: if only one user exists, use them (single-user deployment)
-            all_users = await session.execute(select(User))
-            users = all_users.scalars().all()
-            if len(users) == 1:
-                user = users[0]
-                logger.info(
-                    "Google email %s doesn't match any user email, but only one user exists — using user %d",
-                    body.email,
-                    user.id,
-                )
-            else:
+            if settings.GOOGLE_AUTH_SINGLE_USER_FALLBACK:
+                all_users = await session.execute(select(User))
+                users = all_users.scalars().all()
+                if len(users) == 1:
+                    user = users[0]
+                    logger.info(
+                        "Google email doesn't match any user, single-user fallback to user %d",
+                        user.id,
+                    )
+
+            if user is None:
+                logger.warning("No Spotify user linked to Google account (lookup failed)")
                 raise HTTPException(
                     status_code=404,
-                    detail=f"No Spotify user linked to email {body.email}",
+                    detail="No Spotify user linked to this Google account",
                 )
 
         # Ensure user has at least the default 'user' role (idempotent)

@@ -70,10 +70,10 @@ class GoogleAuthMiddleware(BaseHTTPMiddleware):
                     samesite="lax",
                     path="/",
                 )
-                logger.info("Bridged Google email %s to JWT for user %d", google_email, tokens["user_id"])
+                logger.info("Bridged Google auth to JWT for user %d", tokens["user_id"])
                 return response
 
-            logger.warning("Failed to exchange Google email %s for JWT", google_email)
+            logger.warning("Failed to exchange Google email for JWT")
             # Fall through — route handler will redirect to /login
 
         return await call_next(request)
