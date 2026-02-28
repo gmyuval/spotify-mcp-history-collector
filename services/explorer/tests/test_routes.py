@@ -21,43 +21,41 @@ def test_healthz(client: TestClient) -> None:
 def test_login_page(client: TestClient) -> None:
     response = client.get("/login", follow_redirects=False)
     assert response.status_code == 200
-    assert "Login with Spotify" in response.text
+    assert "Sign in with Google" in response.text
 
 
 def test_login_page_redirects_when_authenticated(client: TestClient) -> None:
     client.cookies.set("access_token", "test-jwt")
     response = client.get("/login", follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"] == "/"
+    assert response.headers["location"] == "/dashboard"
     client.cookies.clear()
-
-
-def test_login_redirect(client: TestClient) -> None:
-    response = client.get("/login/redirect", follow_redirects=False)
-    assert response.status_code == 303
-    location = response.headers["location"]
-    assert "http://test-api:8000/auth/login" in location
-    assert "next=" in location
 
 
 def test_logout(client: TestClient) -> None:
     response = client.post("/logout", follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"] == "/login"
+    assert "/oauth2/sign_out" in response.headers["location"]
 
 
 # --- Dashboard ---
 
 
-def test_dashboard_requires_login(client: TestClient) -> None:
+def test_landing_page_public(client: TestClient) -> None:
     response = client.get("/", follow_redirects=False)
+    assert response.status_code == 200
+    assert "Spotify MCP" in response.text
+
+
+def test_dashboard_requires_login(client: TestClient) -> None:
+    response = client.get("/dashboard", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/login"
 
 
 def test_dashboard_page(client: TestClient, mock_api: AsyncMock) -> None:
     client.cookies.set("access_token", "test-jwt")
-    response = client.get("/")
+    response = client.get("/dashboard")
     assert response.status_code == 200
     assert "150" in response.text  # total_plays
     assert "Test Artist" in response.text
@@ -69,7 +67,7 @@ def test_dashboard_page(client: TestClient, mock_api: AsyncMock) -> None:
 def test_dashboard_api_error(client: TestClient, mock_api: AsyncMock) -> None:
     mock_api.get_dashboard.side_effect = ApiError(500, "Server error")
     client.cookies.set("access_token", "test-jwt")
-    response = client.get("/")
+    response = client.get("/dashboard")
     assert response.status_code == 200
     assert "Server error" in response.text
     client.cookies.clear()
@@ -78,7 +76,7 @@ def test_dashboard_api_error(client: TestClient, mock_api: AsyncMock) -> None:
 def test_dashboard_401_redirects_to_login(client: TestClient, mock_api: AsyncMock) -> None:
     mock_api.get_dashboard.side_effect = ApiError(401, "Unauthorized")
     client.cookies.set("access_token", "expired-jwt")
-    response = client.get("/", follow_redirects=False)
+    response = client.get("/dashboard", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/login"
     client.cookies.clear()

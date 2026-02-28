@@ -13,9 +13,11 @@ from app.explorer.schemas import (
     PlaylistSummary,
     PlaylistTrackItem,
     TrackSummary,
+    UserProfile,
 )
 from app.history.queries import HistoryQueries
 from shared.db.models.cache import CachedPlaylist
+from shared.db.models.user import SpotifyToken, User
 
 
 class ExplorerService:
@@ -69,6 +71,33 @@ class ExplorerService:
             )
             for p in playlists
         ]
+
+    async def get_profile(self, user_id: int, session: AsyncSession) -> UserProfile:
+        result = await session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one()
+
+        # Check if Spotify token exists
+        token_result = await session.execute(select(SpotifyToken.id).where(SpotifyToken.user_id == user_id))
+        has_token = token_result.scalar_one_or_none() is not None
+
+        # All-time stats
+        stats = await HistoryQueries.play_stats(user_id, session, days=99999)
+        total_ms: int = stats["total_ms_played"]  # type: ignore[assignment]
+
+        return UserProfile(
+            user_id=user.id,
+            spotify_user_id=user.spotify_user_id,
+            display_name=user.display_name,
+            email=user.email,
+            country=user.country,
+            product=user.product,
+            created_at=user.created_at,
+            has_spotify_token=has_token,
+            total_plays=stats["total_plays"],
+            unique_tracks=stats["unique_tracks"],
+            unique_artists=stats["unique_artists"],
+            listening_hours=round(total_ms / 3_600_000, 1),
+        )
 
     async def get_playlist_detail(
         self, user_id: int, spotify_playlist_id: str, session: AsyncSession

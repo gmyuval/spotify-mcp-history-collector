@@ -53,3 +53,19 @@ class RefreshTokenRequest(BaseModel):
     """Request body for POST /auth/refresh (API clients)."""
 
     refresh_token: str
+
+
+class GoogleExchangeRequest(BaseModel):
+    """Request body for POST /auth/exchange-google (internal service-to-service)."""
+
+    email: str
+
+
+class GoogleExchangeResponse(BaseModel):
+    """Response from the Google email → JWT exchange endpoint."""
+
+    access_token: str
+    refresh_token: str
+    expires_in: int
+    user_id: int
+    display_name: str | None = None

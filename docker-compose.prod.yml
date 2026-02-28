@@ -16,6 +16,8 @@ services:
       - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-90}
       - RATE_LIMIT_AUTH_PER_MINUTE=${RATE_LIMIT_AUTH_PER_MINUTE:-10}
       - RATE_LIMIT_MCP_PER_MINUTE=${RATE_LIMIT_MCP_PER_MINUTE:-60}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
+      - GOOGLE_AUTH_SINGLE_USER_FALLBACK=${GOOGLE_AUTH_SINGLE_USER_FALLBACK:-false}
     volumes:
       - upload_data:/app/uploads
     networks:
@@ -121,6 +123,46 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  explorer:
+    build:
+      context: ./services/explorer
+      dockerfile: Dockerfile
+    environment:
+      - API_BASE_URL=http://api:8000
+      - API_PUBLIC_URL=https://${DOMAIN}
+      - EXPLORER_BASE_URL=https://${DOMAIN}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - app_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command:
+      [
+        "uvicorn", "explorer.main:app",
+        "--host", "0.0.0.0",
+        "--port", "8002",
+        "--workers", "2",
+        "--proxy-headers",
+        "--forwarded-allow-ips", "*"
+      ]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.14.2
     environment:
@@ -172,6 +214,8 @@ services:
       api:
         condition: service_healthy
       frontend:
+        condition: service_healthy
+      explorer:
         condition: service_healthy
       oauth2-proxy:
         condition: service_started

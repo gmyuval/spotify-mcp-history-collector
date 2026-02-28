@@ -33,6 +33,7 @@ jobs:
           pip install -e "services/api[dev]"
           pip install -e "services/collector[dev]"
           pip install -e "services/frontend[dev]"
+          pip install -e "services/explorer[dev]"
 
       - name: Lint
         run: |
@@ -40,7 +41,7 @@ jobs:
           ruff format --check .
 
       - name: Type check
-        run: mypy services/shared/src services/api/src services/collector/src services/frontend/src
+        run: mypy services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src
 
       - name: Test API
         run: pytest services/api/tests/
@@ -51,6 +52,9 @@ jobs:
 
       - name: Test Frontend
         run: pytest services/frontend/tests/
+
+      - name: Test Explorer
+        run: pytest services/explorer/tests/
 
   deploy:
     name: Deploy
@@ -129,10 +133,32 @@ jobs:
               exit 1
             fi
 
+            echo "=== Restarting Caddy to apply config ==="
+            docker compose --env-file .env.prod -f docker-compose.prod.yml restart caddy
+            echo "Waiting for Caddy to start..."
+            sleep 5
+
+            echo "=== Waiting for Explorer health ==="
+            for i in $(seq 1 30); do
+              if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T explorer curl -sf http://localhost:8002/healthz > /dev/null 2>&1; then
+                echo "Explorer is healthy"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "ERROR: Explorer health check failed after 30 attempts"
+                docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+                docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=100 explorer
+                exit 1
+              fi
+              echo "Waiting for Explorer... ($i/30)"
+              sleep 5
+            done
+
             echo "=== Verifying all services ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml ps
             docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api curl -sf http://localhost:8000/healthz
             docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T frontend curl -sf http://localhost:8001/healthz
+            docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T explorer curl -sf http://localhost:8002/healthz
             echo ""
             echo "=== Cleaning up old images ==="
             docker image prune -af --filter "until=24h"

@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.crypto import TokenEncryptor
 from app.auth.exceptions import InvalidStateError, SpotifyAPIError
 from app.auth.jwt import JWTExpiredError, JWTInvalidError, JWTService
-from app.auth.schemas import JWTTokenResponse, RefreshTokenRequest
+from app.auth.permissions import PermissionChecker
+from app.auth.schemas import GoogleExchangeRequest, GoogleExchangeResponse, JWTTokenResponse, RefreshTokenRequest
 from app.auth.service import OAuthService
 from app.dependencies import db_manager
 from app.settings import AppSettings, get_settings
@@ -53,6 +54,12 @@ class AuthRouter:
             self.logout,
             methods=["POST"],
             response_model=None,
+        )
+        self.router.add_api_route(
+            "/exchange-google",
+            self.exchange_google,
+            methods=["POST"],
+            response_model=GoogleExchangeResponse,
         )
 
     async def login(
@@ -162,6 +169,66 @@ class AuthRouter:
         response.delete_cookie("access_token", path="/", domain=jwt_service.cookie_domain)
         response.delete_cookie("refresh_token", path="/auth/refresh", domain=jwt_service.cookie_domain)
         return response
+
+    async def exchange_google(
+        self,
+        body: GoogleExchangeRequest,
+        request: Request,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+        jwt_service: Annotated[JWTService, Depends(AuthRouter._get_jwt_service)],
+        settings: Annotated[AppSettings, Depends(get_settings)],
+    ) -> GoogleExchangeResponse:
+        """Exchange a Google-authenticated email for JWT tokens.
+
+        Internal endpoint called by the explorer service after Google OAuth
+        via oauth2-proxy. Secured by INTERNAL_API_KEY header.
+        """
+        # Validate internal API key
+        api_key = request.headers.get("X-Internal-API-Key", "")
+        if not settings.INTERNAL_API_KEY or api_key != settings.INTERNAL_API_KEY:
+            raise HTTPException(status_code=403, detail="Invalid or missing internal API key")
+
+        # Look up user by email
+        result = await session.execute(select(User).where(User.email == body.email))
+        user = result.scalar_one_or_none()
+
+        if user is None:
+            # Fallback: if only one user exists, use them (single-user deployment)
+            if settings.GOOGLE_AUTH_SINGLE_USER_FALLBACK:
+                all_users = await session.execute(select(User))
+                users = all_users.scalars().all()
+                if len(users) == 1:
+                    user = users[0]
+                    logger.info(
+                        "Google email doesn't match any user, single-user fallback to user %d",
+                        user.id,
+                    )
+
+            if user is None:
+                logger.warning("No Spotify user linked to Google account (lookup failed)")
+                raise HTTPException(
+                    status_code=404,
+                    detail="No Spotify user linked to this Google account",
+                )
+
+        # Ensure user has at least the default 'user' role (idempotent)
+        checker = PermissionChecker()
+        roles = await checker.get_user_roles(user.id, session)
+        if not roles:
+            try:
+                await checker.assign_role(user.id, "user", session)
+                logger.info("Auto-assigned 'user' role to user %d via Google exchange", user.id)
+            except ValueError:
+                logger.warning("Default 'user' role not found — skipping role assignment for user %d", user.id)
+
+        access_token, refresh_token = jwt_service.create_token_pair(user.id)
+        return GoogleExchangeResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=jwt_service.access_expire_seconds,
+            user_id=user.id,
+            display_name=user.display_name,
+        )
 
     @staticmethod
     def _set_auth_cookies(

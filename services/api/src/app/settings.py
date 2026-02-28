@@ -53,6 +53,12 @@ class AppSettings(BaseSettings):
     # Auth redirect whitelist (comma-separated origins)
     AUTH_ALLOWED_REDIRECT_ORIGINS: str = "http://localhost:8001,http://localhost:8002"
 
+    # Internal API key for trusted service-to-service calls (e.g., explorer → API)
+    INTERNAL_API_KEY: str = ""
+
+    # Google auth: allow mapping any Google email to the sole user in single-user deployments
+    GOOGLE_AUTH_SINGLE_USER_FALLBACK: bool = False
+
     model_config = {"env_prefix": ""}
 
 
