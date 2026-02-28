@@ -18,7 +18,7 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav me-auto">
           <li class="nav-item">
-            <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="/">Dashboard</a>
+            <a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard">Dashboard</a>
           </li>
           <li class="nav-item">
             <a class="nav-link {% if active_page == 'history' %}active{% endif %}" href="/history">History</a>
@@ -28,6 +28,9 @@
           </li>
         </ul>
         <ul class="navbar-nav">
+          <li class="nav-item">
+            <a class="nav-link {% if active_page == 'profile' %}active{% endif %}" href="/profile">Profile</a>
+          </li>
           <li class="nav-item">
             <a class="nav-link text-muted" href="/admin/">Admin</a>
           </li>

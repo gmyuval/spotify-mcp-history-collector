@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.auth import require_permission
 from app.dependencies import db_manager
-from app.explorer.schemas import DashboardData, PaginatedHistory, PlaylistDetail, PlaylistSummary, TrackSummary
+from app.explorer.schemas import (
+    DashboardData,
+    PaginatedHistory,
+    PlaylistDetail,
+    PlaylistSummary,
+    TrackSummary,
+    UserProfile,
+)
 from app.explorer.service import ExplorerService
 from app.history.schemas import ArtistCount
 from app.history.service import HistoryService
@@ -31,6 +38,7 @@ class ExplorerRouter:
         r.add_api_route("/history", self.history, methods=["GET"])
         r.add_api_route("/top-artists", self.top_artists, methods=["GET"])
         r.add_api_route("/top-tracks", self.top_tracks, methods=["GET"])
+        r.add_api_route("/profile", self.profile, methods=["GET"])
         r.add_api_route("/playlists", self.playlists, methods=["GET"])
         r.add_api_route("/playlists/{spotify_playlist_id}", self.playlist_detail, methods=["GET"])
 
@@ -73,6 +81,9 @@ class ExplorerRouter:
             )
             for r in rows
         ]
+
+    async def profile(self, user_id: RequireOwnDataView, session: DBSession) -> UserProfile:
+        return await self._service.get_profile(user_id, session)
 
     async def playlists(self, user_id: RequireOwnDataView, session: DBSession) -> list[PlaylistSummary]:
         return await self._service.get_playlists(user_id, session)

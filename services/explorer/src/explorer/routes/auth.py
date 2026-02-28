@@ -21,7 +21,7 @@ class AuthRouter:
         """
         # If already logged in, redirect to dashboard
         if request.cookies.get("access_token"):
-            return RedirectResponse(url="/", status_code=303)  # type: ignore[return-value]
+            return RedirectResponse(url="/dashboard", status_code=303)  # type: ignore[return-value]
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "login.html", {"request": request}
         )

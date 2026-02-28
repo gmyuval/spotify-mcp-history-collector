@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.crypto import TokenEncryptor
 from app.auth.exceptions import InvalidStateError, SpotifyAPIError
 from app.auth.jwt import JWTExpiredError, JWTInvalidError, JWTService
+from app.auth.permissions import PermissionChecker
 from app.auth.schemas import GoogleExchangeRequest, GoogleExchangeResponse, JWTTokenResponse, RefreshTokenRequest
 from app.auth.service import OAuthService
 from app.dependencies import db_manager
@@ -207,6 +208,16 @@ class AuthRouter:
                     status_code=404,
                     detail=f"No Spotify user linked to email {body.email}",
                 )
+
+        # Ensure user has at least the default 'user' role (idempotent)
+        checker = PermissionChecker()
+        roles = await checker.get_user_roles(user.id, session)
+        if not roles:
+            try:
+                await checker.assign_role(user.id, "user", session)
+                logger.info("Auto-assigned 'user' role to user %d via Google exchange", user.id)
+            except ValueError:
+                logger.warning("Default 'user' role not found — skipping role assignment for user %d", user.id)
 
         access_token, refresh_token = jwt_service.create_token_pair(user.id)
         return GoogleExchangeResponse(

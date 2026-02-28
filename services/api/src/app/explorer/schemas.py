@@ -69,3 +69,18 @@ class PlaylistDetail(BaseModel):
     owner_display_name: str | None
     external_url: str | None
     tracks: list[PlaylistTrackItem]
+
+
+class UserProfile(BaseModel):
+    user_id: int
+    spotify_user_id: str
+    display_name: str | None
+    email: str | None
+    country: str | None
+    product: str | None
+    created_at: datetime
+    has_spotify_token: bool
+    total_plays: int
+    unique_tracks: int
+    unique_artists: int
+    listening_hours: float

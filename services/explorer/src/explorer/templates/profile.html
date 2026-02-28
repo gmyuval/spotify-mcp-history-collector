@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+{% block content %}
+<h2 class="mb-4">Your Profile</h2>
+
+{% if profile %}
+<div class="row g-4">
+  <!-- Account Info -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><strong>Account</strong></div>
+      <div class="card-body">
+        <table class="table table-borderless mb-0">
+          <tr>
+            <td class="text-muted">Display Name</td>
+            <td>{{ profile.display_name or "—" }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted">Spotify ID</td>
+            <td><code>{{ profile.spotify_user_id }}</code></td>
+          </tr>
+          <tr>
+            <td class="text-muted">Email</td>
+            <td>{{ profile.email or "—" }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted">Country</td>
+            <td>{{ profile.country or "—" }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted">Subscription</td>
+            <td>{{ profile.product or "—" }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted">Member Since</td>
+            <td>{{ profile.created_at[:10] if profile.created_at else "—" }}</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- All-time Stats -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><strong>All-Time Stats</strong></div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-6">
+            <div class="card stat-card">
+              <div class="stat-value">{{ profile.total_plays | int }}</div>
+              <div class="stat-label">Total Plays</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="card stat-card">
+              <div class="stat-value">{{ profile.unique_tracks | int }}</div>
+              <div class="stat-label">Unique Tracks</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="card stat-card">
+              <div class="stat-value">{{ profile.unique_artists | int }}</div>
+              <div class="stat-label">Unique Artists</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="card stat-card">
+              <div class="stat-value">{{ "%.1f" | format(profile.listening_hours | float) }}</div>
+              <div class="stat-label">Hours Listened</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Spotify Connection -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header"><strong>Spotify Connection</strong></div>
+      <div class="card-body">
+        {% if profile.has_spotify_token %}
+        <p class="text-success mb-3">Connected</p>
+        <a href="{{ api_public_url }}/auth/login?user_id={{ profile.user_id }}&next={{ explorer_base_url }}/profile"
+           class="btn btn-outline-secondary btn-sm">
+          Reconnect Spotify Account
+        </a>
+        {% else %}
+        <p class="text-warning mb-3">Not connected</p>
+        <a href="{{ api_public_url }}/auth/login?user_id={{ profile.user_id }}&next={{ explorer_base_url }}/profile"
+           class="btn btn-spotify btn-sm">
+          Connect Spotify Account
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<p class="text-muted">Unable to load profile data.</p>
+{% endif %}
+{% endblock %}
