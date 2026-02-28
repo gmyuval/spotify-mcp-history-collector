@@ -16,7 +16,7 @@ services:
       - LOG_RETENTION_DAYS=${LOG_RETENTION_DAYS:-90}
       - RATE_LIMIT_AUTH_PER_MINUTE=${RATE_LIMIT_AUTH_PER_MINUTE:-10}
       - RATE_LIMIT_MCP_PER_MINUTE=${RATE_LIMIT_MCP_PER_MINUTE:-60}
-      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
       - GOOGLE_AUTH_SINGLE_USER_FALLBACK=${GOOGLE_AUTH_SINGLE_USER_FALLBACK:-false}
     volumes:
       - upload_data:/app/uploads
@@ -131,7 +131,7 @@ services:
       - API_BASE_URL=http://api:8000
       - API_PUBLIC_URL=https://${DOMAIN}
       - EXPLORER_BASE_URL=https://${DOMAIN}
-      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:?INTERNAL_API_KEY is required}
     depends_on:
       api:
         condition: service_healthy

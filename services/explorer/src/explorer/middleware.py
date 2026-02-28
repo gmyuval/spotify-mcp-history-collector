@@ -47,6 +47,19 @@ class GoogleAuthMiddleware(BaseHTTPMiddleware):
 
             tokens = await api.exchange_google_email(google_email, settings.INTERNAL_API_KEY)
             if tokens:
+                access_token_val = tokens.get("access_token")
+                refresh_token_val = tokens.get("refresh_token")
+                user_id = tokens.get("user_id")
+
+                if not isinstance(access_token_val, str) or not isinstance(refresh_token_val, str) or user_id is None:
+                    logger.warning("Exchange response missing required token fields")
+                    return await call_next(request)
+
+                try:
+                    expires_in = int(tokens.get("expires_in", 900))
+                except TypeError, ValueError:
+                    expires_in = 900
+
                 # Redirect to the same URL so the browser stores the cookies
                 redirect_url = str(request.url.path)
                 if request.url.query:
@@ -54,8 +67,8 @@ class GoogleAuthMiddleware(BaseHTTPMiddleware):
                 response = RedirectResponse(url=redirect_url, status_code=303)
                 response.set_cookie(
                     key="access_token",
-                    value=tokens["access_token"],
-                    max_age=tokens.get("expires_in", 900),
+                    value=access_token_val,
+                    max_age=expires_in,
                     httponly=True,
                     secure=True,
                     samesite="lax",
@@ -63,14 +76,14 @@ class GoogleAuthMiddleware(BaseHTTPMiddleware):
                 )
                 response.set_cookie(
                     key="refresh_token",
-                    value=tokens["refresh_token"],
+                    value=refresh_token_val,
                     max_age=7 * 86400,  # 7 days
                     httponly=True,
                     secure=True,
                     samesite="lax",
                     path="/",
                 )
-                logger.info("Bridged Google auth to JWT for user %d", tokens["user_id"])
+                logger.info("Bridged Google auth to JWT for user %s", user_id)
                 return response
 
             logger.warning("Failed to exchange Google email for JWT")
