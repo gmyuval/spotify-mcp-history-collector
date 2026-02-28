@@ -72,6 +72,18 @@ async def seeded_user(async_engine: AsyncEngine) -> int:
     return uid
 
 
+@pytest.fixture
+async def second_user(async_engine: AsyncEngine) -> int:
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        user = User(spotify_user_id="memuser2", display_name="Memory User 2")
+        session.add(user)
+        await session.flush()
+        uid = user.id
+        await session.commit()
+    return uid
+
+
 # ── memory.get_profile ──────────────────────────────────────────────
 
 
@@ -333,7 +345,7 @@ def test_full_taste_workflow(client: TestClient, seeded_user: int) -> None:
     assert result["version"] == 0
 
     # 2. Create profile
-    client.post(
+    resp = client.post(
         "/mcp/call",
         json={
             "tool": "memory.update_profile",
@@ -345,9 +357,10 @@ def test_full_taste_workflow(client: TestClient, seeded_user: int) -> None:
             "reason": "Initial taste setup",
         },
     )
+    assert resp.json()["success"]
 
     # 3. Append a preference event
-    client.post(
+    resp = client.post(
         "/mcp/call",
         json={
             "tool": "memory.append_preference_event",
@@ -357,6 +370,7 @@ def test_full_taste_workflow(client: TestClient, seeded_user: int) -> None:
             "source": "user",
         },
     )
+    assert resp.json()["success"]
 
     # 4. Update profile with another patch
     resp = client.post(
@@ -385,10 +399,10 @@ def test_full_taste_workflow(client: TestClient, seeded_user: int) -> None:
 # ── User isolation ──────────────────────────────────────────────────
 
 
-def test_user_isolation(client: TestClient, seeded_user: int) -> None:
-    """User A's profile is not visible to user B."""
+def test_user_isolation(client: TestClient, seeded_user: int, second_user: int) -> None:
+    """User A's profile is not visible to user B (real second user)."""
     # Create profile for seeded_user
-    client.post(
+    resp = client.post(
         "/mcp/call",
         json={
             "tool": "memory.update_profile",
@@ -396,9 +410,17 @@ def test_user_isolation(client: TestClient, seeded_user: int) -> None:
             "patch": {"core_genres": ["metal"]},
         },
     )
+    assert resp.json()["success"]
 
-    # Try to get profile for a different user_id (99999)
-    resp = client.post("/mcp/call", json={"tool": "memory.get_profile", "user_id": 99999})
+    # Second user should have an empty profile, not seeded_user's data
+    resp = client.post("/mcp/call", json={"tool": "memory.get_profile", "user_id": second_user})
     result = resp.json()["result"]
+    assert result["user_id"] == second_user
     assert result["profile"] == {}
     assert result["version"] == 0
+
+    # Verify seeded_user's profile is still intact
+    resp = client.post("/mcp/call", json={"tool": "memory.get_profile", "user_id": seeded_user})
+    result = resp.json()["result"]
+    assert result["profile"] == {"core_genres": ["metal"]}
+    assert result["version"] == 1

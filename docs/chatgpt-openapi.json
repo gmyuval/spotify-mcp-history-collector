@@ -146,6 +146,7 @@
                   },
                   "timestamp": {
                     "type": "string",
+                    "format": "date-time",
                     "description": "For memory.append_preference_event: ISO datetime override (defaults to now)."
                   }
                 }

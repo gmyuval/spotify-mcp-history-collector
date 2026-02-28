@@ -270,8 +270,13 @@ Today, cross-session continuity is limited:
   "properties": {
     "user_id": { "$ref": "memory.common.schema.json#/$defs/UserId" },
     "profile": { "type": "object" },
-    "version": { "type": "integer", "minimum": 1 },
-    "updated_at": { "$ref": "memory.common.schema.json#/$defs/ISODateTime" }
+    "version": { "type": "integer", "minimum": 0 },
+    "updated_at": {
+      "anyOf": [
+        { "$ref": "memory.common.schema.json#/$defs/ISODateTime" },
+        { "type": "null" }
+      ]
+    }
   }
 }
 ```

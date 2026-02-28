@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.registry import registry
@@ -125,12 +126,17 @@ class MemoryToolHandlers:
         reason = args.get("reason", "")
         source = args.get("source", "assistant")
         create_if_missing = args.get("create_if_missing", True)
+        if not isinstance(create_if_missing, bool):
+            raise ValueError("create_if_missing must be a boolean")
 
         valid_sources = {"user", "assistant", "inferred"}
         if source not in valid_sources:
             raise ValueError(f"source must be one of: {', '.join(sorted(valid_sources))}")
 
-        profile = await session.get(TasteProfile, user_id)
+        # Lock the row to prevent concurrent read-modify-write races
+        stmt = select(TasteProfile).where(TasteProfile.user_id == user_id).with_for_update()
+        result = await session.execute(stmt)
+        profile = result.scalar_one_or_none()
 
         if profile is None:
             if not create_if_missing:
