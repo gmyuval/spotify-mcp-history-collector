@@ -28,7 +28,7 @@ class HistoryQueries:
         cutoff = HistoryQueries._cutoff(days)
         stmt = (
             select(
-                Artist.id.label("artist_id"),
+                func.min(Artist.id).label("artist_id"),
                 Artist.name.label("artist_name"),
                 func.count(Play.id).label("play_count"),
             )
@@ -37,7 +37,7 @@ class HistoryQueries:
             .join(TrackArtist, TrackArtist.track_id == Track.id)
             .join(Artist, TrackArtist.artist_id == Artist.id)
             .where(Play.user_id == user_id, Play.played_at >= cutoff)
-            .group_by(Artist.id, Artist.name)
+            .group_by(Artist.name)
             .order_by(func.count(Play.id).desc())
             .limit(limit)
         )
@@ -99,7 +99,7 @@ class HistoryQueries:
 
         # Unique artists requires a join
         artist_stmt = (
-            select(func.count(distinct(Artist.id)))
+            select(func.count(distinct(Artist.name)))
             .select_from(Play)
             .join(Track, Play.track_id == Track.id)
             .join(TrackArtist, TrackArtist.track_id == Track.id)
