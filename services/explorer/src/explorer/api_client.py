@@ -85,3 +85,22 @@ class ExplorerApiClient:
         """GET /api/me/playlists/{spotify_playlist_id}"""
         result: dict[str, Any] = await self._request("GET", f"/api/me/playlists/{spotify_playlist_id}", access_token)
         return result
+
+    async def exchange_google_email(self, email: str, internal_api_key: str) -> dict[str, Any] | None:
+        """POST /auth/exchange-google — exchange Google email for JWT tokens.
+
+        Returns dict with access_token, refresh_token, etc., or None on failure.
+        """
+        headers = {"X-Internal-API-Key": internal_api_key}
+        try:
+            resp = await self._client.post(
+                "/auth/exchange-google",
+                json={"email": email},
+                headers=headers,
+            )
+        except httpx.TransportError:
+            return None
+        if resp.status_code != 200:
+            return None
+        result: dict[str, Any] = resp.json()
+        return result

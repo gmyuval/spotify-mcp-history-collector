@@ -12,6 +12,9 @@ class ExplorerSettings(BaseSettings):
     API_PUBLIC_URL: str = "http://localhost:8000"
     EXPLORER_BASE_URL: str = "http://localhost:8002"
 
+    # Shared secret for internal API calls (exchange-google endpoint)
+    INTERNAL_API_KEY: str = ""
+
     model_config = {"env_prefix": ""}
 
 

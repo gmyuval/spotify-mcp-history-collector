@@ -21,7 +21,7 @@ def test_healthz(client: TestClient) -> None:
 def test_login_page(client: TestClient) -> None:
     response = client.get("/login", follow_redirects=False)
     assert response.status_code == 200
-    assert "Login with Spotify" in response.text
+    assert "Sign in with Google" in response.text
 
 
 def test_login_page_redirects_when_authenticated(client: TestClient) -> None:
@@ -32,18 +32,10 @@ def test_login_page_redirects_when_authenticated(client: TestClient) -> None:
     client.cookies.clear()
 
 
-def test_login_redirect(client: TestClient) -> None:
-    response = client.get("/login/redirect", follow_redirects=False)
-    assert response.status_code == 303
-    location = response.headers["location"]
-    assert "http://test-api:8000/auth/login" in location
-    assert "next=" in location
-
-
 def test_logout(client: TestClient) -> None:
     response = client.post("/logout", follow_redirects=False)
     assert response.status_code == 303
-    assert response.headers["location"] == "/login"
+    assert "/oauth2/sign_out" in response.headers["location"]
 
 
 # --- Dashboard ---

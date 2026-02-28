@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from explorer.api_client import ExplorerApiClient
+from explorer.middleware import GoogleAuthMiddleware
 from explorer.settings import get_settings
 
 
@@ -27,6 +28,7 @@ class ExplorerApp:
         self._setup_static_files()
         self._setup_templates()
         self._setup_routers()
+        self._setup_middleware()
 
     @staticmethod
     @asynccontextmanager
@@ -66,6 +68,9 @@ class ExplorerApp:
         async def health_check() -> dict[str, str]:
             """Health check endpoint."""
             return {"status": "healthy"}
+
+    def _setup_middleware(self) -> None:
+        self.app.add_middleware(GoogleAuthMiddleware)
 
 
 _application = ExplorerApp()
