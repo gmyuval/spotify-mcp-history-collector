@@ -25,6 +25,7 @@ def _test_settings() -> AppSettings:
         SPOTIFY_CLIENT_ID="test",
         SPOTIFY_CLIENT_SECRET="test",
         TOKEN_ENCRYPTION_KEY=TEST_FERNET_KEY,
+        RATE_LIMIT_MCP_PER_MINUTE=10000,
     )
 
 

@@ -48,7 +48,10 @@
                       "spotify.update_playlist",
                       "ops.sync_status",
                       "ops.latest_job_runs",
-                      "ops.latest_import_jobs"
+                      "ops.latest_import_jobs",
+                      "memory.get_profile",
+                      "memory.update_profile",
+                      "memory.append_preference_event"
                     ]
                   },
                   "user_id": {
@@ -114,6 +117,37 @@
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "List of Spotify track IDs. For spotify.add_tracks and spotify.remove_tracks (max 100)."
+                  },
+                  "patch": {
+                    "type": "object",
+                    "description": "For memory.update_profile: JSON merge-patch to apply (e.g. {core_genres: [...], playlist_rules: {...}})."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "For memory.update_profile: why this update was made."
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "For memory tools: who originated this — user, assistant, or inferred.",
+                    "enum": ["user", "assistant", "inferred"]
+                  },
+                  "create_if_missing": {
+                    "type": "boolean",
+                    "description": "For memory.update_profile: create profile if it doesn't exist (default true)."
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "For memory.append_preference_event: event type.",
+                    "enum": ["like", "dislike", "rule", "feedback", "note"]
+                  },
+                  "payload": {
+                    "type": "object",
+                    "description": "For memory.append_preference_event: event payload (e.g. {raw_text: '...', entities: [...]})."
+                  },
+                  "timestamp": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "For memory.append_preference_event: ISO datetime override (defaults to now)."
                   }
                 }
               }
