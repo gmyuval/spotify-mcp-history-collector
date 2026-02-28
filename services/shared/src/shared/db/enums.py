@@ -52,3 +52,21 @@ class TrackSource(enum.StrEnum):
 
     SPOTIFY_API = "spotify_api"
     IMPORT_ZIP = "import_zip"
+
+
+class PreferenceEventSource(enum.StrEnum):
+    """Who originated a preference event."""
+
+    USER = "user"
+    ASSISTANT = "assistant"
+    INFERRED = "inferred"
+
+
+class PreferenceEventType(enum.StrEnum):
+    """Type of preference event."""
+
+    LIKE = "like"
+    DISLIKE = "dislike"
+    RULE = "rule"
+    FEEDBACK = "feedback"
+    NOTE = "note"

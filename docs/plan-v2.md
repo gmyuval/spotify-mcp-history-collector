@@ -24,9 +24,11 @@ Additionally, there are **bugs to fix first**:
 | 3 | Per-User Spotify Credentials | **DONE** |
 | 4 | JWT User Authentication | **DONE** |
 | 5 | Admin UI for RBAC & User Management | **DONE** |
-| 6 | Public Data Exploration Frontend | **NEXT** |
-| 7 | ChatGPT Taste Inference Storage | Pending |
-| 8 | Data Exploration Features & Taste Profile UI | Pending |
+| 6 | Public Data Exploration Frontend | **DONE** |
+| 7 | MCP Memory: Taste Profile + Preference Events | **NEXT** |
+| 8 | MCP Memory: Playlist Ledger | Pending |
+| 9 | MCP Memory: Search, Export/Delete & ChatGPT Integration | Pending |
+| 10 | Explorer UI: Taste Profile & Playlist Ledger Pages | Pending |
 
 ---
 
@@ -417,129 +419,245 @@ services/explorer/
 
 ---
 
-## Phase 7 — PR: ChatGPT Taste Inference Storage
+## Phase 7 — PR: MCP Memory: Taste Profile + Preference Events
 
-**Goal:** Allow ChatGPT to store and retrieve its analysis/inferences about a user's music taste. ChatGPT can call an MCP tool to save a structured taste profile (genres, moods, descriptions, notable patterns), and retrieve it later to provide continuity across conversations.
+**Goal:** Persist user taste profiles with versioned patch/merge updates, plus an append-only preference event log. Introduces the `memory.*` namespace and standard response envelope per the [MCP Memory PRD](mcp_memory_prd.md).
 
-### New DB table (Alembic migration `006_taste_profiles`)
+### New DB tables (Alembic migration `006_memory_taste`)
 
-**`taste_profiles`**:
-- `id` (BigInt PK)
+**`taste_profiles`** — One profile per user, versioned JSONB:
+- `user_id` (BigInt FK → users, **PK** — one profile per user)
+- `profile_json` (JSONB) — normalized taste data (genres, rules, preferences)
+- `version` (Integer, starts at 1, incremented on each update)
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+
+**`preference_events`** — Append-only event log:
+- `event_id` (UUID PK, server-generated)
 - `user_id` (BigInt FK → users, indexed)
-- `profile_type` (String 50) — "summary" | "genre_breakdown" | "mood_profile" | "custom"
-- `title` (String 255) — e.g., "Overall Taste Summary", "January 2026 Mood"
-- `content` (Text) — free-form text or structured JSON written by ChatGPT
-- `metadata_json` (Text/JSON, nullable) — optional structured data (top genres list, scores, etc.)
-- `created_by` (String 50, default "chatgpt") — who created this entry
-- `created_at`, `updated_at`
-- Index: `(user_id, profile_type)`
+- `timestamp` (TIMESTAMPTZ, defaults to now)
+- `source` (VARCHAR — `user` | `assistant` | `inferred`)
+- `type` (VARCHAR — `like` | `dislike` | `rule` | `feedback` | `note`)
+- `payload_json` (JSONB)
+
+### New enums (`shared/db/enums.py`)
+
+- `PreferenceEventSource` — `user`, `assistant`, `inferred`
+- `PreferenceEventType` — `like`, `dislike`, `rule`, `feedback`, `note`
+
+### Standard response envelope (all `memory.*` tools)
+
+```json
+{"success": true, "result": {...}}
+{"success": false, "error": {"code": "NOT_FOUND", "message": "..."}}
+```
+
+Error codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `CONFLICT`, `INTERNAL`, `DB_ERROR`
 
 ### New MCP tools (3)
 
-**`taste.save_profile(user_id, profile_type, title, content, metadata?)`** — Store a taste inference:
-- ChatGPT calls this after analyzing listening data to persist its insights
-- Upserts by `(user_id, profile_type, title)` — updating replaces previous content
+**`memory.get_profile(user_id)`** — Returns current taste profile:
+- Returns `{user_id, profile, version, updated_at}` or empty profile `{}` if none exists yet
 
-**`taste.get_profiles(user_id, profile_type?)`** — Retrieve stored taste profiles:
-- Returns all profiles for user, optionally filtered by type
-- ChatGPT calls this at conversation start to recall previous analysis
+**`memory.update_profile(user_id, patch, reason?, source?, create_if_missing?)`** — Patch/merge update:
+- JSON merge-patch: shallow merge of `patch` into existing `profile_json`
+- Increments `version` on each update
+- `create_if_missing` (default true): creates profile if it doesn't exist
+- Also appends a preference event recording the `reason` for audit trail
 
-**`taste.delete_profile(user_id, profile_id)`** — Remove a stored profile
+**`memory.append_preference_event(user_id, type, payload, source?, timestamp?)`** — Append to event log:
+- Records explicit user feedback, rules, likes/dislikes
+- Returns `{event_id, user_id, timestamp}`
 
-### Files to modify
+### Files to create/modify
 
-**`services/shared/src/shared/db/models/taste.py`** (new) — TasteProfile model
-
-**`services/api/src/app/mcp/tools/taste_tools.py`** (new) — `TasteToolHandlers`:
-- `taste.save_profile` — validate + upsert
-- `taste.get_profiles` — query + return
-- `taste.delete_profile` — delete by id
-
-**`services/api/src/app/mcp/tools/__init__.py`** — Import taste tools
-
-**`docs/chatgpt-openapi.json`** — Add 3 new tools + params
-
-**`docs/chatgpt-gpt-setup.md`** — Update GPT instructions:
-- "At the start of a conversation, call taste.get_profiles to recall your previous analysis"
-- "After providing a taste analysis, call taste.save_profile to persist it for future conversations"
+**`services/shared/src/shared/db/models/memory.py`** (new) — TasteProfile, PreferenceEvent models
+**`services/shared/src/shared/db/models/__init__.py`** — Import new models
+**`services/shared/src/shared/db/enums.py`** — Add PreferenceEventSource, PreferenceEventType
+**`services/api/alembic/versions/006_memory_taste.py`** — Migration
+**`services/api/src/app/mcp/tools/memory_tools.py`** (new) — MemoryToolHandlers + envelope wrapper
+**`services/api/src/app/mcp/tools/__init__.py`** — Import memory tools
+**`docs/chatgpt-openapi.json`** — Add 3 new tools
 
 ### Example ChatGPT workflow
-1. User: "What kind of music do I listen to?"
-2. ChatGPT: calls `taste.get_profiles(user_id=1)` → finds previous summary from last week
-3. ChatGPT: calls `history.taste_summary(user_id=1, days=30)` → gets fresh data
-4. ChatGPT: compares, synthesizes, presents updated analysis
-5. ChatGPT: calls `taste.save_profile(user_id=1, profile_type="summary", title="Overall Taste Summary", content="...")` → persists updated analysis
+1. Session start: `memory.get_profile(user_id=1)` → recall previous profile
+2. User says "I like upbeat symphonic metal with breathers":
+   - `memory.append_preference_event(user_id=1, type="rule", payload={"raw_text": "upbeat symphonic metal with breathers"}, source="user")`
+   - `memory.update_profile(user_id=1, patch={"core_genres": ["symphonic metal"], "energy_preferences": {"default": "upbeat", "contemplative_breaks": true}}, reason="User stated genre + energy preference")`
 
 ### Tests
-- Save/retrieve/update/delete profile tests
-- MCP tool integration tests
-- Upsert behavior test (same type+title replaces content)
+- Profile create (first update), get, patch/merge, version increment
+- Preference event append + chronological retrieval
+- Response envelope format (success + error cases)
+- User isolation (can't read another user's profile)
+- `create_if_missing=false` returns NOT_FOUND
 
 ### Verification
-- Ask ChatGPT to analyze taste → it saves a profile
-- Start new conversation → ChatGPT retrieves previous profile
-- Verify profiles visible in explorer frontend (Phase 8)
+- `POST /mcp/call {"tool": "memory.update_profile", ...}` creates profile
+- `POST /mcp/call {"tool": "memory.get_profile", ...}` returns it
+- Profile version increments on each update
+- Preference events accumulate, ordered by timestamp
 
 ---
 
-## Phase 8 — PR: Data Exploration Features & Taste Profile UI
+## Phase 8 — PR: MCP Memory: Playlist Ledger
 
-**Goal:** Rich exploration features in the public frontend: listening history timeline, playlist management, ChatGPT-created playlist tracking.
+**Goal:** Track all assistant-created/edited playlists with full event history and snapshot-based reconstruction. The ledger is the canonical record even when Spotify read-back is blocked.
 
-### Pages & features
+### New DB tables (Alembic migration `007_playlist_ledger`)
 
-**Dashboard:**
-- Total plays, hours listened, unique tracks/artists
-- Top 5 artists/tracks (last 30 days)
-- Listening activity chart (plays per day, last 90 days)
-- Active playlists summary
+**`memory_playlists`** — Playlist metadata:
+- `playlist_id` (VARCHAR PK — Spotify playlist ID)
+- `user_id` (BigInt FK → users, indexed)
+- `name`, `description` (Text)
+- `intent_tags` (JSONB, default `[]`) — e.g., `["upbeat", "symphonic metal"]`
+- `seed_context` (JSONB, default `{}`) — what inspired the playlist
+- `latest_snapshot_id` (UUID FK → playlist_snapshots, nullable)
+- `created_at`, `updated_at` (TIMESTAMPTZ)
 
-**History Browser:**
-- Paginated table with search/filter (date range, artist, track name)
-- Sortable columns (date, track, artist, duration)
-- HTMX infinite scroll or pagination
-- Click track/artist → detail page
+**`playlist_snapshots`** — Point-in-time track lists:
+- `snapshot_id` (UUID PK)
+- `playlist_id` (VARCHAR FK → memory_playlists, indexed)
+- `created_at` (TIMESTAMPTZ)
+- `track_ids` (JSONB) — ordered array of Spotify track IDs
+- `source` (VARCHAR — `create` | `periodic` | `manual`)
 
-**Playlist Explorer:**
-- Grid/list of user's playlists (cached from Phase 1)
-- Filter: all / created by user / created by ChatGPT
-- Playlist detail: track listing, total duration, creation source
-- Track ChatGPT-created playlists via `created_via` field on `cached_playlists`
+**`playlist_events`** — Append-only mutation ledger:
+- `event_id` (UUID PK)
+- `playlist_id` (VARCHAR FK → memory_playlists, indexed)
+- `user_id` (BigInt FK → users)
+- `timestamp` (TIMESTAMPTZ)
+- `type` (VARCHAR — `ADD_TRACKS` | `REMOVE_TRACKS` | `REORDER` | `UPDATE_META`)
+- `payload_json` (JSONB) — type-specific payload
+- `client_event_id` (UUID, nullable) — for idempotency
 
-**Track Detail Page:**
-- Track metadata (album, artists, duration, popularity)
-- User's play count + last played
-- Audio features visualization (if enriched) — radar chart for danceability/energy/etc.
+### New enums
 
-**Artist Detail Page:**
-- Artist metadata (genres, popularity)
-- User's top tracks by this artist
-- Play count over time
+- `PlaylistSnapshotSource` — `create`, `periodic`, `manual`
+- `PlaylistEventType` — `ADD_TRACKS`, `REMOVE_TRACKS`, `REORDER`, `UPDATE_META`
 
-### DB changes (Alembic migration `007_playlist_source_tracking`)
+### New MCP tools (5)
 
-**Add to `cached_playlists`:**
-- `created_via` (String 50, nullable) — "chatgpt" | "user" | "external" | null
-- Set by `create_playlist` MCP tool handler when ChatGPT creates a playlist
+**`memory.log_playlist_create(user_id, playlist_id, name, track_ids, description?, intent_tags?, seed_context?, idempotency_key?)`**
+- Creates playlist record + initial snapshot
+- Idempotent via `idempotency_key` (returns existing record if already logged)
 
-### Files to modify
+**`memory.log_playlist_mutation(user_id, playlist_id, type, payload, client_event_id?)`**
+- Appends event to ledger
+- Auto-creates snapshot every N=10 mutations for fast reconstruction
+- Returns `{event_id, playlist_id, timestamp, new_snapshot_id?}`
 
-- Explorer templates (all pages above)
-- Explorer routes (data fetching + rendering)
-- API user-facing endpoints (history, playlist, track detail queries)
-- `playlist_tools.py` — `create_playlist` handler: set `created_via="chatgpt"` in cache
-- **Taste profile page** in explorer — show ChatGPT's stored analysis of user's taste
-- API endpoint `GET /api/me/taste-profiles` — returns stored taste profiles for display
+**`memory.get_playlists(user_id, limit?, cursor?)`**
+- List tracked playlists with pagination
+- Returns summary: name, created_at, updated_at, intent_tags, track_count
+
+**`memory.get_playlist(user_id, playlist_id, include_events_limit?)`**
+- Full playlist detail: metadata + latest snapshot + recent events
+
+**`memory.reconstruct_playlist(user_id, playlist_id, at_time?)`**
+- Reconstructs track list from nearest snapshot + applying subsequent events
+- Used when Spotify read-back fails (403, missing scopes)
+- Returns `{playlist_id, as_of, track_ids, reconstruction: {used_snapshot_id, applied_event_count}}`
+
+### Snapshot compaction policy
+- Snapshot at create time
+- Auto-snapshot every 10 mutations
+- `log_playlist_mutation` returns `new_snapshot_id` when compaction triggers
 
 ### Tests
-- API endpoint tests for each data exploration query
-- Frontend route tests
-- ChatGPT playlist tracking test
+- Playlist create + get + list
+- Mutation logging (ADD_TRACKS, REMOVE_TRACKS, REORDER, UPDATE_META)
+- Reconstruction from snapshot + events
+- Snapshot compaction after N mutations
+- Idempotency (duplicate create/mutation)
+- User isolation
 
 ### Verification
-- Browse full listening history with filters
-- View ChatGPT-created playlists separately
-- Track detail shows play count + audio features chart
+- Create playlist via `spotify.create_playlist` → log with `memory.log_playlist_create`
+- Add/remove tracks → log mutations → reconstruct matches expected state
+- After 10 mutations, auto-snapshot created
+
+---
+
+## Phase 9 — PR: MCP Memory: Search, Export/Delete & ChatGPT Integration
+
+**Goal:** Cross-memory search, data portability (export + delete), and full ChatGPT GPT integration with tool-calling playbook.
+
+### New MCP tools (3)
+
+**`memory.search(user_id, query, limit?)`** — Keyword search across memory:
+- Searches playlist names/descriptions/tags, preference events, profile notes
+- Returns ranked results: `[{kind, id, score, snippet, metadata}]`
+- Kind: `playlist` | `preference_event` | `profile`
+- Uses PostgreSQL `ILIKE`/`ts_vector` for text matching
+
+**`memory.export_user_data(user_id)`** — Export all memory:
+- Returns `{user_id, exported_at, data: {profile, preference_events, playlists, snapshots, events}}`
+- Full JSON dump of all stored memory for the user
+
+**`memory.delete_user_data(user_id, confirm=true)`** — Hard delete:
+- Deletes all taste profile, preference events, playlists, snapshots, events
+- Requires `confirm=true` (safety guard)
+- Returns `{user_id, deleted_at, deleted: true}`
+
+### ChatGPT integration updates
+
+**`docs/chatgpt-openapi.json`** — Add all 11 `memory.*` tools with flat param schemas
+
+**`docs/chatgpt-gpt-setup.md`** — Update with full tool-calling playbook (from PRD §10):
+- Session bootstrap: `memory.get_profile` + `memory.get_playlists`
+- Preference handling: append event + update profile
+- Playlist creation: always log with `memory.log_playlist_create` after `spotify.create_playlist`
+- Playlist editing: log mutations alongside Spotify API calls
+- Guardrails: artist over-weighting rules from profile
+- Spotify read-back failure: use `memory.reconstruct_playlist`
+
+### Tests
+- Search across profiles, events, playlists
+- Export returns complete data
+- Delete removes all data, subsequent get returns empty
+- ChatGPT OpenAPI schema validates
+
+### Verification
+- `memory.search("symphonic metal")` finds relevant playlists and events
+- `memory.export_user_data` returns complete JSON
+- `memory.delete_user_data` removes everything; profile/playlists are gone
+
+---
+
+## Phase 10 — PR: Explorer UI: Taste Profile & Playlist Ledger Pages
+
+**Goal:** Show MCP memory data in the explorer frontend so users can see their taste profile, preference history, and assistant-tracked playlists.
+
+### API endpoints (add to api service)
+
+- `GET /api/me/taste-profile` — Returns current profile + recent preference events
+- `GET /api/me/memory-playlists` — List playlists from memory ledger (not Spotify cache)
+- `GET /api/me/memory-playlists/{id}` — Playlist detail with events + current track list
+
+### Explorer pages
+
+**Taste Profile page** (`/profile/taste`):
+- Display normalized taste profile (genres, rules, energy preferences)
+- Preference event timeline (chronological, filterable by type)
+- "What ChatGPT knows about your taste" framing
+
+**Memory Playlists page** (`/playlists/memory`):
+- List of assistant-tracked playlists with intent tags
+- Click → detail with track list, mutation history, seed context
+- "Playlists created by your assistant" framing
+
+**Dashboard integration:**
+- Card showing taste profile summary (top genres, key rules)
+- Card showing recent assistant playlists
+
+### Tests
+- Explorer route tests (mock API client)
+- API endpoint tests for memory data
+
+### Verification
+- Profile page shows taste data + event history
+- Memory playlists page shows tracked playlists
+- Dashboard cards link to detail pages
 - Responsive on mobile
 
 ---
@@ -547,20 +665,20 @@ services/explorer/
 ## Implementation Order & Dependencies
 
 ```text
-Phase 0 (error fix)           ✅ DONE
-Phase 1 (caching)             ✅ DONE
-Phase 2 (RBAC schema)         ✅ DONE
-Phase 3 (per-user creds)      ✅ DONE
-Phase 4 (JWT auth)            ✅ DONE
-Phase 5 (admin RBAC UI)       ✅ DONE
-Phase 6 (explorer foundation) ← NEXT — depends on Phases 1, 4 (both done)
-Phase 7 (taste storage)       ← depends on Phase 1 (done)
-Phase 8 (explorer features)   ← depends on Phases 6, 7
+Phase 0  (error fix)                       ✅ DONE
+Phase 1  (caching)                         ✅ DONE
+Phase 2  (RBAC schema)                     ✅ DONE
+Phase 3  (per-user creds)                  ✅ DONE
+Phase 4  (JWT auth)                        ✅ DONE
+Phase 5  (admin RBAC UI)                   ✅ DONE
+Phase 6  (explorer foundation)             ✅ DONE
+Phase 7  (taste profile + events)          ← NEXT
+Phase 8  (playlist ledger)                 ← depends on Phase 7 (shared envelope + patterns)
+Phase 9  (search, export/delete, ChatGPT)  ← depends on Phases 7, 8
+Phase 10 (explorer UI for memory)          ← depends on Phases 7, 8, 9
 ```
 
-Remaining order: **6 → 7 → 8**
-
-Phases 6 and 7 can be done in parallel since they're independent.
+Remaining order: **7 → 8 → 9 → 10**
 
 ---
 
@@ -573,5 +691,7 @@ Phases 6 and 7 can be done in parallel since they're independent.
 5. **JWT for user sessions** — Stateless auth that works across services. HTTP-only cookies for browser security.
 6. **Per-user Spotify credentials** — Optional override at user level. System defaults used when not set. Credentials encrypted at rest (same pattern as refresh tokens).
 7. **Separate explorer service** — Clean separation: admin frontend for ops, explorer for end users. Different auth models, different audiences.
-8. **ChatGPT playlist tracking** — Tag playlists with `created_via` at creation time. Simple, queryable, enables the "show me what ChatGPT created" feature.
-9. **Taste profile storage** — Free-form text + optional structured JSON. ChatGPT decides what to store (summaries, genre breakdowns, mood profiles). Upsert by `(user_id, profile_type, title)` keeps profiles fresh without duplicating. Profiles visible in the explorer frontend so users can see what ChatGPT thinks of their taste.
+8. **`memory.*` namespace** — All memory tools under one namespace per the MCP Memory PRD. Standard response envelope (`{success, result?, error?}`) for consistency.
+9. **Versioned taste profile** — Single JSONB profile per user with version counter. JSON merge-patch for updates. Append-only preference events capture raw feedback; profile captures normalized rules.
+10. **Playlist ledger with snapshots** — Snapshot + event sourcing pattern. Snapshots at create + every N mutations for fast reconstruction. Ledger is canonical record even when Spotify read-back fails.
+11. **Idempotency** — `idempotency_key` for playlist create, `client_event_id` for mutations. Prevents duplicates from retries.
