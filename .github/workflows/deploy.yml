@@ -133,10 +133,13 @@ jobs:
               exit 1
             fi
 
-            echo "=== Restarting Caddy to apply config ==="
-            docker compose --env-file .env.prod -f docker-compose.prod.yml restart caddy
-            echo "Waiting for Caddy to start..."
-            sleep 5
+            echo "=== Recreating Caddy to apply config + env vars ==="
+            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-deps caddy
+            echo "Waiting for Caddy to obtain TLS certificate..."
+            sleep 10
+
+            echo "=== Caddy logs (last 20 lines) ==="
+            docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=20 caddy
 
             echo "=== Waiting for Explorer health ==="
             for i in $(seq 1 30); do
