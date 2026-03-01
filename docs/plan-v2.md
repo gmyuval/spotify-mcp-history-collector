@@ -26,8 +26,8 @@ Additionally, there are **bugs to fix first**:
 | 5 | Admin UI for RBAC & User Management | **DONE** |
 | 6 | Public Data Exploration Frontend | **DONE** |
 | 7 | MCP Memory: Taste Profile + Preference Events | **DONE** |
-| 8 | Explorer UI: Taste Profile Display + Management | **NEXT** |
-| 9 | MCP Memory: Playlist Ledger | Pending |
+| 8 | Explorer UI: Taste Profile Display + Management | **DONE** |
+| 9 | MCP Memory: Playlist Ledger | **NEXT** |
 | 10 | MCP Memory: Search, Export/Delete & ChatGPT Integration | Pending |
 | 11 | Explorer UI: Playlist Ledger Pages | Pending |
 
@@ -500,11 +500,50 @@ Error codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `CONFLICT`, `INTERNAL`, `DB_ERROR`
 
 ---
 
-## Phase 8 — PR: MCP Memory: Playlist Ledger
+## Phase 8 — ~~PR: Explorer UI: Taste Profile Display + Management~~ ✅ DONE
+
+**Goal:** Give users visibility and control over their AI-curated taste profile through the explorer UI. Also adds a `memory.clear_profile` MCP tool for ChatGPT to reset profiles on request.
+
+Detailed plan: [`docs/phase8-taste-ui-plan.md`](phase8-taste-ui-plan.md)
+
+### Summary of what was implemented
+
+**New MCP tool:** `memory.clear_profile(user_id, clear_events?)` — deletes the TasteProfile row (resets to v0), optionally clears all PreferenceEvent rows.
+
+**New API endpoints** (gated by JWT + `own_data.view`):
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/me/taste-profile` | Get taste profile + recent preference events |
+| `PATCH` | `/api/me/taste-profile` | Update profile via merge-patch |
+| `DELETE` | `/api/me/taste-profile` | Clear profile (reset to v0) |
+| `GET` | `/api/me/preference-events` | Paginated preference event history |
+
+**New explorer pages:**
+- `/taste` — Full taste profile page with genre/avoid tag management, energy preferences, playlist rules, and "Other Preferences" catch-all
+- `/taste/update` (POST) — Add/remove/set profile fields
+- `/taste/clear` (POST) — Clear entire profile with modal confirmation
+- `/taste/partials/events` — HTMX partial for paginated preference event history
+
+**Dashboard integration:** Taste summary card on dashboard showing top genres (or "No taste profile yet") with link to `/taste`.
+
+**ChatGPT updates:** `memory.clear_profile` added to OpenAPI schema and GPT instructions with usage guidance ("forget everything", "reset my profile", etc.).
+
+### Files created/modified
+
+See [`docs/phase8-taste-ui-plan.md`](phase8-taste-ui-plan.md) for the full file list. Key new files:
+- `services/explorer/src/explorer/routes/taste.py`
+- `services/explorer/src/explorer/templates/taste.html`
+- `services/explorer/src/explorer/templates/partials/_taste_events.html`
+- `services/api/tests/test_explorer/test_taste_endpoints.py`
+
+---
+
+## Phase 9 — PR: MCP Memory: Playlist Ledger
 
 **Goal:** Track all assistant-created/edited playlists with full event history and snapshot-based reconstruction. The ledger is the canonical record even when Spotify read-back is blocked.
 
-### New DB tables (Alembic migration `007_playlist_ledger`)
+### New DB tables (Alembic migration `007_playlist_ledger` — TBD)
 
 **`memory_playlists`** — Playlist metadata:
 - `playlist_id` (VARCHAR PK — Spotify playlist ID)
@@ -579,7 +618,7 @@ Error codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `CONFLICT`, `INTERNAL`, `DB_ERROR`
 
 ---
 
-## Phase 9 — PR: MCP Memory: Search, Export/Delete & ChatGPT Integration
+## Phase 10 — PR: MCP Memory: Search, Export/Delete & ChatGPT Integration
 
 **Goal:** Cross-memory search, data portability (export + delete), and full ChatGPT GPT integration with tool-calling playbook.
 
@@ -602,7 +641,7 @@ Error codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `CONFLICT`, `INTERNAL`, `DB_ERROR`
 
 ### ChatGPT integration updates
 
-**`docs/chatgpt-openapi.json`** — Add all 11 `memory.*` tools with flat param schemas
+**`docs/chatgpt-openapi.json`** — Add remaining `memory.*` tools (search, export, delete) with flat param schemas
 
 **`docs/chatgpt-gpt-setup.md`** — Update with full tool-calling playbook (from PRD §10):
 - Session bootstrap: `memory.get_profile` + `memory.get_playlists`
@@ -625,22 +664,18 @@ Error codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `CONFLICT`, `INTERNAL`, `DB_ERROR`
 
 ---
 
-## Phase 10 — PR: Explorer UI: Taste Profile & Playlist Ledger Pages
+## Phase 11 — PR: Explorer UI: Playlist Ledger Pages
 
-**Goal:** Show MCP memory data in the explorer frontend so users can see their taste profile, preference history, and assistant-tracked playlists.
+**Goal:** Show assistant-tracked playlists in the explorer frontend so users can see playlists created/edited by their AI assistant, with mutation history and track lists.
+
+> **Note:** The taste profile UI was completed in Phase 8. This phase focuses solely on the playlist ledger UI.
 
 ### API endpoints (add to api service)
 
-- `GET /api/me/taste-profile` — Returns current profile + recent preference events
 - `GET /api/me/memory-playlists` — List playlists from memory ledger (not Spotify cache)
 - `GET /api/me/memory-playlists/{id}` — Playlist detail with events + current track list
 
 ### Explorer pages
-
-**Taste Profile page** (`/profile/taste`):
-- Display normalized taste profile (genres, rules, energy preferences)
-- Preference event timeline (chronological, filterable by type)
-- "What ChatGPT knows about your taste" framing
 
 **Memory Playlists page** (`/playlists/memory`):
 - List of assistant-tracked playlists with intent tags
@@ -648,17 +683,15 @@ Error codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `CONFLICT`, `INTERNAL`, `DB_ERROR`
 - "Playlists created by your assistant" framing
 
 **Dashboard integration:**
-- Card showing taste profile summary (top genres, key rules)
-- Card showing recent assistant playlists
+- Card showing recent assistant playlists (taste profile card already done in Phase 8)
 
 ### Tests
 - Explorer route tests (mock API client)
-- API endpoint tests for memory data
+- API endpoint tests for memory playlist data
 
 ### Verification
-- Profile page shows taste data + event history
 - Memory playlists page shows tracked playlists
-- Dashboard cards link to detail pages
+- Dashboard card links to detail page
 - Responsive on mobile
 
 ---
@@ -666,20 +699,21 @@ Error codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `CONFLICT`, `INTERNAL`, `DB_ERROR`
 ## Implementation Order & Dependencies
 
 ```text
-Phase 0  (error fix)                       ✅ DONE
-Phase 1  (caching)                         ✅ DONE
-Phase 2  (RBAC schema)                     ✅ DONE
-Phase 3  (per-user creds)                  ✅ DONE
-Phase 4  (JWT auth)                        ✅ DONE
-Phase 5  (admin RBAC UI)                   ✅ DONE
-Phase 6  (explorer foundation)             ✅ DONE
-Phase 7  (taste profile + events)          ← NEXT
-Phase 8  (playlist ledger)                 ← depends on Phase 7 (shared envelope + patterns)
-Phase 9  (search, export/delete, ChatGPT)  ← depends on Phases 7, 8
-Phase 10 (explorer UI for memory)          ← depends on Phases 7, 8, 9
+Phase 0  (error fix)                        ✅ DONE
+Phase 1  (caching)                          ✅ DONE
+Phase 2  (RBAC schema)                      ✅ DONE
+Phase 3  (per-user creds)                   ✅ DONE
+Phase 4  (JWT auth)                         ✅ DONE
+Phase 5  (admin RBAC UI)                    ✅ DONE
+Phase 6  (explorer foundation)              ✅ DONE
+Phase 7  (taste profile + events)           ✅ DONE
+Phase 8  (explorer taste UI)                ✅ DONE
+Phase 9  (playlist ledger)                  ← NEXT (depends on Phase 7 patterns)
+Phase 10 (search, export/delete, ChatGPT)   ← depends on Phases 7, 9
+Phase 11 (explorer UI: playlist ledger)     ← depends on Phases 9, 10
 ```
 
-Remaining order: **7 → 8 → 9 → 10**
+Remaining order: **9 → 10 → 11**
 
 ---
 
