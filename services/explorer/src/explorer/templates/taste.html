@@ -45,7 +45,7 @@
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <strong>Core Genres</strong>
-        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#addGenreSection">+</button>
+        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#addGenreSection" aria-label="Add core genre">+</button>
       </div>
       <div class="card-body">
         {% if profile.core_genres %}
@@ -57,7 +57,7 @@
               <input type="hidden" name="action" value="remove">
               <input type="hidden" name="field" value="core_genres">
               <input type="hidden" name="value" value="{{ genre }}">
-              <button type="submit" class="taste-tag-remove" title="Remove">&times;</button>
+              <button type="submit" class="taste-tag-remove" title="Remove" aria-label="Remove {{ genre }}">&times;</button>
             </form>
           </span>
           {% endfor %}
@@ -82,7 +82,7 @@
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <strong>Avoid</strong>
-        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#addAvoidSection">+</button>
+        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#addAvoidSection" aria-label="Add avoid item">+</button>
       </div>
       <div class="card-body">
         {% if profile.avoid %}
@@ -94,7 +94,7 @@
               <input type="hidden" name="action" value="remove">
               <input type="hidden" name="field" value="avoid">
               <input type="hidden" name="value" value="{{ item }}">
-              <button type="submit" class="taste-tag-remove" title="Remove">&times;</button>
+              <button type="submit" class="taste-tag-remove" title="Remove" aria-label="Remove {{ item }}">&times;</button>
             </form>
           </span>
           {% endfor %}
@@ -204,7 +204,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Clear Taste Profile</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <p>This will permanently delete your taste profile. Your AI assistant will start fresh next time.</p>

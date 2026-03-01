@@ -175,6 +175,7 @@ Layout:
 ## Files to Create/Modify
 
 ### New Files
+
 | File | Purpose |
 |------|---------|
 | `services/explorer/src/explorer/routes/taste.py` | Taste profile route handler |
@@ -183,6 +184,7 @@ Layout:
 | `services/api/tests/test_explorer/test_taste_endpoints.py` | API endpoint tests |
 
 ### Modified Files
+
 | File | Change |
 |------|--------|
 | `services/api/src/app/mcp/tools/memory_tools.py` | Add `memory.clear_profile` tool |

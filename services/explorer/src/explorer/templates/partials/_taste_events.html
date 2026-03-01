@@ -44,14 +44,44 @@
   </tbody>
 </table>
 
-{% if events.total > events.offset + events.limit %}
-<div class="text-center py-3">
-  <button class="btn btn-outline-secondary btn-sm"
-          hx-get="/taste/partials/events?limit={{ events.limit }}&offset={{ events.offset + events.limit }}"
-          hx-target="#events-container"
-          hx-swap="innerHTML">
-    Load more ({{ events.total - events.offset - events.limit }} remaining)
-  </button>
+{% if events.total > events.limit %}
+{% set total_pages = ((events.total - 1) // events.limit) + 1 %}
+{% set current_page = (events.offset // events.limit) + 1 %}
+<div class="py-3">
+  <nav>
+    <ul class="pagination pagination-sm justify-content-center mb-0">
+      <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">
+        <a class="page-link"
+           hx-get="/taste/partials/events?limit={{ events.limit }}&offset={{ (current_page - 2) * events.limit }}"
+           hx-target="#events-container"
+           hx-swap="innerHTML"
+           href="#">Prev</a>
+      </li>
+      {% for p in range(1, total_pages + 1) %}
+      {% if p <= 3 or p > total_pages - 2 or (p >= current_page - 1 and p <= current_page + 1) %}
+      <li class="page-item {% if p == current_page %}active{% endif %}">
+        <a class="page-link"
+           hx-get="/taste/partials/events?limit={{ events.limit }}&offset={{ (p - 1) * events.limit }}"
+           hx-target="#events-container"
+           hx-swap="innerHTML"
+           href="#">{{ p }}</a>
+      </li>
+      {% elif p == 4 or p == total_pages - 2 %}
+      <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+      {% endfor %}
+      <li class="page-item {% if current_page >= total_pages %}disabled{% endif %}">
+        <a class="page-link"
+           hx-get="/taste/partials/events?limit={{ events.limit }}&offset={{ current_page * events.limit }}"
+           hx-target="#events-container"
+           hx-swap="innerHTML"
+           href="#">Next</a>
+      </li>
+    </ul>
+  </nav>
+  <p class="text-center text-muted mt-2 mb-0">
+    <small>Showing {{ events.offset + 1 }}–{{ [events.offset + events.limit, events.total] | min }} of {{ events.total }}</small>
+  </p>
 </div>
 {% endif %}
 

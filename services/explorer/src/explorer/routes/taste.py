@@ -71,7 +71,7 @@ class TasteRouter:
                 taste_data = await api.get_taste_profile(token)
                 profile = taste_data.get("profile", {}).get("profile", {})
             except ApiError:
-                profile = {}
+                return RedirectResponse(url="/taste", status_code=303)  # type: ignore[return-value]
             current_list: list[str] = profile.get(field, [])
             if isinstance(current_list, list) and value not in current_list:
                 patch[field] = [*current_list, value]
@@ -82,7 +82,7 @@ class TasteRouter:
                 taste_data = await api.get_taste_profile(token)
                 profile = taste_data.get("profile", {}).get("profile", {})
             except ApiError:
-                profile = {}
+                return RedirectResponse(url="/taste", status_code=303)  # type: ignore[return-value]
             current_list = profile.get(field, [])
             if isinstance(current_list, list) and value in current_list:
                 patch[field] = [item for item in current_list if item != value]
