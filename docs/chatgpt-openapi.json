@@ -119,8 +119,8 @@
                     "description": "List of Spotify track IDs. For spotify.add_tracks and spotify.remove_tracks (max 100)."
                   },
                   "patch": {
-                    "type": "object",
-                    "description": "For memory.update_profile: JSON merge-patch to apply (e.g. {core_genres: [...], playlist_rules: {...}})."
+                    "type": "string",
+                    "description": "For memory.update_profile: JSON merge-patch as a JSON string (e.g. \"{\\\"core_genres\\\": [\\\"metal\\\"], \\\"playlist_rules\\\": {}}\")."
                   },
                   "reason": {
                     "type": "string",
@@ -135,14 +135,14 @@
                     "type": "boolean",
                     "description": "For memory.update_profile: create profile if it doesn't exist (default true)."
                   },
-                  "type": {
+                  "event_type": {
                     "type": "string",
                     "description": "For memory.append_preference_event: event type.",
                     "enum": ["like", "dislike", "rule", "feedback", "note"]
                   },
                   "payload": {
-                    "type": "object",
-                    "description": "For memory.append_preference_event: event payload (e.g. {raw_text: '...', entities: [...]})."
+                    "type": "string",
+                    "description": "For memory.append_preference_event: event payload as a JSON string (e.g. \"{\\\"raw_text\\\": \\\"I like metal\\\"}\")."
                   },
                   "timestamp": {
                     "type": "string",
