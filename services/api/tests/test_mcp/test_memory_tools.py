@@ -489,3 +489,147 @@ def test_user_isolation(client: TestClient, seeded_user: int, second_user: int) 
     result = resp.json()["result"]
     assert result["profile"] == {"core_genres": ["metal"]}
     assert result["version"] == 1
+
+
+# ── memory.clear_profile ──────────────────────────────────────────
+
+
+def test_clear_profile_resets_to_version_zero(client: TestClient, seeded_user: int) -> None:
+    """Clear profile deletes the row, subsequent get returns version 0."""
+    # Create a profile first
+    client.post(
+        "/mcp/call",
+        json={"tool": "memory.update_profile", "user_id": seeded_user, "patch": {"core_genres": ["metal"]}},
+    )
+
+    # Clear it
+    resp = client.post("/mcp/call", json={"tool": "memory.clear_profile", "user_id": seeded_user})
+    data = resp.json()
+    assert data["success"]
+    assert data["result"]["cleared"] is True
+    assert data["result"]["events_cleared"] is False
+
+    # Verify it's gone
+    resp = client.post("/mcp/call", json={"tool": "memory.get_profile", "user_id": seeded_user})
+    result = resp.json()["result"]
+    assert result["version"] == 0
+    assert result["profile"] == {}
+
+
+def test_clear_profile_with_events(client: TestClient, seeded_user: int) -> None:
+    """clear_events=true also deletes preference events."""
+    # Create a profile and some events
+    client.post(
+        "/mcp/call",
+        json={"tool": "memory.update_profile", "user_id": seeded_user, "patch": {"mood": "dark"}, "reason": "test"},
+    )
+    client.post(
+        "/mcp/call",
+        json={
+            "tool": "memory.append_preference_event",
+            "user_id": seeded_user,
+            "type": "like",
+            "payload": {"raw_text": "I like metal"},
+        },
+    )
+
+    # Clear with events
+    resp = client.post(
+        "/mcp/call",
+        json={"tool": "memory.clear_profile", "user_id": seeded_user, "clear_events": True},
+    )
+    data = resp.json()
+    assert data["success"]
+    assert data["result"]["cleared"] is True
+    assert data["result"]["events_cleared"] is True
+
+
+def test_clear_profile_without_events_keeps_events(client: TestClient, seeded_user: int) -> None:
+    """clear_events=false (default) keeps preference events intact."""
+    # Create profile + event
+    client.post(
+        "/mcp/call",
+        json={"tool": "memory.update_profile", "user_id": seeded_user, "patch": {"mood": "dark"}},
+    )
+    client.post(
+        "/mcp/call",
+        json={
+            "tool": "memory.append_preference_event",
+            "user_id": seeded_user,
+            "type": "note",
+            "payload": {"raw_text": "test event"},
+        },
+    )
+
+    # Clear profile only (default clear_events=false)
+    resp = client.post("/mcp/call", json={"tool": "memory.clear_profile", "user_id": seeded_user})
+    assert resp.json()["success"]
+
+    # Profile is gone
+    resp = client.post("/mcp/call", json={"tool": "memory.get_profile", "user_id": seeded_user})
+    assert resp.json()["result"]["version"] == 0
+
+    # But we can still create a new profile (events weren't deleted)
+    resp = client.post(
+        "/mcp/call",
+        json={"tool": "memory.update_profile", "user_id": seeded_user, "patch": {"new_key": "value"}},
+    )
+    assert resp.json()["success"]
+    assert resp.json()["result"]["version"] == 1
+
+
+def test_clear_profile_no_existing_profile(client: TestClient, seeded_user: int) -> None:
+    """Clearing a non-existent profile succeeds silently."""
+    resp = client.post("/mcp/call", json={"tool": "memory.clear_profile", "user_id": seeded_user})
+    data = resp.json()
+    assert data["success"]
+    assert data["result"]["cleared"] is True
+
+
+def test_clear_profile_invalid_user_id(client: TestClient) -> None:
+    """Invalid user_id returns error."""
+    resp = client.post("/mcp/call", json={"tool": "memory.clear_profile", "user_id": -1})
+    data = resp.json()
+    assert not data["success"]
+    assert "user_id must be a positive integer" in data["error"]
+
+
+def test_clear_profile_invalid_clear_events(client: TestClient, seeded_user: int) -> None:
+    """Non-boolean clear_events returns error."""
+    resp = client.post(
+        "/mcp/call",
+        json={"tool": "memory.clear_profile", "user_id": seeded_user, "clear_events": "yes"},
+    )
+    data = resp.json()
+    assert not data["success"]
+    assert "clear_events must be a boolean" in data["error"]
+
+
+def test_clear_and_recreate_profile(client: TestClient, seeded_user: int) -> None:
+    """Full workflow: create, clear, recreate — version resets to 1."""
+    # Create at version 1
+    client.post(
+        "/mcp/call",
+        json={"tool": "memory.update_profile", "user_id": seeded_user, "patch": {"core_genres": ["metal"]}},
+    )
+    # Update to version 2
+    client.post(
+        "/mcp/call",
+        json={"tool": "memory.update_profile", "user_id": seeded_user, "patch": {"mood": "dark"}},
+    )
+    resp = client.post("/mcp/call", json={"tool": "memory.get_profile", "user_id": seeded_user})
+    assert resp.json()["result"]["version"] == 2
+
+    # Clear
+    client.post("/mcp/call", json={"tool": "memory.clear_profile", "user_id": seeded_user})
+
+    # Recreate — version should restart at 1
+    resp = client.post(
+        "/mcp/call",
+        json={"tool": "memory.update_profile", "user_id": seeded_user, "patch": {"core_genres": ["jazz"]}},
+    )
+    result = resp.json()["result"]
+    assert result["version"] == 1
+    assert result["profile"]["core_genres"] == ["jazz"]
+    # Old keys should be gone
+    assert "mood" not in result["profile"]

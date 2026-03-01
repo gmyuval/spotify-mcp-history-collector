@@ -91,6 +91,32 @@ class ExplorerApiClient:
         result: dict[str, Any] = await self._request("GET", f"/api/me/playlists/{spotify_playlist_id}", access_token)
         return result
 
+    async def get_taste_profile(self, access_token: str) -> dict[str, Any]:
+        """GET /api/me/taste-profile"""
+        result: dict[str, Any] = await self._request("GET", "/api/me/taste-profile", access_token)
+        return result
+
+    async def update_taste_profile(
+        self, access_token: str, patch: dict[str, Any], reason: str | None = None
+    ) -> dict[str, Any]:
+        """PATCH /api/me/taste-profile"""
+        body: dict[str, Any] = {"patch": patch}
+        if reason:
+            body["reason"] = reason
+        result: dict[str, Any] = await self._request("PATCH", "/api/me/taste-profile", access_token, json=body)
+        return result
+
+    async def clear_taste_profile(self, access_token: str) -> None:
+        """DELETE /api/me/taste-profile"""
+        await self._request("DELETE", "/api/me/taste-profile", access_token)
+
+    async def get_preference_events(self, access_token: str, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+        """GET /api/me/preference-events"""
+        result: dict[str, Any] = await self._request(
+            "GET", "/api/me/preference-events", access_token, params={"limit": limit, "offset": offset}
+        )
+        return result
+
     async def exchange_google_email(self, email: str, internal_api_key: str) -> dict[str, Any] | None:
         """POST /auth/exchange-google — exchange Google email for JWT tokens.
 

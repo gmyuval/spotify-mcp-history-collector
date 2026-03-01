@@ -59,6 +59,7 @@ class ExplorerApp:
             landing_router,
             playlists_router,
             profile_router,
+            taste_router,
         )
 
         self.app.include_router(landing_router)
@@ -67,6 +68,7 @@ class ExplorerApp:
         self.app.include_router(history_router, prefix="/history", tags=["history"])
         self.app.include_router(playlists_router, prefix="/playlists", tags=["playlists"])
         self.app.include_router(profile_router)
+        self.app.include_router(taste_router)
 
         @self.app.get("/healthz")
         async def health_check() -> dict[str, str]:

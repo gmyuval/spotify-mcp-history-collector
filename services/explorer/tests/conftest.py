@@ -75,6 +75,53 @@ def _default_mock_api() -> AsyncMock:
         ],
     }
 
+    api.get_taste_profile.return_value = {
+        "profile": {
+            "user_id": 1,
+            "profile": {
+                "core_genres": ["symphonic metal", "power metal"],
+                "avoid": ["pop"],
+                "energy_preferences": {"default": "upbeat"},
+                "playlist_rules": {"max_tracks_per_artist": 3},
+            },
+            "version": 2,
+            "updated_at": "2026-02-28T12:00:00",
+        },
+        "recent_events": [
+            {
+                "event_id": "abc-123",
+                "timestamp": "2026-02-28T12:00:00",
+                "source": "user",
+                "type": "like",
+                "payload": {"raw_text": "I like symphonic metal"},
+            },
+        ],
+    }
+
+    api.update_taste_profile.return_value = {
+        "user_id": 1,
+        "profile": {"core_genres": ["symphonic metal", "power metal", "melodic death metal"]},
+        "version": 3,
+        "updated_at": "2026-02-28T13:00:00",
+    }
+
+    api.clear_taste_profile.return_value = None
+
+    api.get_preference_events.return_value = {
+        "items": [
+            {
+                "event_id": "abc-123",
+                "timestamp": "2026-02-28T12:00:00",
+                "source": "user",
+                "type": "like",
+                "payload": {"raw_text": "I like symphonic metal"},
+            },
+        ],
+        "total": 1,
+        "limit": 20,
+        "offset": 0,
+    }
+
     return api
 
 

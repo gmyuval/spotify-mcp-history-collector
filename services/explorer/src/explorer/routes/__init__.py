@@ -6,6 +6,7 @@ from explorer.routes.history import router as history_router
 from explorer.routes.landing import router as landing_router
 from explorer.routes.playlists import router as playlists_router
 from explorer.routes.profile import router as profile_router
+from explorer.routes.taste import router as taste_router
 
 __all__ = [
     "auth_router",
@@ -14,4 +15,5 @@ __all__ = [
     "landing_router",
     "playlists_router",
     "profile_router",
+    "taste_router",
 ]

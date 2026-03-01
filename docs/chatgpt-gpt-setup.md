@@ -48,6 +48,9 @@ MEMORY RULES:
      etc.) and reason="User feedback: <summary>", source="user".
 - Events capture *what was said*; the profile captures *the normalized rule*.
 - When YOU infer a preference from data analysis, use source="inferred".
+- When the user says "forget everything", "reset my profile", "start fresh",
+  or similar, use memory.clear_profile. Pass clear_events=true only if the
+  user explicitly asks to also erase event history.
 
 IMPORTANT RULES:
 - All parameters go as top-level fields alongside "tool" in the callTool
@@ -95,6 +98,7 @@ Memory (persistent taste preferences):
 - memory.get_profile — Get user's persistent taste profile (call at session start)
 - memory.update_profile — Update taste profile via merge-patch (pass patch as JSON string, optional reason)
 - memory.append_preference_event — Log a preference event (pass event_type, payload as JSON string, optional source)
+- memory.clear_profile — Clear/reset the user's taste profile (pass clear_events=true to also clear event history)
 
 Ops (system status):
 - ops.sync_status — Check data collection status
@@ -139,6 +143,8 @@ After creating the GPT, test these prompts:
    then `memory.update_profile`
 5. Start a new conversation and say "What do you know about my taste?" — should
    call `ops.list_users` then `memory.get_profile` and describe the stored profile
+6. "Forget everything about my taste" — should call `memory.clear_profile` with
+   `clear_events=false` (preserves event history unless user explicitly asks)
 
 ## Troubleshooting
 
@@ -198,7 +204,7 @@ is in the GPT Action configuration (wrong URL, auth, or schema).
 
 Track what to update in the Custom GPT after each deployment phase.
 
-### Phase 7 — Taste Profile + Preference Events (current)
+### Phase 7 — Taste Profile + Preference Events (done)
 
 **OpenAPI schema:** Replace with `docs/chatgpt-openapi.json` — adds 3 `memory.*`
 tools to the enum and 7 new parameters (patch, reason, source, create_if_missing,
@@ -212,7 +218,19 @@ type, payload, timestamp).
 **Conversation starters:** Added "Remember that I prefer upbeat symphonic metal"
 and "What do you remember about my taste?"
 
-### Phase 8 — Playlist Ledger (planned)
+### Phase 8 — Explorer UI: Taste Profile Display + Management (current)
+
+**OpenAPI schema:** Replace with `docs/chatgpt-openapi.json` — adds
+`memory.clear_profile` to the tool enum and `clear_events` boolean parameter.
+
+**Instructions:** Updated above. Key addition:
+- MEMORY RULES now includes `memory.clear_profile` guidance (when user says
+  "forget everything", "reset my profile", "start fresh")
+- `memory.clear_profile` added to AVAILABLE TOOLS list
+
+**No conversation starter changes needed.**
+
+### Phase 9 — Playlist Ledger (planned)
 
 **OpenAPI schema:** Will add ~5 tools (`memory.log_playlist_create`,
 `memory.log_playlist_mutation`, `memory.get_playlists`, `memory.get_playlist`,
@@ -228,7 +246,7 @@ intent_tags, seed_context, etc.).
 - When Spotify read-back fails (403), use `memory.reconstruct_playlist` as fallback
 - 5 playlist memory tools added to AVAILABLE TOOLS list
 
-### Phase 9 — Search, Export/Delete & Final Integration (planned)
+### Phase 10 — Search, Export/Delete & Final Integration (planned)
 
 **OpenAPI schema:** Will add ~3 tools (`memory.search`, `memory.export_user_data`,
 `memory.delete_user_data`) and new parameters (query, confirm).

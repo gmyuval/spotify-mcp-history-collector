@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp.registry import registry
@@ -89,6 +89,22 @@ class MemoryToolHandlers:
                 ),
             ],
         )(self.append_preference_event)
+
+        registry.register(
+            name="memory.clear_profile",
+            description="Clear/reset the user's taste profile. Optionally also clear all preference events. After clearing, the profile returns to version 0.",
+            category="memory",
+            parameters=[
+                _USER_PARAM,
+                MCPToolParam(
+                    name="clear_events",
+                    type="boolean",
+                    description="Also delete all preference events (default false)",
+                    required=False,
+                    default=False,
+                ),
+            ],
+        )(self.clear_profile)
 
     # ── memory.get_profile ──────────────────────────────────────────
 
@@ -235,6 +251,33 @@ class MemoryToolHandlers:
             "event_id": str(event_id),
             "user_id": user_id,
             "timestamp": ts.isoformat(),
+        }
+
+    # ── memory.clear_profile ─────────────────────────────────────────
+
+    async def clear_profile(self, args: dict[str, Any], session: AsyncSession) -> dict[str, Any]:
+        user_id = args.get("user_id")
+        if not isinstance(user_id, int) or user_id < 1:
+            raise ValueError("user_id must be a positive integer")
+
+        clear_events = args.get("clear_events", False)
+        if not isinstance(clear_events, bool):
+            raise ValueError("clear_events must be a boolean")
+
+        # Delete the taste profile row
+        await session.execute(delete(TasteProfile).where(TasteProfile.user_id == user_id))
+
+        events_cleared = False
+        if clear_events:
+            await session.execute(delete(PreferenceEvent).where(PreferenceEvent.user_id == user_id))
+            events_cleared = True
+
+        await session.flush()
+
+        return {
+            "user_id": user_id,
+            "cleared": True,
+            "events_cleared": events_cleared,
         }
 
 

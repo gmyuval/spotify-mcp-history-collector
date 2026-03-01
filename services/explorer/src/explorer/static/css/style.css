@@ -256,3 +256,89 @@ a:hover {
   min-width: 2rem;
   text-align: right;
 }
+
+/* Taste profile tags */
+.taste-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35em 0.65em;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--green);
+  background-color: rgba(29, 185, 84, 0.1);
+  border: 1px solid rgba(29, 185, 84, 0.3);
+  border-radius: 500px;
+  transition: all 0.15s;
+}
+
+.taste-tag:hover {
+  background-color: rgba(29, 185, 84, 0.2);
+  border-color: var(--green);
+}
+
+.taste-tag-avoid {
+  color: #ff6b6b;
+  background-color: rgba(255, 107, 107, 0.1);
+  border-color: rgba(255, 107, 107, 0.3);
+}
+
+.taste-tag-avoid:hover {
+  background-color: rgba(255, 107, 107, 0.2);
+  border-color: #ff6b6b;
+}
+
+.taste-tag-remove {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  padding: 0;
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.taste-tag-remove:hover {
+  opacity: 1;
+}
+
+/* Event type badges */
+.event-badge-like {
+  background-color: rgba(29, 185, 84, 0.2) !important;
+  color: var(--green) !important;
+}
+
+.event-badge-dislike {
+  background-color: rgba(255, 107, 107, 0.2) !important;
+  color: #ff6b6b !important;
+}
+
+.event-badge-rule {
+  background-color: rgba(100, 149, 237, 0.2) !important;
+  color: #6495ed !important;
+}
+
+.event-badge-feedback {
+  background-color: rgba(255, 193, 7, 0.2) !important;
+  color: #ffc107 !important;
+}
+
+.event-badge-note {
+  background-color: rgba(108, 117, 125, 0.2) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Modal dark theme */
+.modal-content {
+  background-color: var(--bg-card);
+  border-color: var(--border);
+}
+
+.modal-header {
+  border-bottom-color: var(--border);
+}
+
+.modal-footer {
+  border-top-color: var(--border);
+}
