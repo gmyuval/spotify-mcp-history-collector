@@ -292,7 +292,21 @@ def test_append_preference_event_invalid_payload(client: TestClient, seeded_user
             "tool": "memory.append_preference_event",
             "user_id": seeded_user,
             "type": "note",
-            "payload": "not an object",
+            "payload": "not valid json",
+        },
+    )
+    data = resp.json()
+    assert not data["success"]
+    assert "payload must be valid JSON" in data["error"]
+
+    # Valid JSON but not an object (e.g. array) also rejected
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "memory.append_preference_event",
+            "user_id": seeded_user,
+            "type": "note",
+            "payload": 42,
         },
     )
     data = resp.json()
@@ -332,6 +346,57 @@ def test_append_preference_event_invalid_timestamp(client: TestClient, seeded_us
     data = resp.json()
     assert not data["success"]
     assert "timestamp must be a valid ISO datetime string" in data["error"]
+
+
+# ── ChatGPT compatibility (JSON strings + event_type alias) ────────
+
+
+def test_update_profile_patch_as_json_string(client: TestClient, seeded_user: int) -> None:
+    """ChatGPT sends patch as a JSON string — should be parsed."""
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "memory.update_profile",
+            "user_id": seeded_user,
+            "patch": '{"core_genres": ["metal"], "mood": "dark"}',
+        },
+    )
+    data = resp.json()
+    assert data["success"]
+    assert data["result"]["profile"]["core_genres"] == ["metal"]
+    assert data["result"]["profile"]["mood"] == "dark"
+
+
+def test_append_event_payload_as_json_string(client: TestClient, seeded_user: int) -> None:
+    """ChatGPT sends payload as a JSON string — should be parsed."""
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "memory.append_preference_event",
+            "user_id": seeded_user,
+            "type": "like",
+            "payload": '{"raw_text": "I love Nightwish"}',
+        },
+    )
+    data = resp.json()
+    assert data["success"]
+    assert "event_id" in data["result"]
+
+
+def test_append_event_event_type_alias(client: TestClient, seeded_user: int) -> None:
+    """ChatGPT sends event_type instead of type — should be aliased."""
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "memory.append_preference_event",
+            "user_id": seeded_user,
+            "event_type": "dislike",
+            "payload": {"raw_text": "too much pop"},
+        },
+    )
+    data = resp.json()
+    assert data["success"]
+    assert "event_id" in data["result"]
 
 
 # ── Integration: full workflow ──────────────────────────────────────

@@ -88,7 +88,7 @@ SPOTIFY_SCOPES = (
 
 **`services/api/src/app/mcp/tools/__init__.py`** — Add `import app.mcp.tools.playlist_tools`
 
-**`docs/chatgpt-openapi.json` + `docs/chatgpt-openapi.yaml`** — Add 5 read tool names + new params (`track_id`, `artist_id`, `album_id`, `playlist_id`)
+**`docs/chatgpt-openapi.json`** — Add 5 read tool names + new params (`track_id`, `artist_id`, `album_id`, `playlist_id`)
 
 **`docs/chatgpt-gpt-setup.md`** — Add new tools to GPT instructions
 
@@ -128,7 +128,7 @@ SPOTIFY_SCOPES = (
 
 All write handlers call `_check_scopes()` first and return clear "re-authorize via /auth/login" error if missing.
 
-**`docs/chatgpt-openapi.json` + `docs/chatgpt-openapi.yaml`** — Add 4 write tool names + params (`name`, `description`, `public`, `track_ids`)
+**`docs/chatgpt-openapi.json`** — Add 4 write tool names + params (`name`, `description`, `public`, `track_ids`)
 
 **`docs/chatgpt-gpt-setup.md`** — Add write tools + examples
 

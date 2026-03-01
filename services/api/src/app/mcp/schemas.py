@@ -25,7 +25,7 @@ class MCPToolDefinition(BaseModel):
 
 
 # ChatGPT schema uses "search_type" to avoid conflict with JSON Schema "type"
-_FIELD_ALIASES: dict[str, str] = {"search_type": "type"}
+_FIELD_ALIASES: dict[str, str] = {"search_type": "type", "event_type": "type"}
 
 
 class MCPCallRequest(BaseModel):

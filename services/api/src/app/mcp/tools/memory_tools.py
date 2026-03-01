@@ -1,5 +1,6 @@
 """MCP tool handlers for persistent taste memory — profile + preference events."""
 
+import json
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -120,6 +121,12 @@ class MemoryToolHandlers:
             raise ValueError("user_id must be a positive integer")
 
         patch = args.get("patch")
+        # ChatGPT may send object params as JSON strings
+        if isinstance(patch, str):
+            try:
+                patch = json.loads(patch)
+            except json.JSONDecodeError:
+                raise ValueError("patch must be valid JSON") from None
         if not isinstance(patch, dict) or not patch:
             raise ValueError("patch must be a non-empty object")
 
@@ -187,6 +194,12 @@ class MemoryToolHandlers:
             raise ValueError(f"type must be one of: {', '.join(sorted(valid_types))}")
 
         payload = args.get("payload")
+        # ChatGPT may send object params as JSON strings
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                raise ValueError("payload must be valid JSON") from None
         if not isinstance(payload, dict):
             raise ValueError("payload must be an object")
 

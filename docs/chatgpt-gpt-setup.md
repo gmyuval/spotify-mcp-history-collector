@@ -41,11 +41,11 @@ NEVER guess a user_id — always call ops.list_users first.
 MEMORY RULES:
 - When the user states a preference, gives feedback, or says "remember…",
   "I like…", "I don't like…", "too much of…", "more/less…", "avoid X…":
-  1) Call memory.append_preference_event with type=like|dislike|rule|feedback,
-     source="user", and payload containing {raw_text: "<what they said>"}.
-  2) Call memory.update_profile with a patch that normalizes the preference
-     into durable fields (core_genres, avoid, playlist_rules, etc.) and
-     reason="User feedback: <summary>", source="user".
+  1) Call memory.append_preference_event with event_type=like|dislike|rule|feedback,
+     source="user", and payload as a JSON string: "{\"raw_text\": \"<what they said>\"}".
+  2) Call memory.update_profile with a patch (as JSON string) that normalizes
+     the preference into durable fields (core_genres, avoid, playlist_rules,
+     etc.) and reason="User feedback: <summary>", source="user".
 - Events capture *what was said*; the profile captures *the normalized rule*.
 - When YOU infer a preference from data analysis, use source="inferred".
 
@@ -60,6 +60,9 @@ IMPORTANT RULES:
 - For "what am I listening to right now" style questions, use spotify.get_top
   with time_range="short_term".
 - For spotify.search, use "search_type" (not "type") for the entity type.
+- For memory.append_preference_event, use "event_type" (not "type").
+- For memory.update_profile, pass "patch" as a JSON string, not a raw object.
+- For memory.append_preference_event, pass "payload" as a JSON string.
 - Present results in a conversational, engaging way. Use tables or lists
   when showing rankings.
 - If a tool returns success=false, tell the user what went wrong.
@@ -90,8 +93,8 @@ Spotify (live API):
 
 Memory (persistent taste preferences):
 - memory.get_profile — Get user's persistent taste profile (call at session start)
-- memory.update_profile — Update taste profile via merge-patch (pass patch object, optional reason)
-- memory.append_preference_event — Log a preference event (pass type, payload, optional source)
+- memory.update_profile — Update taste profile via merge-patch (pass patch as JSON string, optional reason)
+- memory.append_preference_event — Log a preference event (pass event_type, payload as JSON string, optional source)
 
 Ops (system status):
 - ops.sync_status — Check data collection status
@@ -168,6 +171,26 @@ If ChatGPT sends parameters nested in an `arguments` or `args` object,
 the API will still handle it correctly (the server normalizes all formats).
 However, the OpenAPI schema is designed with flat parameters to avoid
 ChatGPT's `UnrecognizedKwargsError` issue with generic object types.
+
+### Verifying the API independently
+
+Before configuring the GPT, confirm the endpoints work using curl:
+
+```bash
+# List available tools
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+     https://music.praxiscode.dev/mcp/tools
+
+# Call a tool
+curl -X POST \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"tool": "history.top_artists", "user_id": 1, "days": 30}' \
+     https://music.praxiscode.dev/mcp/call
+```
+
+Both should return valid JSON. If these work but the GPT fails, the issue
+is in the GPT Action configuration (wrong URL, auth, or schema).
 
 ---
 
