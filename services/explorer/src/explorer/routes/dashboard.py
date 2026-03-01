@@ -36,8 +36,10 @@ class DashboardRouter:
 
         try:
             taste_data = await api.get_taste_profile(token)
-        except ApiError:
-            pass  # Taste profile is optional — don't error the page
+        except ApiError as e:
+            if e.status_code == 401:
+                return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
+            # Taste profile is optional — don't error the page for non-auth failures
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "dashboard.html",

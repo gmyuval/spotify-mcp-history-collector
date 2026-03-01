@@ -143,6 +143,8 @@ After creating the GPT, test these prompts:
    then `memory.update_profile`
 5. Start a new conversation and say "What do you know about my taste?" — should
    call `ops.list_users` then `memory.get_profile` and describe the stored profile
+6. "Forget everything about my taste" — should call `memory.clear_profile` with
+   `clear_events=false` (preserves event history unless user explicitly asks)
 
 ## Troubleshooting
 
