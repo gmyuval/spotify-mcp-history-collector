@@ -1,5 +1,7 @@
 """Dashboard page — listening stats overview."""
 
+from typing import Any
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -23,6 +25,7 @@ class DashboardRouter:
         api: ExplorerApiClient = request.app.state.api
         error: str | None = None
         dashboard_data: dict[str, object] = {}
+        taste_data: dict[str, Any] = {}
 
         try:
             dashboard_data = await api.get_dashboard(token)
@@ -31,12 +34,18 @@ class DashboardRouter:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
             error = e.detail
 
+        try:
+            taste_data = await api.get_taste_profile(token)
+        except ApiError:
+            pass  # Taste profile is optional — don't error the page
+
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "dashboard.html",
             {
                 "request": request,
                 "active_page": "dashboard",
                 "data": dashboard_data,
+                "taste": taste_data,
                 "error": error,
             },
         )

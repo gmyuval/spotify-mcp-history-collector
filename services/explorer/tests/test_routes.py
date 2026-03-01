@@ -151,3 +151,160 @@ def test_playlist_detail_api_error(client: TestClient, mock_api: AsyncMock) -> N
     assert response.status_code == 200
     assert "Not found" in response.text
     client.cookies.clear()
+
+
+# --- Taste Profile ---
+
+
+def test_taste_requires_login(client: TestClient) -> None:
+    response = client.get("/taste", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_taste_page(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/taste")
+    assert response.status_code == 200
+    assert "Taste Profile" in response.text
+    assert "symphonic metal" in response.text
+    assert "power metal" in response.text
+    assert "pop" in response.text  # avoid list
+    mock_api.get_taste_profile.assert_called_once_with("test-jwt")
+    client.cookies.clear()
+
+
+def test_taste_page_empty_profile(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.get_taste_profile.return_value = {
+        "profile": {"user_id": 1, "profile": {}, "version": 0, "updated_at": None},
+        "recent_events": [],
+    }
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/taste")
+    assert response.status_code == 200
+    assert "No taste profile yet" in response.text
+    client.cookies.clear()
+
+
+def test_taste_page_api_error(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.get_taste_profile.side_effect = ApiError(500, "Server error")
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/taste")
+    assert response.status_code == 200
+    assert "Server error" in response.text
+    client.cookies.clear()
+
+
+def test_taste_page_401_redirects(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.get_taste_profile.side_effect = ApiError(401, "Unauthorized")
+    client.cookies.set("access_token", "expired-jwt")
+    response = client.get("/taste", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+    client.cookies.clear()
+
+
+def test_taste_update_add_genre(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.post(
+        "/taste/update",
+        data={"action": "add", "field": "core_genres", "value": "melodic death metal"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/taste"
+    # Should have fetched current profile then called update
+    mock_api.get_taste_profile.assert_called_once_with("test-jwt")
+    mock_api.update_taste_profile.assert_called_once()
+    call_args = mock_api.update_taste_profile.call_args
+    patch = call_args[0][1]  # second positional arg
+    assert "melodic death metal" in patch["core_genres"]
+    client.cookies.clear()
+
+
+def test_taste_update_remove_genre(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.post(
+        "/taste/update",
+        data={"action": "remove", "field": "core_genres", "value": "power metal"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    mock_api.update_taste_profile.assert_called_once()
+    call_args = mock_api.update_taste_profile.call_args
+    patch = call_args[0][1]
+    assert "power metal" not in patch["core_genres"]
+    assert "symphonic metal" in patch["core_genres"]
+    client.cookies.clear()
+
+
+def test_taste_update_set_value(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.post(
+        "/taste/update",
+        data={"action": "set", "field": "mood", "value": "dark"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    mock_api.update_taste_profile.assert_called_once()
+    call_args = mock_api.update_taste_profile.call_args
+    patch = call_args[0][1]
+    assert patch["mood"] == "dark"
+    client.cookies.clear()
+
+
+def test_taste_update_requires_login(client: TestClient) -> None:
+    response = client.post("/taste/update", data={"action": "add", "field": "x", "value": "y"}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_taste_clear(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.post("/taste/clear", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/taste"
+    mock_api.clear_taste_profile.assert_called_once_with("test-jwt")
+    client.cookies.clear()
+
+
+def test_taste_clear_requires_login(client: TestClient) -> None:
+    response = client.post("/taste/clear", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_taste_events_partial(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/taste/partials/events?limit=10&offset=0")
+    assert response.status_code == 200
+    mock_api.get_preference_events.assert_called_once_with("test-jwt", limit=10, offset=0)
+    client.cookies.clear()
+
+
+def test_taste_events_partial_requires_login(client: TestClient) -> None:
+    response = client.get("/taste/partials/events", follow_redirects=False)
+    assert response.status_code == 303
+
+
+# --- Dashboard taste integration ---
+
+
+def test_dashboard_shows_taste_summary(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    assert "symphonic metal" in response.text
+    assert "power metal" in response.text
+    mock_api.get_taste_profile.assert_called_once_with("test-jwt")
+    client.cookies.clear()
+
+
+def test_dashboard_taste_api_error_graceful(client: TestClient, mock_api: AsyncMock) -> None:
+    """Dashboard still loads even if taste profile API fails."""
+    mock_api.get_taste_profile.side_effect = ApiError(500, "Taste error")
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    assert "150" in response.text  # Dashboard data still renders
+    client.cookies.clear()

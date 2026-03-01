@@ -1,0 +1,60 @@
+{% if events["items"] %}
+<table class="table table-hover mb-0">
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Type</th>
+      <th>Source</th>
+      <th>Details</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for event in events["items"] %}
+    <tr>
+      <td class="text-muted" style="white-space: nowrap;">{{ event.timestamp[:16] | replace("T", " ") }}</td>
+      <td>
+        {% if event.type == "like" %}
+        <span class="badge event-badge-like">like</span>
+        {% elif event.type == "dislike" %}
+        <span class="badge event-badge-dislike">dislike</span>
+        {% elif event.type == "rule" %}
+        <span class="badge event-badge-rule">rule</span>
+        {% elif event.type == "feedback" %}
+        <span class="badge event-badge-feedback">feedback</span>
+        {% else %}
+        <span class="badge event-badge-note">note</span>
+        {% endif %}
+      </td>
+      <td>
+        <span class="badge bg-secondary">{{ event.source }}</span>
+      </td>
+      <td>
+        {% if event.payload.raw_text %}
+          {{ event.payload.raw_text }}
+        {% elif event.payload.reason %}
+          {{ event.payload.reason }}
+        {% elif event.payload.action %}
+          {{ event.payload.action }}{% if event.payload.patch_keys %}: {{ event.payload.patch_keys | join(", ") }}{% endif %}
+        {% else %}
+          <code class="small">{{ event.payload | tojson(indent=0) }}</code>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if events.total > events.offset + events.limit %}
+<div class="text-center py-3">
+  <button class="btn btn-outline-secondary btn-sm"
+          hx-get="/taste/partials/events?limit={{ events.limit }}&offset={{ events.offset + events.limit }}"
+          hx-target="#events-container"
+          hx-swap="innerHTML">
+    Load more ({{ events.total - events.offset - events.limit }} remaining)
+  </button>
+</div>
+{% endif %}
+
+{% else %}
+<p class="text-muted text-center py-4 mb-0">No preference events recorded yet</p>
+{% endif %}

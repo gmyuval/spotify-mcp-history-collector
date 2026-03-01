@@ -51,7 +51,8 @@
                       "ops.latest_import_jobs",
                       "memory.get_profile",
                       "memory.update_profile",
-                      "memory.append_preference_event"
+                      "memory.append_preference_event",
+                      "memory.clear_profile"
                     ]
                   },
                   "user_id": {
@@ -148,6 +149,10 @@
                     "type": "string",
                     "format": "date-time",
                     "description": "For memory.append_preference_event: ISO datetime override (defaults to now)."
+                  },
+                  "clear_events": {
+                    "type": "boolean",
+                    "description": "For memory.clear_profile: also delete all preference events (default false)."
                   }
                 }
               }
