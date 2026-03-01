@@ -25,10 +25,11 @@ Additionally, there are **bugs to fix first**:
 | 4 | JWT User Authentication | **DONE** |
 | 5 | Admin UI for RBAC & User Management | **DONE** |
 | 6 | Public Data Exploration Frontend | **DONE** |
-| 7 | MCP Memory: Taste Profile + Preference Events | **NEXT** |
-| 8 | MCP Memory: Playlist Ledger | Pending |
-| 9 | MCP Memory: Search, Export/Delete & ChatGPT Integration | Pending |
-| 10 | Explorer UI: Taste Profile & Playlist Ledger Pages | Pending |
+| 7 | MCP Memory: Taste Profile + Preference Events | **DONE** |
+| 8 | Explorer UI: Taste Profile Display + Management | **NEXT** |
+| 9 | MCP Memory: Playlist Ledger | Pending |
+| 10 | MCP Memory: Search, Export/Delete & ChatGPT Integration | Pending |
+| 11 | Explorer UI: Playlist Ledger Pages | Pending |
 
 ---
 

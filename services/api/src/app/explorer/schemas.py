@@ -1,6 +1,7 @@
 """Response schemas for user-facing explorer API endpoints."""
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -84,3 +85,38 @@ class UserProfile(BaseModel):
     unique_tracks: int
     unique_artists: int
     listening_hours: float
+
+
+# ── Taste profile schemas ──────────────────────────────────────────
+
+
+class TasteProfileResponse(BaseModel):
+    user_id: int
+    profile: dict[str, Any]
+    version: int
+    updated_at: str | None
+
+
+class PreferenceEventItem(BaseModel):
+    event_id: str
+    timestamp: str
+    source: str
+    type: str
+    payload: dict[str, Any]
+
+
+class TasteProfileWithEvents(BaseModel):
+    profile: TasteProfileResponse
+    recent_events: list[PreferenceEventItem]
+
+
+class PaginatedPreferenceEvents(BaseModel):
+    items: list[PreferenceEventItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class TasteProfilePatch(BaseModel):
+    patch: dict[str, Any]
+    reason: str | None = None

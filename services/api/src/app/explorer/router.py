@@ -10,8 +10,12 @@ from app.dependencies import db_manager
 from app.explorer.schemas import (
     DashboardData,
     PaginatedHistory,
+    PaginatedPreferenceEvents,
     PlaylistDetail,
     PlaylistSummary,
+    TasteProfilePatch,
+    TasteProfileResponse,
+    TasteProfileWithEvents,
     TrackSummary,
     UserProfile,
 )
@@ -41,6 +45,10 @@ class ExplorerRouter:
         r.add_api_route("/profile", self.profile, methods=["GET"])
         r.add_api_route("/playlists", self.playlists, methods=["GET"])
         r.add_api_route("/playlists/{spotify_playlist_id}", self.playlist_detail, methods=["GET"])
+        r.add_api_route("/taste-profile", self.taste_profile, methods=["GET"])
+        r.add_api_route("/taste-profile", self.update_taste_profile, methods=["PATCH"])
+        r.add_api_route("/taste-profile", self.clear_taste_profile, methods=["DELETE"])
+        r.add_api_route("/preference-events", self.preference_events, methods=["GET"])
 
     async def dashboard(self, user_id: RequireOwnDataView, session: DBSession) -> DashboardData:
         return await self._service.get_dashboard(user_id, session)
@@ -98,6 +106,33 @@ class ExplorerRouter:
         if result is None:
             raise HTTPException(status_code=404, detail="Playlist not found")
         return result
+
+    async def taste_profile(self, user_id: RequireOwnDataView, session: DBSession) -> TasteProfileWithEvents:
+        """Get the user's taste profile with recent preference events."""
+        return await self._service.get_taste_profile(user_id, session)
+
+    async def update_taste_profile(
+        self, body: TasteProfilePatch, user_id: RequireOwnDataView, session: DBSession
+    ) -> TasteProfileResponse:
+        """Update taste profile via JSON merge-patch. Creates if missing."""
+        if not body.patch:
+            raise HTTPException(status_code=422, detail="patch must be a non-empty object")
+        return await self._service.update_taste_profile(user_id, body.patch, body.reason, session)
+
+    async def clear_taste_profile(self, user_id: RequireOwnDataView, session: DBSession) -> dict[str, bool]:
+        """Delete the user's taste profile, resetting to version 0."""
+        await self._service.clear_taste_profile(user_id, session)
+        return {"cleared": True}
+
+    async def preference_events(
+        self,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        limit: int = Query(default=20, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ) -> PaginatedPreferenceEvents:
+        """Get paginated preference event history."""
+        return await self._service.get_preference_events(user_id, session, limit=limit, offset=offset)
 
 
 _instance = ExplorerRouter()

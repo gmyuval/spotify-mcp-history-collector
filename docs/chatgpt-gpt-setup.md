@@ -95,6 +95,7 @@ Memory (persistent taste preferences):
 - memory.get_profile — Get user's persistent taste profile (call at session start)
 - memory.update_profile — Update taste profile via merge-patch (pass patch as JSON string, optional reason)
 - memory.append_preference_event — Log a preference event (pass event_type, payload as JSON string, optional source)
+- memory.clear_profile — Clear/reset the user's taste profile (pass clear_events=true to also clear event history)
 
 Ops (system status):
 - ops.sync_status — Check data collection status
