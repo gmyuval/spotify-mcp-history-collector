@@ -137,12 +137,16 @@ class TestLogPlaylistCreate:
         }
         data1 = _call(client, "memory.log_playlist_create", **params)
         assert data1["success"]
+        assert data1["result"]["stored_track_count"] == 2
 
-        # Second call with same key but different playlist_id — returns original
-        params2 = {**params, "playlist_id": "pl_idemp_other"}
+        # Second call with same key but different playlist_id and different
+        # track_ids — returns original record with stored track count (not
+        # the caller's track_ids length).
+        params2 = {**params, "playlist_id": "pl_idemp_other", "track_ids": ["t1", "t2", "t3"]}
         data2 = _call(client, "memory.log_playlist_create", **params2)
         assert data2["success"]
         assert data2["result"]["playlist_id"] == "pl_idemp"  # original
+        assert data2["result"]["stored_track_count"] == 2  # from stored snapshot, not args
 
     def test_duplicate_playlist_id_error(self, client: TestClient, seeded_user: int) -> None:
         """Creating same playlist_id twice without idempotency_key fails."""

@@ -122,7 +122,8 @@
                   "track_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of Spotify track IDs. For spotify.add_tracks, spotify.remove_tracks (max 100), and memory.log_playlist_create."
+                    "maxItems": 10000,
+                    "description": "List of Spotify track IDs. For spotify.add_tracks, spotify.remove_tracks (max 100), and memory.log_playlist_create (max 10000)."
                   },
                   "patch": {
                     "type": "string",

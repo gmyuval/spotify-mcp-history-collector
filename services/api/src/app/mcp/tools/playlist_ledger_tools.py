@@ -294,13 +294,18 @@ class PlaylistLedgerToolHandlers:
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
             if existing is not None:
-                # Return existing record
+                # Return existing record with track count from stored snapshot
                 existing_snap_id = str(existing.latest_snapshot_id) if existing.latest_snapshot_id else None
+                stored_count = 0
+                if existing.latest_snapshot_id:
+                    snap = await session.get(PlaylistSnapshot, existing.latest_snapshot_id)
+                    if snap:
+                        stored_count = len(snap.track_ids)
                 return {
                     "playlist_id": existing.playlist_id,
                     "snapshot_id": existing_snap_id,
                     "created_at": existing.created_at.isoformat(),
-                    "stored_track_count": len(track_ids),
+                    "stored_track_count": stored_count,
                 }
 
         # Also check if playlist_id already exists
