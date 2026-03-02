@@ -52,7 +52,12 @@
                       "memory.get_profile",
                       "memory.update_profile",
                       "memory.append_preference_event",
-                      "memory.clear_profile"
+                      "memory.clear_profile",
+                      "memory.log_playlist_create",
+                      "memory.log_playlist_mutation",
+                      "memory.get_playlists",
+                      "memory.get_playlist",
+                      "memory.reconstruct_playlist"
                     ]
                   },
                   "user_id": {
@@ -100,15 +105,15 @@
                   },
                   "playlist_id": {
                     "type": "string",
-                    "description": "Spotify playlist ID. For playlist tools."
+                    "description": "Spotify playlist ID. For playlist tools and memory playlist ledger tools."
                   },
                   "name": {
                     "type": "string",
-                    "description": "Playlist name. For spotify.create_playlist and spotify.update_playlist."
+                    "description": "Playlist name. For spotify.create_playlist, spotify.update_playlist, and memory.log_playlist_create."
                   },
                   "description": {
                     "type": "string",
-                    "description": "Playlist description. For spotify.create_playlist and spotify.update_playlist."
+                    "description": "Playlist description. For spotify.create_playlist, spotify.update_playlist, and memory.log_playlist_create."
                   },
                   "public": {
                     "type": "boolean",
@@ -117,7 +122,7 @@
                   "track_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of Spotify track IDs. For spotify.add_tracks and spotify.remove_tracks (max 100)."
+                    "description": "List of Spotify track IDs. For spotify.add_tracks, spotify.remove_tracks (max 100), and memory.log_playlist_create."
                   },
                   "patch": {
                     "type": "string",
@@ -143,7 +148,7 @@
                   },
                   "payload": {
                     "type": "string",
-                    "description": "For memory.append_preference_event: event payload as a JSON string (e.g. \"{\\\"raw_text\\\": \\\"I like metal\\\"}\")."
+                    "description": "For memory.append_preference_event and memory.log_playlist_mutation: payload as a JSON string. For mutations: {\"track_ids\": [...]} for ADD/REMOVE/REORDER, {\"name\": \"...\"} for UPDATE_META."
                   },
                   "timestamp": {
                     "type": "string",
@@ -153,6 +158,40 @@
                   "clear_events": {
                     "type": "boolean",
                     "description": "For memory.clear_profile: also delete all preference events (default false)."
+                  },
+                  "mutation_type": {
+                    "type": "string",
+                    "description": "For memory.log_playlist_mutation: type of mutation.",
+                    "enum": ["ADD_TRACKS", "REMOVE_TRACKS", "REORDER", "UPDATE_META"]
+                  },
+                  "intent_tags": {
+                    "type": "string",
+                    "description": "For memory.log_playlist_create: JSON array of tags as a string (e.g. \"[\\\"upbeat\\\", \\\"symphonic metal\\\"]\")."
+                  },
+                  "seed_context": {
+                    "type": "string",
+                    "description": "For memory.log_playlist_create: JSON object of seed context as a string (e.g. \"{\\\"days\\\": 60, \\\"top_artists\\\": [...]}\")."
+                  },
+                  "idempotency_key": {
+                    "type": "string",
+                    "description": "For memory.log_playlist_create: idempotency key to prevent duplicate creates on retry."
+                  },
+                  "client_event_id": {
+                    "type": "string",
+                    "description": "For memory.log_playlist_mutation: client-generated UUID for idempotent mutation logging."
+                  },
+                  "include_events_limit": {
+                    "type": "integer",
+                    "description": "For memory.get_playlist: max events to include (default 50, max 500)."
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "description": "For memory.get_playlists: pagination cursor from previous response."
+                  },
+                  "at_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "For memory.reconstruct_playlist: reconstruct as of this ISO datetime (defaults to now)."
                   }
                 }
               }

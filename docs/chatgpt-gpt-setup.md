@@ -36,6 +36,8 @@ STARTUP: At the start of EVERY new conversation:
    - If version > 0, read the profile and use it to inform your recommendations
      (genres, rules, avoid-list, energy preferences, etc.).
    - If version == 0, no profile exists yet — that's fine, you'll build one.
+3) Optionally call memory.get_playlists to see recent assistant-created playlists.
+   If the user references "that playlist you made" or similar, use this to find it.
 NEVER guess a user_id — always call ops.list_users first.
 
 MEMORY RULES:
@@ -52,6 +54,27 @@ MEMORY RULES:
   or similar, use memory.clear_profile. Pass clear_events=true only if the
   user explicitly asks to also erase event history.
 
+PLAYLIST MEMORY (always log playlists you create or edit):
+- After creating a playlist (spotify.create_playlist + spotify.add_tracks),
+  ALWAYS call memory.log_playlist_create with the exact ordered track_ids,
+  playlist_id, name, and intent_tags describing the playlist's vibe/purpose.
+  Also pass seed_context with the analysis that inspired it (time window,
+  top artists, constraints applied).
+- After any spotify.add_tracks: call memory.log_playlist_mutation with
+  mutation_type="ADD_TRACKS" and payload="{\"track_ids\": [...]}" (JSON string).
+- After any spotify.remove_tracks: call memory.log_playlist_mutation with
+  mutation_type="REMOVE_TRACKS" and payload="{\"track_ids\": [...]}" (JSON string).
+- After any spotify.update_playlist: call memory.log_playlist_mutation with
+  mutation_type="UPDATE_META" and payload with the changed fields (name,
+  description, intent_tags) as a JSON string.
+- For memory.log_playlist_mutation, use "mutation_type" (not "type") for the
+  mutation type.
+- When user asks "what playlists did you make?", use memory.get_playlists.
+- When Spotify read-back fails (403), use memory.reconstruct_playlist as a
+  fallback to recover the track list from the memory ledger.
+- Memory is the canonical record of playlist contents — do not rely solely
+  on spotify.get_playlist.
+
 IMPORTANT RULES:
 - All parameters go as top-level fields alongside "tool" in the callTool
   request. Do NOT nest them in "arguments" or "args".
@@ -64,8 +87,12 @@ IMPORTANT RULES:
   with time_range="short_term".
 - For spotify.search, use "search_type" (not "type") for the entity type.
 - For memory.append_preference_event, use "event_type" (not "type").
+- For memory.log_playlist_mutation, use "mutation_type" (not "type").
 - For memory.update_profile, pass "patch" as a JSON string, not a raw object.
 - For memory.append_preference_event, pass "payload" as a JSON string.
+- For memory.log_playlist_mutation, pass "payload" as a JSON string.
+- For memory.log_playlist_create, pass "intent_tags" and "seed_context" as
+  JSON strings if ChatGPT sends them as objects.
 - Present results in a conversational, engaging way. Use tables or lists
   when showing rankings.
 - If a tool returns success=false, tell the user what went wrong.
@@ -100,6 +127,13 @@ Memory (persistent taste preferences):
 - memory.append_preference_event — Log a preference event (pass event_type, payload as JSON string, optional source)
 - memory.clear_profile — Clear/reset the user's taste profile (pass clear_events=true to also clear event history)
 
+Memory (playlist ledger):
+- memory.log_playlist_create — Log a newly created playlist (pass playlist_id, name, track_ids, optional intent_tags, seed_context, idempotency_key)
+- memory.log_playlist_mutation — Log a playlist edit (pass playlist_id, mutation_type=ADD_TRACKS|REMOVE_TRACKS|REORDER|UPDATE_META, payload as JSON string)
+- memory.get_playlists — List assistant-tracked playlists (pass optional limit, cursor)
+- memory.get_playlist — Get full playlist details with snapshot and events (pass playlist_id, optional include_events_limit)
+- memory.reconstruct_playlist — Reconstruct playlist track list from memory (pass playlist_id, optional at_time)
+
 Ops (system status):
 - ops.sync_status — Check data collection status
 - ops.latest_job_runs — Recent sync job history
@@ -128,6 +162,7 @@ Ops (system status):
 - How complete is my listening data?
 - Remember that I prefer upbeat symphonic metal
 - What do you remember about my taste?
+- What playlists did you make for me?
 
 ## Verify
 
@@ -230,21 +265,20 @@ and "What do you remember about my taste?"
 
 **No conversation starter changes needed.**
 
-### Phase 9 — Playlist Ledger (planned)
+### Phase 9 — Playlist Ledger (current)
 
-**OpenAPI schema:** Will add ~5 tools (`memory.log_playlist_create`,
-`memory.log_playlist_mutation`, `memory.get_playlists`, `memory.get_playlist`,
-`memory.reconstruct_playlist`) and new parameters (playlist_id for memory,
-intent_tags, seed_context, etc.).
+**OpenAPI schema:** Replace with `docs/chatgpt-openapi.json` — adds 5 `memory.*`
+playlist ledger tools to the enum and 8 new parameters (mutation_type,
+intent_tags, seed_context, idempotency_key, client_event_id, include_events_limit,
+cursor, at_time).
 
-**Instructions:** Will add:
-- PLAYLIST MEMORY section: after `spotify.create_playlist` + `spotify.add_tracks`,
-  always call `memory.log_playlist_create` with the exact track_ids and intent_tags
-- After any `spotify.add_tracks` / `spotify.remove_tracks` / `spotify.update_playlist`,
-  call `memory.log_playlist_mutation` with the corresponding mutation type
-- When user asks "what playlists did you make?", use `memory.get_playlists`
-- When Spotify read-back fails (403), use `memory.reconstruct_playlist` as fallback
-- 5 playlist memory tools added to AVAILABLE TOOLS list
+**Instructions:** Updated above. Key additions:
+- Session bootstrap now optionally calls `memory.get_playlists` (step 3)
+- PLAYLIST MEMORY section: canonical workflow for logging playlist creates/edits
+- `mutation_type` alias (not `type`) for memory.log_playlist_mutation
+- 5 playlist memory tools added to AVAILABLE TOOLS list under new subsection
+
+**Conversation starters:** Added "What playlists did you make for me?"
 
 ### Phase 10 — Search, Export/Delete & Final Integration (planned)
 

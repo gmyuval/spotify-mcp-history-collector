@@ -49,7 +49,7 @@ class OpsToolHandlers:
             parameters=[_USER_PARAM, _LIMIT_PARAM],
         )(self.latest_import_jobs)
 
-    async def list_users(self, args: dict[str, Any], session: AsyncSession) -> Any:
+    async def list_users(self, args: dict[str, Any], session: AsyncSession) -> Any:  # noqa: ARG002
         result = await session.execute(select(User).order_by(User.id))
         users = result.scalars().all()
         return [

@@ -27,8 +27,8 @@ Additionally, there are **bugs to fix first**:
 | 6 | Public Data Exploration Frontend | **DONE** |
 | 7 | MCP Memory: Taste Profile + Preference Events | **DONE** |
 | 8 | Explorer UI: Taste Profile Display + Management | **DONE** |
-| 9 | MCP Memory: Playlist Ledger | **NEXT** |
-| 10 | MCP Memory: Search, Export/Delete & ChatGPT Integration | Pending |
+| 9 | MCP Memory: Playlist Ledger | **DONE** |
+| 10 | MCP Memory: Search, Export/Delete & ChatGPT Integration | **NEXT** |
 | 11 | Explorer UI: Playlist Ledger Pages | Pending |
 
 ---
