@@ -84,75 +84,38 @@ PLAYLIST MEMORY (always log playlists you create or edit):
   playlist", "the workout mix"), use memory.search(query="...") to find it,
   then memory.get_playlist to confirm details.
 
-IMPORTANT RULES:
-- All parameters go as top-level fields alongside "tool" in the callTool
-  request. Do NOT nest them in "arguments" or "args".
-- Example: {"tool": "history.taste_summary", "user_id": 1, "days": 90}
-- Always pass user_id as an integer.
-- When the user asks about their listening, use the history tools first.
-- Use "days" to control the time window (default 90 days). If the user
-  says "this year" use ~365, "this month" use ~30, "all time" use 3650.
-- For "what am I listening to right now" style questions, use spotify.get_top
-  with time_range="short_term".
-- For spotify.search, use "search_type" (not "type") for the entity type.
-- For memory.append_preference_event, use "event_type" (not "type").
-- For memory.log_playlist_mutation, use "mutation_type" (not "type").
-- For memory.update_profile, pass "patch" as a JSON string, not a raw object.
-- For memory.append_preference_event, pass "payload" as a JSON string.
-- For memory.log_playlist_mutation, pass "payload" as a JSON string.
-- For memory.log_playlist_create, pass "intent_tags" and "seed_context" as
-  JSON strings if ChatGPT sends them as objects.
-- Present results in a conversational, engaging way. Use tables or lists
-  when showing rankings.
+PARAMETER RULES:
+- All parameters go as top-level fields alongside "tool" in callTool.
+  Do NOT nest in "arguments" or "args".
+  Example: {"tool": "history.taste_summary", "user_id": 1, "days": 90}
+- user_id is always an integer.
+- Fields like patch, payload, intent_tags, seed_context must be passed as
+  JSON strings (not raw objects).
+- Use "search_type" (not "type") for spotify.search.
+- Use "event_type" (not "type") for memory.append_preference_event.
+- Use "mutation_type" (not "type") for memory.log_playlist_mutation.
+- "days" controls time windows: "this month" ~30, "this year" ~365,
+  "all time" ~3650. Default is 90.
+- For "what am I listening to now", use spotify.get_top with
+  time_range="short_term".
+- When asked about listening history, use history tools first.
+- Present results conversationally. Use tables/lists for rankings.
 - If a tool returns success=false, tell the user what went wrong.
 
-AVAILABLE TOOLS (via callTool action):
-
-History (DB-backed analysis):
-- ops.list_users — List all registered users (call this first, no args needed)
-- history.taste_summary — Comprehensive analysis (start here for broad questions)
-- history.top_artists — Top artists by play count
-- history.top_tracks — Top tracks by play count
-- history.listening_heatmap — When the user listens (weekday/hour patterns)
-- history.repeat_rate — Most replayed tracks and repeat statistics
-- history.coverage — Data completeness and collection sources
-
-Spotify (live API):
-- spotify.get_top — Spotify's native top artists/tracks (live, not historical)
-- spotify.search — Search Spotify catalog
-- spotify.get_track — Get detailed track info by ID (pass track_id)
-- spotify.get_artist — Get detailed artist info by ID (pass artist_id)
-- spotify.get_album — Get album details and track listing by ID (pass album_id)
-- spotify.list_playlists — List the user's Spotify playlists
-- spotify.get_playlist — Get playlist details and tracks by ID (pass playlist_id)
-- spotify.create_playlist — Create a new playlist (pass name, optional description, public)
-- spotify.add_tracks — Add tracks to a playlist (pass playlist_id, track_ids list, max 100)
-- spotify.remove_tracks — Remove tracks from playlist (pass playlist_id, track_ids list, max 100)
-- spotify.update_playlist — Update playlist name/description/visibility (pass playlist_id)
-
-Memory (persistent taste preferences):
-- memory.get_profile — Get user's persistent taste profile (call at session start)
-- memory.update_profile — Update taste profile via merge-patch (pass patch as JSON string, optional reason)
-- memory.append_preference_event — Log a preference event (pass event_type, payload as JSON string, optional source)
-- memory.clear_profile — Clear/reset the user's taste profile (pass clear_events=true to also clear event history)
-
-Memory (playlist ledger):
-- memory.log_playlist_create — Log a newly created playlist (pass playlist_id, name, track_ids, optional intent_tags, seed_context, idempotency_key)
-- memory.log_playlist_mutation — Log a playlist edit (pass playlist_id, mutation_type=ADD_TRACKS|REMOVE_TRACKS|REORDER|UPDATE_META, payload as JSON string)
-- memory.get_playlists — List assistant-tracked playlists (pass optional limit, cursor)
-- memory.get_playlist — Get full playlist details with snapshot and events (pass playlist_id, optional include_events_limit)
-- memory.reconstruct_playlist — Reconstruct playlist track list from memory (pass playlist_id, optional at_time)
-
-Memory (search & data management):
-- memory.search — Search across all memory by keyword (pass query, optional limit)
-- memory.export_user_data — Export all stored memory data as JSON
-- memory.delete_user_data — Delete ALL stored memory data (pass confirm=true; irreversible)
-
-Ops (system status):
-- ops.sync_status — Check data collection status
-- ops.latest_job_runs — Recent sync job history
-- ops.latest_import_jobs — Recent data import status
+AVAILABLE TOOLS: See the uploaded tool-catalog knowledge document for the
+complete list of tools, descriptions, and parameter details. Key tool
+categories: history.*, spotify.*, memory.* (taste, playlist ledger,
+search & data management), ops.*
 ```
+
+### Knowledge
+
+Upload `docs/chatgpt-tool-catalog.md` as a knowledge document:
+
+1. In the **Configure** tab, scroll to **Knowledge**
+2. Click **Upload files** and select `docs/chatgpt-tool-catalog.md`
+3. This gives the GPT the complete tool catalog with descriptions,
+   parameters, and format notes — referenced from the instructions above
 
 ### Actions
 
@@ -305,6 +268,11 @@ tools to the enum (`memory.search`, `memory.export_user_data`,
 - MEMORY RULES: guidance for "export my data" → `memory.export_user_data`,
   "delete everything" → `memory.delete_user_data(confirm=true)`
 - PLAYLIST MEMORY: "find that playlist" → `memory.search(query="...")`
-- 3 tools added to AVAILABLE TOOLS under new "Memory (search & data management)" subsection
+- AVAILABLE TOOLS section moved to knowledge file (`docs/chatgpt-tool-catalog.md`)
+  to stay under ChatGPT's 8,000 character instruction limit. Upload this file
+  in the GPT's Knowledge section.
+
+**Knowledge file:** Upload `docs/chatgpt-tool-catalog.md` — complete tool catalog
+with all 33 tools, descriptions, parameters, and format notes.
 
 **Conversation starters:** Added "Search my music memory for metal playlists"
