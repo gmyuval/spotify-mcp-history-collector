@@ -28,4 +28,5 @@ def text_match(column: Any, query: str, dialect: str) -> Any:
     """
     if dialect == "postgresql":
         return func.to_tsvector("english", column).op("@@")(func.plainto_tsquery("english", query))
-    return column.ilike(f"%{query}%")
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return column.ilike(f"%{escaped}%", escape="\\")

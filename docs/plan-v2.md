@@ -695,7 +695,7 @@ Migration seeds default values for all existing constants.
 - Grouped by category (accordion/tabs)
 - Inline editing with type-appropriate inputs (number, text, JSON)
 - Reset-to-default button per setting
-- HTMX for save without full page reload
+- HTMX for save without full-page reload
 
 ### Files to create/modify
 

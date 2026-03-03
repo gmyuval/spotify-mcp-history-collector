@@ -28,7 +28,7 @@ _USER_PARAM = MCPToolParam(name="user_id", type="int", description="User ID")
 def _validate_user_id(args: dict[str, Any]) -> int:
     """Extract and validate user_id from tool arguments."""
     user_id = args.get("user_id")
-    if not isinstance(user_id, int) or user_id < 1:
+    if type(user_id) is not int or user_id < 1:
         raise ValueError("user_id must be a positive integer")
     return user_id
 

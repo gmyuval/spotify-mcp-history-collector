@@ -102,9 +102,9 @@ PARAMETER RULES:
 - Present results conversationally. Use tables/lists for rankings.
 - If a tool returns success=false, tell the user what went wrong.
 
-AVAILABLE TOOLS: See the uploaded tool-catalog knowledge document for the
-complete list of tools, descriptions, and parameter details. Key tool
-categories: history.*, spotify.*, memory.* (taste, playlist ledger,
+AVAILABLE TOOLS: See the uploaded "chatgpt-tool-catalog.md" knowledge file
+for the complete list of tools, descriptions, and parameter details. Key
+tool categories: history.*, spotify.*, memory.* (taste, playlist ledger,
 search & data management), ops.*
 ```
 

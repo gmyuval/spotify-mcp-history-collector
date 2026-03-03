@@ -18,6 +18,7 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -117,7 +118,7 @@ def pg_engine() -> Generator[AsyncEngine]:
     engine = create_async_engine(POSTGRES_URL, echo=False, poolclass=NullPool)
     try:
         _run_async(_ensure_tables(engine))
-    except Exception:
+    except OperationalError, InterfaceError, OSError:
         _run_async(engine.dispose())
         pytest.skip("PostgreSQL not available at localhost:5434")
     yield engine
