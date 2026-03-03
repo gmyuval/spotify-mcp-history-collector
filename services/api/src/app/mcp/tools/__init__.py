@@ -1,6 +1,7 @@
 """Import all tool modules to trigger registration with the global registry."""
 
 import app.mcp.tools.history_tools as history_tools  # noqa: F401
+import app.mcp.tools.memory_data_tools as memory_data_tools  # noqa: F401
 import app.mcp.tools.memory_tools as memory_tools  # noqa: F401
 import app.mcp.tools.ops_tools as ops_tools  # noqa: F401
 import app.mcp.tools.playlist_ledger_tools as playlist_ledger_tools  # noqa: F401

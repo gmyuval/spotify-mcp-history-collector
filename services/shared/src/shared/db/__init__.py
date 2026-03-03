@@ -26,6 +26,7 @@ from shared.db.models import (
     UserRole,
 )
 from shared.db.operations import MusicRepository
+from shared.db.search import text_match
 from shared.db.session import DatabaseManager
 
 __all__ = [
@@ -61,4 +62,6 @@ __all__ = [
     "DatabaseManager",
     # Operations
     "MusicRepository",
+    # Search
+    "text_match",
 ]

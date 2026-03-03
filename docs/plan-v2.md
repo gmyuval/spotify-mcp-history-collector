@@ -28,8 +28,9 @@ Additionally, there are **bugs to fix first**:
 | 7 | MCP Memory: Taste Profile + Preference Events | **DONE** |
 | 8 | Explorer UI: Taste Profile Display + Management | **DONE** |
 | 9 | MCP Memory: Playlist Ledger | **DONE** |
-| 10 | MCP Memory: Search, Export/Delete & ChatGPT Integration | **NEXT** |
+| 10 | MCP Memory: Search, Export/Delete & ChatGPT Integration | **DONE** |
 | 11 | Explorer UI: Playlist Ledger Pages | Pending |
+| 12 | Admin-Configurable Settings | Pending |
 
 ---
 
@@ -539,128 +540,68 @@ See [`docs/phase8-taste-ui-plan.md`](phase8-taste-ui-plan.md) for the full file 
 
 ---
 
-## Phase 9 — PR: MCP Memory: Playlist Ledger
+## Phase 9 — ~~PR: MCP Memory: Playlist Ledger~~ ✅ DONE
 
 **Goal:** Track all assistant-created/edited playlists with full event history and snapshot-based reconstruction. The ledger is the canonical record even when Spotify read-back is blocked.
 
-### New DB tables (Alembic migration `007_playlist_ledger` — TBD)
+Detailed plan: [`docs/phase9-playlist-ledger-plan.md`](phase9-playlist-ledger-plan.md)
 
-**`memory_playlists`** — Playlist metadata:
-- `playlist_id` (VARCHAR PK — Spotify playlist ID)
-- `user_id` (BigInt FK → users, indexed)
-- `name`, `description` (Text)
-- `intent_tags` (JSONB, default `[]`) — e.g., `["upbeat", "symphonic metal"]`
-- `seed_context` (JSONB, default `{}`) — what inspired the playlist
-- `latest_snapshot_id` (UUID FK → playlist_snapshots, nullable)
-- `created_at`, `updated_at` (TIMESTAMPTZ)
+### Summary of what was implemented
 
-**`playlist_snapshots`** — Point-in-time track lists:
-- `snapshot_id` (UUID PK)
-- `playlist_id` (VARCHAR FK → memory_playlists, indexed)
-- `created_at` (TIMESTAMPTZ)
-- `track_ids` (JSONB) — ordered array of Spotify track IDs
-- `source` (VARCHAR — `create` | `periodic` | `manual`)
+**New DB tables** (Alembic migration `007_playlist_ledger`): `memory_playlists`, `playlist_snapshots`, `playlist_events` with circular FK handling (`use_alter=True`) and composite index on `(playlist_id, timestamp)`.
 
-**`playlist_events`** — Append-only mutation ledger:
-- `event_id` (UUID PK)
-- `playlist_id` (VARCHAR FK → memory_playlists, indexed)
-- `user_id` (BigInt FK → users)
-- `timestamp` (TIMESTAMPTZ)
-- `type` (VARCHAR — `ADD_TRACKS` | `REMOVE_TRACKS` | `REORDER` | `UPDATE_META`)
-- `payload_json` (JSONB) — type-specific payload
-- `client_event_id` (UUID, nullable) — for idempotency
+**New enums:** `PlaylistSnapshotSource` (create/periodic/manual), `PlaylistEventType` (ADD_TRACKS/REMOVE_TRACKS/REORDER/UPDATE_META).
 
-### New enums
+**New MCP tools (5):**
 
-- `PlaylistSnapshotSource` — `create`, `periodic`, `manual`
-- `PlaylistEventType` — `ADD_TRACKS`, `REMOVE_TRACKS`, `REORDER`, `UPDATE_META`
+| Tool | Purpose |
+|------|---------|
+| `memory.log_playlist_create` | Log newly created playlist with initial track list. Idempotent via `idempotency_key`. |
+| `memory.log_playlist_mutation` | Log add/remove/reorder/meta mutations. Auto-snapshot compaction every 10 events. Idempotent via `client_event_id`. |
+| `memory.get_playlists` | List tracked playlists with cursor-based pagination. |
+| `memory.get_playlist` | Full detail: metadata + latest snapshot + recent events. |
+| `memory.reconstruct_playlist` | Rebuild track list from snapshot + event replay. Supports point-in-time `at_time`. |
 
-### New MCP tools (5)
+**Reconstruction logic:** `ReconstructionResult` NamedTuple, event replay (ADD_TRACKS with insert-at-position, REMOVE_TRACKS via set filter, REORDER replaces list, UPDATE_META skipped).
 
-**`memory.log_playlist_create(user_id, playlist_id, name, track_ids, description?, intent_tags?, seed_context?, idempotency_key?)`**
-- Creates playlist record + initial snapshot
-- Idempotent via `idempotency_key` (returns existing record if already logged)
+**ChatGPT updates:** OpenAPI schema with 5 tools + 9 parameters, GPT setup guide with PLAYLIST MEMORY workflow section.
 
-**`memory.log_playlist_mutation(user_id, playlist_id, type, payload, client_event_id?)`**
-- Appends event to ledger
-- Auto-creates snapshot every N=10 mutations for fast reconstruction
-- Returns `{event_id, playlist_id, timestamp, new_snapshot_id?}`
+**Ruff `ARG` lint rule:** Added unused-arguments detection to pre-commit, with per-file-ignores for pytest fixtures.
 
-**`memory.get_playlists(user_id, limit?, cursor?)`**
-- List tracked playlists with pagination
-- Returns summary: name, created_at, updated_at, intent_tags, track_count
+### Files created/modified
 
-**`memory.get_playlist(user_id, playlist_id, include_events_limit?)`**
-- Full playlist detail: metadata + latest snapshot + recent events
-
-**`memory.reconstruct_playlist(user_id, playlist_id, at_time?)`**
-- Reconstructs track list from nearest snapshot + applying subsequent events
-- Used when Spotify read-back fails (403, missing scopes)
-- Returns `{playlist_id, as_of, track_ids, reconstruction: {used_snapshot_id, applied_event_count}}`
-
-### Snapshot compaction policy
-- Snapshot at create time
-- Auto-snapshot every 10 mutations
-- `log_playlist_mutation` returns `new_snapshot_id` when compaction triggers
-
-### Tests
-- Playlist create + get + list
-- Mutation logging (ADD_TRACKS, REMOVE_TRACKS, REORDER, UPDATE_META)
-- Reconstruction from snapshot + events
-- Snapshot compaction after N mutations
-- Idempotency (duplicate create/mutation)
-- User isolation
-
-### Verification
-- Create playlist via `spotify.create_playlist` → log with `memory.log_playlist_create`
-- Add/remove tracks → log mutations → reconstruct matches expected state
-- After 10 mutations, auto-snapshot created
+See [`docs/phase9-playlist-ledger-plan.md`](phase9-playlist-ledger-plan.md) for the full file list. Key new files:
+- `services/api/src/app/mcp/tools/playlist_ledger_tools.py`
+- `services/api/alembic/versions/007_playlist_ledger.py`
+- `services/api/tests/test_mcp/test_playlist_ledger_tools.py` (38 tests)
 
 ---
 
-## Phase 10 — PR: MCP Memory: Search, Export/Delete & ChatGPT Integration
+## Phase 10 — ~~PR: MCP Memory: Search, Export/Delete & ChatGPT Integration~~ ✅ DONE
 
 **Goal:** Cross-memory search, data portability (export + delete), and full ChatGPT GPT integration with tool-calling playbook.
 
-### New MCP tools (3)
+### Summary of what was implemented
 
-**`memory.search(user_id, query, limit?)`** — Keyword search across memory:
-- Searches playlist names/descriptions/tags, preference events, profile notes
-- Returns ranked results: `[{kind, id, score, snippet, metadata}]`
-- Kind: `playlist` | `preference_event` | `profile`
-- Uses PostgreSQL `ILIKE`/`ts_vector` for text matching
+**New MCP tools (3):**
 
-**`memory.export_user_data(user_id)`** — Export all memory:
-- Returns `{user_id, exported_at, data: {profile, preference_events, playlists, snapshots, events}}`
-- Full JSON dump of all stored memory for the user
+| Tool | Purpose |
+|------|---------|
+| `memory.search` | Keyword search across playlists (name/description/tags), preference events (payload), and taste profile (JSON content). Returns ranked results with scores, snippets, and metadata. Deduplicates playlist matches. |
+| `memory.export_user_data` | Full JSON export of all memory: profile, preference events, playlists, snapshots, playlist events. |
+| `memory.delete_user_data` | Hard delete all memory data. Requires `confirm=true` safety guard. Handles circular FK constraints. |
 
-**`memory.delete_user_data(user_id, confirm=true)`** — Hard delete:
-- Deletes all taste profile, preference events, playlists, snapshots, events
-- Requires `confirm=true` (safety guard)
-- Returns `{user_id, deleted_at, deleted: true}`
+**Search scoring:** Playlist name match (1.0), description (0.8), tags (0.7), preference event (0.5), profile (0.3).
 
-### ChatGPT integration updates
+**ChatGPT updates:** OpenAPI schema with 3 tools + 2 parameters (`query`, `confirm`). GPT instructions updated with search/export/delete guidance, conversation starter added.
 
-**`docs/chatgpt-openapi.json`** — Add remaining `memory.*` tools (search, export, delete) with flat param schemas
+### Files created/modified
 
-**`docs/chatgpt-gpt-setup.md`** — Update with full tool-calling playbook (from PRD §10):
-- Session bootstrap: `memory.get_profile` + `memory.get_playlists`
-- Preference handling: append event + update profile
-- Playlist creation: always log with `memory.log_playlist_create` after `spotify.create_playlist`
-- Playlist editing: log mutations alongside Spotify API calls
-- Guardrails: artist over-weighting rules from profile
-- Spotify read-back failure: use `memory.reconstruct_playlist`
-
-### Tests
-- Search across profiles, events, playlists
-- Export returns complete data
-- Delete removes all data, subsequent get returns empty
-- ChatGPT OpenAPI schema validates
-
-### Verification
-- `memory.search("symphonic metal")` finds relevant playlists and events
-- `memory.export_user_data` returns complete JSON
-- `memory.delete_user_data` removes everything; profile/playlists are gone
+- `services/api/src/app/mcp/tools/memory_data_tools.py` (new) — Tool handlers
+- `services/api/tests/test_mcp/test_memory_data_tools.py` (new) — 23 tests
+- `services/api/src/app/mcp/tools/__init__.py` — Import new module
+- `docs/chatgpt-openapi.json` — 3 tools + 2 params
+- `docs/chatgpt-gpt-setup.md` — Search/export/delete guidance + changelog
 
 ---
 
@@ -696,6 +637,97 @@ See [`docs/phase8-taste-ui-plan.md`](phase8-taste-ui-plan.md) for the full file 
 
 ---
 
+## Phase 12 — PR: Admin-Configurable Settings
+
+**Goal:** Replace hardcoded constants (magic numbers) across the codebase with a DB-backed settings system, manageable through the admin UI. This includes search parameters, limits, scoring weights, and other operational tunables that are currently embedded as constants.
+
+### New DB table (Alembic migration `008_app_settings`)
+
+**`app_settings`** — Key-value settings store:
+- `key` (String 100, **PK**) — setting identifier, e.g. `search.max_query_length`
+- `value_json` (JSONB) — the setting value (supports int, float, string, list, dict)
+- `description` (Text, nullable) — human-readable explanation
+- `category` (String 50) — grouping for admin UI (e.g. `search`, `limits`, `scoring`)
+- `updated_at` (TIMESTAMPTZ) — last modification time
+
+Migration seeds default values for all existing constants.
+
+### Settings to migrate
+
+**Memory search (`memory_data_tools.py`):**
+- `search.max_query_length` (default 500)
+- `search.default_limit` (default 25)
+- `search.max_limit` (default 200)
+- `search.snippet_max_length` (default 100)
+- `search.score_playlist_name` (default 1.0)
+- `search.score_playlist_description` (default 0.8)
+- `search.score_playlist_tags` (default 0.7)
+- `search.score_preference_event` (default 0.5)
+- `search.score_profile` (default 0.3)
+
+**Playlist ledger (`playlist_ledger_tools.py`):**
+- `playlist.snapshot_compaction_threshold` (default 10)
+- `playlist.default_page_size` (default 20)
+- `playlist.max_page_size` (default 100)
+- `playlist.recent_events_limit` (default 20)
+
+**Other candidates:** Cache TTLs, rate limits, JWT expiry times — evaluate during implementation.
+
+### API endpoints (admin)
+
+- `GET /admin/settings` — List all settings, grouped by category
+- `GET /admin/settings/{key}` — Get single setting
+- `PUT /admin/settings/{key}` — Update setting value (validates type matches default)
+- `POST /admin/settings/reset` — Reset all to defaults (or specific key)
+
+### Settings service
+
+**`services/api/src/app/admin/settings_service.py`** (new):
+- `SettingsService` class with async methods
+- In-memory cache with TTL (avoids DB query on every tool call)
+- `get(key, default)` → returns typed value
+- `set(key, value)` → validates, updates, invalidates cache
+- `get_all(category?)` → for admin listing
+
+### Admin UI page
+
+**`/admin/settings`** — Settings management page:
+- Grouped by category (accordion/tabs)
+- Inline editing with type-appropriate inputs (number, text, JSON)
+- Reset-to-default button per setting
+- HTMX for save without full-page reload
+
+### Files to create/modify
+
+**New files:**
+- `services/shared/src/shared/db/models/settings.py` — AppSetting model
+- `services/api/src/app/admin/settings_service.py` — Settings service with caching
+- `services/api/src/app/admin/settings_router.py` — Admin API endpoints
+- `services/frontend/src/frontend/routes/settings.py` — Admin UI route
+- `services/frontend/src/frontend/templates/settings.html` — Template
+- `services/api/alembic/versions/008_app_settings.py` — Migration
+- `services/api/tests/test_admin/test_settings.py` — Tests
+
+**Modified files:**
+- `services/api/src/app/mcp/tools/memory_data_tools.py` — Use settings service
+- `services/api/src/app/mcp/tools/playlist_ledger_tools.py` — Use settings service
+- `services/shared/src/shared/db/__init__.py` — Export new model
+- `services/api/src/app/admin/router.py` — Include settings router
+
+### Tests
+- Settings CRUD API tests
+- Cache invalidation on update
+- Default value seeding
+- Tool handlers respect runtime settings changes
+- Admin UI route tests
+
+### Verification
+- Change `search.default_limit` via admin UI → verify `memory.search` uses new value
+- Reset to defaults → values restored
+- Settings survive app restart (persisted in DB)
+
+---
+
 ## Implementation Order & Dependencies
 
 ```text
@@ -708,12 +740,13 @@ Phase 5  (admin RBAC UI)                    ✅ DONE
 Phase 6  (explorer foundation)              ✅ DONE
 Phase 7  (taste profile + events)           ✅ DONE
 Phase 8  (explorer taste UI)                ✅ DONE
-Phase 9  (playlist ledger)                  ← NEXT (depends on Phase 7 patterns)
-Phase 10 (search, export/delete, ChatGPT)   ← depends on Phases 7, 9
-Phase 11 (explorer UI: playlist ledger)     ← depends on Phases 9, 10
+Phase 9  (playlist ledger)                  ✅ DONE
+Phase 10 (search, export/delete, ChatGPT)   ✅ DONE
+Phase 11 (explorer UI: playlist ledger)     ← NEXT (depends on Phases 9, 10)
+Phase 12 (admin-configurable settings)      Pending (depends on Phase 5)
 ```
 
-Remaining order: **9 → 10 → 11**
+Remaining order: **11 → 12**
 
 ---
 
@@ -730,3 +763,4 @@ Remaining order: **9 → 10 → 11**
 9. **Versioned taste profile** — Single JSONB profile per user with version counter. JSON merge-patch for updates. Append-only preference events capture raw feedback; profile captures normalized rules.
 10. **Playlist ledger with snapshots** — Snapshot + event sourcing pattern. Snapshots at create + every N mutations for fast reconstruction. Ledger is canonical record even when Spotify read-back fails.
 11. **Idempotency** — `idempotency_key` for playlist create, `client_event_id` for mutations. Prevents duplicates from retries.
+12. **DB-backed settings over env vars** — Operational tunables (search limits, scoring weights, compaction thresholds) belong in a DB settings table with admin UI, not env vars that require redeployment. In-memory cache with TTL avoids per-request DB queries.

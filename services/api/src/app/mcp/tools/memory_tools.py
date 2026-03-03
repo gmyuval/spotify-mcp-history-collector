@@ -110,7 +110,7 @@ class MemoryToolHandlers:
 
     async def get_profile(self, args: dict[str, Any], session: AsyncSession) -> dict[str, Any]:
         user_id = args.get("user_id")
-        if not isinstance(user_id, int) or user_id < 1:
+        if type(user_id) is not int or user_id < 1:
             raise ValueError("user_id must be a positive integer")
 
         profile = await session.get(TasteProfile, user_id)
@@ -133,7 +133,7 @@ class MemoryToolHandlers:
 
     async def update_profile(self, args: dict[str, Any], session: AsyncSession) -> dict[str, Any]:
         user_id = args.get("user_id")
-        if not isinstance(user_id, int) or user_id < 1:
+        if type(user_id) is not int or user_id < 1:
             raise ValueError("user_id must be a positive integer")
 
         patch = args.get("patch")
@@ -201,7 +201,7 @@ class MemoryToolHandlers:
 
     async def append_preference_event(self, args: dict[str, Any], session: AsyncSession) -> dict[str, Any]:
         user_id = args.get("user_id")
-        if not isinstance(user_id, int) or user_id < 1:
+        if type(user_id) is not int or user_id < 1:
             raise ValueError("user_id must be a positive integer")
 
         event_type = args.get("type")
@@ -257,7 +257,7 @@ class MemoryToolHandlers:
 
     async def clear_profile(self, args: dict[str, Any], session: AsyncSession) -> dict[str, Any]:
         user_id = args.get("user_id")
-        if not isinstance(user_id, int) or user_id < 1:
+        if type(user_id) is not int or user_id < 1:
             raise ValueError("user_id must be a positive integer")
 
         clear_events = args.get("clear_events", False)
