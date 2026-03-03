@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db.enums import TrackSource
 from shared.db.models.music import Artist, Play, Track, TrackArtist
+from shared.db.search import text_match
 
 
 class HistoryQueries:
@@ -211,12 +212,11 @@ class HistoryQueries:
         )
 
         if q:
-            escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            pattern = f"%{escaped}%"
+            dialect = session.bind.dialect.name if session.bind else "postgresql"
             base = base.where(
                 or_(
-                    Track.name.ilike(pattern),
-                    primary_artist.c.artist_name.ilike(pattern),
+                    text_match(Track.name, q, dialect),
+                    text_match(primary_artist.c.artist_name, q, dialect),
                 )
             )
 

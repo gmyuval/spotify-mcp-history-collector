@@ -72,4 +72,7 @@ testpaths = [
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --strict-markers --tb=short"
+addopts = "-v --strict-markers --tb=short -m 'not integration'"
+markers = [
+    "integration: requires Docker PostgreSQL at localhost:5434 (run with: pytest -m integration)",
+]

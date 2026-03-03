@@ -57,7 +57,10 @@
                       "memory.log_playlist_mutation",
                       "memory.get_playlists",
                       "memory.get_playlist",
-                      "memory.reconstruct_playlist"
+                      "memory.reconstruct_playlist",
+                      "memory.search",
+                      "memory.export_user_data",
+                      "memory.delete_user_data"
                     ]
                   },
                   "user_id": {
@@ -193,6 +196,14 @@
                     "type": "string",
                     "format": "date-time",
                     "description": "For memory.reconstruct_playlist: reconstruct as of this ISO datetime (defaults to now)."
+                  },
+                  "query": {
+                    "type": "string",
+                    "description": "For memory.search: keyword search query across memory (playlists, preferences, profile)."
+                  },
+                  "confirm": {
+                    "type": "boolean",
+                    "description": "For memory.delete_user_data: must be true to confirm deletion of all stored memory data."
                   }
                 }
               }

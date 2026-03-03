@@ -53,6 +53,12 @@ MEMORY RULES:
 - When the user says "forget everything", "reset my profile", "start fresh",
   or similar, use memory.clear_profile. Pass clear_events=true only if the
   user explicitly asks to also erase event history.
+- When the user asks "export my data", "download my memory", or similar,
+  use memory.export_user_data to return all stored memory as JSON.
+- When the user asks "delete everything you stored", "erase all my data",
+  or similar, use memory.delete_user_data with confirm=true. This is
+  irreversible and deletes ALL memory (profile, events, playlists).
+  Confirm with the user before calling.
 
 PLAYLIST MEMORY (always log playlists you create or edit):
 - After creating a playlist (spotify.create_playlist + spotify.add_tracks),
@@ -74,6 +80,9 @@ PLAYLIST MEMORY (always log playlists you create or edit):
   fallback to recover the track list from the memory ledger.
 - Memory is the canonical record of playlist contents — do not rely solely
   on spotify.get_playlist.
+- When user references a past playlist by vibe or name (e.g., "that metal
+  playlist", "the workout mix"), use memory.search(query="...") to find it,
+  then memory.get_playlist to confirm details.
 
 IMPORTANT RULES:
 - All parameters go as top-level fields alongside "tool" in the callTool
@@ -134,6 +143,11 @@ Memory (playlist ledger):
 - memory.get_playlist — Get full playlist details with snapshot and events (pass playlist_id, optional include_events_limit)
 - memory.reconstruct_playlist — Reconstruct playlist track list from memory (pass playlist_id, optional at_time)
 
+Memory (search & data management):
+- memory.search — Search across all memory by keyword (pass query, optional limit)
+- memory.export_user_data — Export all stored memory data as JSON
+- memory.delete_user_data — Delete ALL stored memory data (pass confirm=true; irreversible)
+
 Ops (system status):
 - ops.sync_status — Check data collection status
 - ops.latest_job_runs — Recent sync job history
@@ -163,6 +177,7 @@ Ops (system status):
 - Remember that I prefer upbeat symphonic metal
 - What do you remember about my taste?
 - What playlists did you make for me?
+- Search my music memory for metal playlists
 
 ## Verify
 
@@ -280,12 +295,16 @@ cursor, at_time).
 
 **Conversation starters:** Added "What playlists did you make for me?"
 
-### Phase 10 — Search, Export/Delete & Final Integration (planned)
+### Phase 10 — Search, Export/Delete & Final Integration (done)
 
-**OpenAPI schema:** Will add ~3 tools (`memory.search`, `memory.export_user_data`,
-`memory.delete_user_data`) and new parameters (query, confirm).
+**OpenAPI schema:** Replace with `docs/chatgpt-openapi.json` — adds 3 `memory.*`
+tools to the enum (`memory.search`, `memory.export_user_data`,
+`memory.delete_user_data`) and 2 new parameters (`query`, `confirm`).
 
-**Instructions:** Will add:
-- When user references a past playlist by vibe/name, use `memory.search` first
-- Support "export my data" and "delete everything you stored" requests
-- 3 tools added to AVAILABLE TOOLS list
+**Instructions:** Updated above. Key additions:
+- MEMORY RULES: guidance for "export my data" → `memory.export_user_data`,
+  "delete everything" → `memory.delete_user_data(confirm=true)`
+- PLAYLIST MEMORY: "find that playlist" → `memory.search(query="...")`
+- 3 tools added to AVAILABLE TOOLS under new "Memory (search & data management)" subsection
+
+**Conversation starters:** Added "Search my music memory for metal playlists"
