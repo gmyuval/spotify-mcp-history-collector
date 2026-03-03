@@ -42,7 +42,7 @@ class SpotifyMCPApp:
 
     @staticmethod
     @asynccontextmanager
-    async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG004
         """Application lifespan: start DB log handler, clean up on shutdown."""
         db_log_handler = DBLogHandler(db_manager, service=ServiceName.API)
         await db_log_handler.start()

@@ -15,6 +15,7 @@ select = [
     "B",  # flake8-bugbear
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
+    "ARG",  # flake8-unused-arguments
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)
@@ -24,6 +25,12 @@ ignore = [
 # migration is always correct. Promoting it to safe lets `ruff check --fix`
 # handle it automatically instead of requiring `--unsafe-fixes`.
 extend-safe-fixes = ["UP042"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files: pytest fixtures are referenced by name in function signatures
+# but not used in the function body — this is expected pytest behaviour.
+"**/tests/**" = ["ARG001"]
+"**/conftest.py" = ["ARG001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "shared", "collector", "frontend"]

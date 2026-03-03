@@ -26,7 +26,7 @@ class AuthRouter:
             "login.html", {"request": request}
         )
 
-    async def logout(self, request: Request) -> Response:
+    async def logout(self, request: Request) -> Response:  # noqa: ARG002
         """Clear auth cookies and redirect to Google sign-out."""
         # Clear JWT cookies then redirect to oauth2-proxy sign-out
         # which clears the Google OAuth session and redirects to login

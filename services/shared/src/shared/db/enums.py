@@ -70,3 +70,20 @@ class PreferenceEventType(enum.StrEnum):
     RULE = "rule"
     FEEDBACK = "feedback"
     NOTE = "note"
+
+
+class PlaylistSnapshotSource(enum.StrEnum):
+    """Source/trigger of a playlist snapshot."""
+
+    CREATE = "create"
+    PERIODIC = "periodic"
+    MANUAL = "manual"
+
+
+class PlaylistEventType(enum.StrEnum):
+    """Type of playlist mutation event."""
+
+    ADD_TRACKS = "ADD_TRACKS"
+    REMOVE_TRACKS = "REMOVE_TRACKS"
+    REORDER = "REORDER"
+    UPDATE_META = "UPDATE_META"
