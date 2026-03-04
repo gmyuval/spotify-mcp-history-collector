@@ -312,12 +312,16 @@ class ExplorerService:
             if snap is not None:
                 track_ids = [str(t) for t in snap.track_ids]
 
-        count_stmt = select(func.count()).select_from(PlaylistEvent).where(PlaylistEvent.playlist_id == playlist_id)
+        count_stmt = (
+            select(func.count())
+            .select_from(PlaylistEvent)
+            .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
+        )
         total_events = (await session.execute(count_stmt)).scalar_one()
 
         events_stmt = (
             select(PlaylistEvent)
-            .where(PlaylistEvent.playlist_id == playlist_id)
+            .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
             .order_by(desc(PlaylistEvent.timestamp))
             .limit(20)
         )
@@ -358,12 +362,16 @@ class ExplorerService:
         if pl is None or pl.user_id != user_id:
             return None
 
-        count_stmt = select(func.count()).select_from(PlaylistEvent).where(PlaylistEvent.playlist_id == playlist_id)
+        count_stmt = (
+            select(func.count())
+            .select_from(PlaylistEvent)
+            .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
+        )
         total = (await session.execute(count_stmt)).scalar_one()
 
         stmt = (
             select(PlaylistEvent)
-            .where(PlaylistEvent.playlist_id == playlist_id)
+            .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
             .order_by(desc(PlaylistEvent.timestamp))
             .limit(limit)
             .offset(offset)
