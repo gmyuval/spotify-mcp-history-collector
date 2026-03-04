@@ -120,3 +120,50 @@ class PaginatedPreferenceEvents(BaseModel):
 class TasteProfilePatch(BaseModel):
     patch: dict[str, Any]
     reason: str | None = None
+
+
+# ── Memory playlist schemas ──────────────────────────────────────
+
+
+class MemoryPlaylistSummary(BaseModel):
+    playlist_id: str
+    name: str
+    description: str | None
+    created_at: str
+    updated_at: str
+    intent_tags: list[str]
+    track_count: int
+
+
+class PaginatedMemoryPlaylists(BaseModel):
+    items: list[MemoryPlaylistSummary]
+    total: int
+    limit: int
+    offset: int
+
+
+class MemoryPlaylistEventItem(BaseModel):
+    event_id: str
+    timestamp: str
+    type: str
+    payload: dict[str, Any]
+
+
+class MemoryPlaylistDetail(BaseModel):
+    playlist_id: str
+    name: str
+    description: str | None
+    created_at: str
+    updated_at: str
+    intent_tags: list[str]
+    seed_context: dict[str, Any]
+    track_ids: list[str]
+    recent_events: list[MemoryPlaylistEventItem]
+    total_events: int
+
+
+class PaginatedMemoryPlaylistEvents(BaseModel):
+    items: list[MemoryPlaylistEventItem]
+    total: int
+    limit: int
+    offset: int

@@ -119,5 +119,29 @@
       </div>
     </div>
   </div>
+
+  <!-- AI-Created Playlists Summary -->
+  <div class="col-md-12">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between">
+        <strong>AI-Created Playlists</strong>
+        <a href="/playlists/memory" class="text-muted small">View All</a>
+      </div>
+      <div class="card-body">
+        {% if memory_playlists and memory_playlists["items"] %}
+          <p class="mb-2">{{ memory_playlists.total }} playlist{{ "s" if memory_playlists.total != 1 else "" }} created by your assistant</p>
+          <div class="d-flex flex-wrap gap-2">
+            {% for pl in memory_playlists["items"][:5] %}
+            <a href="/playlists/memory/{{ pl.playlist_id }}" class="text-decoration-none">
+              <span class="taste-tag">{{ pl.name }} ({{ pl.track_count }})</span>
+            </a>
+            {% endfor %}
+          </div>
+        {% else %}
+        <p class="text-muted mb-0">No AI-created playlists yet. <a href="/playlists/memory">View</a></p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}

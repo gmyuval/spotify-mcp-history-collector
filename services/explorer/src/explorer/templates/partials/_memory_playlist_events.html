@@ -1,0 +1,84 @@
+{% if events["items"] %}
+<table class="table table-hover mb-0">
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Type</th>
+      <th>Details</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for event in events["items"] %}
+    <tr>
+      <td class="text-muted" style="white-space: nowrap;">{{ event.timestamp[:16] | replace("T", " ") }}</td>
+      <td>
+        {% if event.type == "ADD_TRACKS" %}
+        <span class="badge event-badge-like">add</span>
+        {% elif event.type == "REMOVE_TRACKS" %}
+        <span class="badge event-badge-dislike">remove</span>
+        {% elif event.type == "REORDER" %}
+        <span class="badge event-badge-rule">reorder</span>
+        {% elif event.type == "UPDATE_META" %}
+        <span class="badge event-badge-note">meta</span>
+        {% else %}
+        <span class="badge bg-secondary">{{ event.type }}</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if event.payload.track_ids %}
+          {{ event.payload.track_ids | length }} track(s)
+        {% elif event.payload.name %}
+          Name: {{ event.payload.name }}
+        {% else %}
+          <code class="small">{{ event.payload | tojson(indent=0) }}</code>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if events.total > events.limit %}
+{% set total_pages = ((events.total - 1) // events.limit) + 1 %}
+{% set current_page = (events.offset // events.limit) + 1 %}
+<div class="py-3">
+  <nav>
+    <ul class="pagination pagination-sm justify-content-center mb-0">
+      <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">
+        <a class="page-link"
+           hx-get="/playlists/memory/{{ playlist_id }}/partials/events?limit={{ events.limit }}&offset={{ (current_page - 2) * events.limit }}"
+           hx-target="#events-container"
+           hx-swap="innerHTML"
+           href="#">Prev</a>
+      </li>
+      {% for p in range(1, total_pages + 1) %}
+      {% if p <= 3 or p > total_pages - 2 or (p >= current_page - 1 and p <= current_page + 1) %}
+      <li class="page-item {% if p == current_page %}active{% endif %}">
+        <a class="page-link"
+           hx-get="/playlists/memory/{{ playlist_id }}/partials/events?limit={{ events.limit }}&offset={{ (p - 1) * events.limit }}"
+           hx-target="#events-container"
+           hx-swap="innerHTML"
+           href="#">{{ p }}</a>
+      </li>
+      {% elif p == 4 or p == total_pages - 2 %}
+      <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+      {% endfor %}
+      <li class="page-item {% if current_page >= total_pages %}disabled{% endif %}">
+        <a class="page-link"
+           hx-get="/playlists/memory/{{ playlist_id }}/partials/events?limit={{ events.limit }}&offset={{ current_page * events.limit }}"
+           hx-target="#events-container"
+           hx-swap="innerHTML"
+           href="#">Next</a>
+      </li>
+    </ul>
+  </nav>
+  <p class="text-center text-muted mt-2 mb-0">
+    <small>Showing {{ events.offset + 1 }}-{{ [events.offset + events.limit, events.total] | min }} of {{ events.total }}</small>
+  </p>
+</div>
+{% endif %}
+
+{% else %}
+<p class="text-muted text-center py-4 mb-0">No mutation events recorded</p>
+{% endif %}

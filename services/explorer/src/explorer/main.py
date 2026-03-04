@@ -57,6 +57,7 @@ class ExplorerApp:
             dashboard_router,
             history_router,
             landing_router,
+            memory_playlists_router,
             playlists_router,
             profile_router,
             taste_router,
@@ -66,6 +67,8 @@ class ExplorerApp:
         self.app.include_router(auth_router)
         self.app.include_router(dashboard_router)
         self.app.include_router(history_router, prefix="/history", tags=["history"])
+        # memory_playlists must come before playlists to avoid /{spotify_playlist_id} match
+        self.app.include_router(memory_playlists_router, prefix="/playlists/memory", tags=["memory-playlists"])
         self.app.include_router(playlists_router, prefix="/playlists", tags=["playlists"])
         self.app.include_router(profile_router)
         self.app.include_router(taste_router)

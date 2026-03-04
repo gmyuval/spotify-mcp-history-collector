@@ -107,6 +107,57 @@ def _default_mock_api() -> AsyncMock:
 
     api.clear_taste_profile.return_value = None
 
+    api.get_memory_playlists.return_value = {
+        "items": [
+            {
+                "playlist_id": "sp_abc123",
+                "name": "My AI Playlist",
+                "description": "Created by assistant",
+                "created_at": "2026-03-01T10:00:00",
+                "updated_at": "2026-03-01T12:00:00",
+                "intent_tags": ["upbeat", "metal"],
+                "track_count": 15,
+            },
+        ],
+        "total": 1,
+        "limit": 20,
+        "offset": 0,
+    }
+
+    api.get_memory_playlist.return_value = {
+        "playlist_id": "sp_abc123",
+        "name": "My AI Playlist",
+        "description": "Created by assistant",
+        "created_at": "2026-03-01T10:00:00",
+        "updated_at": "2026-03-01T12:00:00",
+        "intent_tags": ["upbeat", "metal"],
+        "seed_context": {"days": 30},
+        "track_ids": ["track1", "track2", "track3"],
+        "recent_events": [
+            {
+                "event_id": "evt-123",
+                "timestamp": "2026-03-01T12:00:00",
+                "type": "ADD_TRACKS",
+                "payload": {"track_ids": ["track4"]},
+            },
+        ],
+        "total_events": 1,
+    }
+
+    api.get_memory_playlist_events.return_value = {
+        "items": [
+            {
+                "event_id": "evt-123",
+                "timestamp": "2026-03-01T12:00:00",
+                "type": "ADD_TRACKS",
+                "payload": {"track_ids": ["track4"]},
+            },
+        ],
+        "total": 1,
+        "limit": 20,
+        "offset": 0,
+    }
+
     api.get_preference_events.return_value = {
         "items": [
             {

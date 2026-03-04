@@ -9,7 +9,10 @@ from app.admin.auth import require_permission
 from app.dependencies import db_manager
 from app.explorer.schemas import (
     DashboardData,
+    MemoryPlaylistDetail,
     PaginatedHistory,
+    PaginatedMemoryPlaylistEvents,
+    PaginatedMemoryPlaylists,
     PaginatedPreferenceEvents,
     PlaylistDetail,
     PlaylistSummary,
@@ -49,6 +52,9 @@ class ExplorerRouter:
         r.add_api_route("/taste-profile", self.update_taste_profile, methods=["PATCH"])
         r.add_api_route("/taste-profile", self.clear_taste_profile, methods=["DELETE"])
         r.add_api_route("/preference-events", self.preference_events, methods=["GET"])
+        r.add_api_route("/memory-playlists", self.memory_playlists, methods=["GET"])
+        r.add_api_route("/memory-playlists/{playlist_id}", self.memory_playlist_detail, methods=["GET"])
+        r.add_api_route("/memory-playlists/{playlist_id}/events", self.memory_playlist_events, methods=["GET"])
 
     async def dashboard(self, user_id: RequireOwnDataView, session: DBSession) -> DashboardData:
         return await self._service.get_dashboard(user_id, session)
@@ -133,6 +139,44 @@ class ExplorerRouter:
     ) -> PaginatedPreferenceEvents:
         """Get paginated preference event history."""
         return await self._service.get_preference_events(user_id, session, limit=limit, offset=offset)
+
+    async def memory_playlists(
+        self,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        limit: int = Query(default=20, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ) -> PaginatedMemoryPlaylists:
+        """List assistant-tracked playlists from the memory ledger."""
+        return await self._service.get_memory_playlists(user_id, session, limit=limit, offset=offset)
+
+    async def memory_playlist_detail(
+        self,
+        playlist_id: str,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+    ) -> MemoryPlaylistDetail:
+        """Get a memory playlist with track IDs and recent events."""
+        result = await self._service.get_memory_playlist_detail(user_id, playlist_id, session)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Memory playlist not found")
+        return result
+
+    async def memory_playlist_events(
+        self,
+        playlist_id: str,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        limit: int = Query(default=20, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ) -> PaginatedMemoryPlaylistEvents:
+        """Get paginated mutation events for a memory playlist."""
+        result = await self._service.get_memory_playlist_events(
+            user_id, playlist_id, session, limit=limit, offset=offset
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="Memory playlist not found")
+        return result
 
 
 _instance = ExplorerRouter()

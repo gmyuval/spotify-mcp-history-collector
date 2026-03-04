@@ -89,8 +89,8 @@ PARAMETER RULES:
   Do NOT nest in "arguments" or "args".
   Example: {"tool": "history.taste_summary", "user_id": 1, "days": 90}
 - user_id is always an integer.
-- Fields like patch, payload, intent_tags, seed_context must be passed as
-  JSON strings (not raw objects).
+- Fields like patch, payload, intent_tags, seed_context accept either native
+  JSON objects/arrays or JSON-encoded strings. The server handles both.
 - Use "search_type" (not "type") for spotify.search.
 - Use "event_type" (not "type") for memory.append_preference_event.
 - Use "mutation_type" (not "type") for memory.log_playlist_mutation.
@@ -276,3 +276,21 @@ tools to the enum (`memory.search`, `memory.export_user_data`,
 with all 33 tools, descriptions, parameters, and format notes.
 
 **Conversation starters:** Added "Search my music memory for metal playlists"
+
+### Phase 11 — Explorer UI: Playlist Ledger Pages + ChatGPT OpenAPI Fix (current)
+
+**OpenAPI schema:** Replace with `docs/chatgpt-openapi.json` — fixes 4 parameter
+types from `"type": "string"` to `oneOf` so ChatGPT can send native JSON objects:
+- `patch`: `oneOf: [{type: object}, {type: string}]`
+- `payload`: `oneOf: [{type: object}, {type: string}]`
+- `intent_tags`: `oneOf: [{type: array, items: {type: string}}, {type: string}]`
+- `seed_context`: `oneOf: [{type: object}, {type: string}]`
+
+**Instructions:** Updated PARAMETER RULES to note that `patch`, `payload`,
+`intent_tags`, `seed_context` accept either native JSON objects/arrays or
+JSON-encoded strings.
+
+**Knowledge file:** Re-upload `docs/chatgpt-tool-catalog.md` — updated Parameter
+Format Notes section to reflect both formats are accepted.
+
+**No tool enum or conversation starter changes needed.**

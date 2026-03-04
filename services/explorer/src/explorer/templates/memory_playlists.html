@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}AI Playlists{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">AI-Created Playlists</h2>
+  <a href="/playlists" class="btn btn-outline-secondary btn-sm">Spotify Playlists</a>
+</div>
+
+{% if data["items"] %}
+<div class="row g-3">
+  {% for pl in data["items"] %}
+  <div class="col-sm-6 col-md-4 col-lg-3">
+    <a href="/playlists/memory/{{ pl.playlist_id }}" class="text-decoration-none">
+      <div class="card playlist-card h-100">
+        <div class="card-body">
+          <h6 class="card-title text-white mb-1">{{ pl.name }}</h6>
+          <small class="text-muted">{{ pl.track_count }} tracks</small>
+          {% if pl.description %}
+          <p class="text-muted small mt-2 mb-1">{{ pl.description[:80] }}{% if pl.description | length > 80 %}...{% endif %}</p>
+          {% endif %}
+          {% if pl.intent_tags %}
+          <div class="d-flex flex-wrap gap-1 mt-2">
+            {% for tag in pl.intent_tags[:3] %}
+            <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ tag }}</span>
+            {% endfor %}
+            {% if pl.intent_tags | length > 3 %}
+            <span class="badge bg-secondary" style="font-size: 0.7rem;">+{{ pl.intent_tags | length - 3 }}</span>
+            {% endif %}
+          </div>
+          {% endif %}
+          <div class="text-muted small mt-2">{{ pl.updated_at[:10] }}</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+{% if data.total > data.limit %}
+{% set current_page = (data.offset // data.limit) + 1 %}
+{% set total_pages = ((data.total - 1) // data.limit) + 1 %}
+<div class="py-3">
+  <nav>
+    <ul class="pagination pagination-sm justify-content-center mb-0">
+      <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">
+        <a class="page-link" href="/playlists/memory?limit={{ data.limit }}&offset={{ (current_page - 2) * data.limit }}">Prev</a>
+      </li>
+      {% for p in range(1, total_pages + 1) %}
+      {% if p <= 3 or p > total_pages - 2 or (p >= current_page - 1 and p <= current_page + 1) %}
+      <li class="page-item {% if p == current_page %}active{% endif %}">
+        <a class="page-link" href="/playlists/memory?limit={{ data.limit }}&offset={{ (p - 1) * data.limit }}">{{ p }}</a>
+      </li>
+      {% elif p == 4 or p == total_pages - 2 %}
+      <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+      {% endfor %}
+      <li class="page-item {% if current_page >= total_pages %}disabled{% endif %}">
+        <a class="page-link" href="/playlists/memory?limit={{ data.limit }}&offset={{ current_page * data.limit }}">Next</a>
+      </li>
+    </ul>
+  </nav>
+  <p class="text-center text-muted mt-2 mb-0">
+    <small>Showing {{ data.offset + 1 }}-{{ [data.offset + data.limit, data.total] | min }} of {{ data.total }}</small>
+  </p>
+</div>
+{% endif %}
+
+{% else %}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <p class="text-muted mb-0">No AI-created playlists yet. Your assistant will log playlists here when it creates them for you.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

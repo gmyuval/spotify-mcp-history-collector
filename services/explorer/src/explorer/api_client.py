@@ -1,8 +1,64 @@
 """API client for the explorer frontend — forwards user JWT to the API."""
 
-from typing import Any
+from typing import Any, TypedDict
 
 import httpx
+
+# -- TypedDicts for structured API response shapes --
+
+
+class MemoryPlaylistItem(TypedDict):
+    """A single memory playlist summary as returned by the list endpoint."""
+
+    playlist_id: str
+    name: str
+    description: str | None
+    created_at: str
+    updated_at: str
+    intent_tags: list[str]
+    track_count: int
+
+
+class PaginatedMemoryPlaylists(TypedDict):
+    """Paginated list of memory playlist summaries."""
+
+    items: list[MemoryPlaylistItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class MemoryPlaylistEvent(TypedDict):
+    """A single playlist mutation event."""
+
+    event_id: str
+    timestamp: str
+    type: str
+    payload: dict[str, Any]
+
+
+class MemoryPlaylistDetail(TypedDict):
+    """Full memory playlist detail with tracks and recent events."""
+
+    playlist_id: str
+    name: str
+    description: str | None
+    created_at: str
+    updated_at: str
+    intent_tags: list[str]
+    seed_context: dict[str, Any]
+    track_ids: list[str]
+    recent_events: list[MemoryPlaylistEvent]
+    total_events: int
+
+
+class PaginatedMemoryPlaylistEvents(TypedDict):
+    """Paginated list of playlist mutation events."""
+
+    items: list[MemoryPlaylistEvent]
+    total: int
+    limit: int
+    offset: int
 
 
 class ApiError(Exception):
@@ -114,6 +170,34 @@ class ExplorerApiClient:
         """GET /api/me/preference-events"""
         result: dict[str, Any] = await self._request(
             "GET", "/api/me/preference-events", access_token, params={"limit": limit, "offset": offset}
+        )
+        return result
+
+    async def get_memory_playlists(
+        self, access_token: str, limit: int = 20, offset: int = 0
+    ) -> PaginatedMemoryPlaylists:
+        """Fetch paginated list of assistant-tracked playlists."""
+        result: PaginatedMemoryPlaylists = await self._request(
+            "GET", "/api/me/memory-playlists", access_token, params={"limit": limit, "offset": offset}
+        )
+        return result
+
+    async def get_memory_playlist(self, access_token: str, playlist_id: str) -> MemoryPlaylistDetail:
+        """Fetch a single memory playlist with track IDs and recent events."""
+        result: MemoryPlaylistDetail = await self._request(
+            "GET", f"/api/me/memory-playlists/{playlist_id}", access_token
+        )
+        return result
+
+    async def get_memory_playlist_events(
+        self, access_token: str, playlist_id: str, limit: int = 20, offset: int = 0
+    ) -> PaginatedMemoryPlaylistEvents:
+        """Fetch paginated mutation events for a memory playlist."""
+        result: PaginatedMemoryPlaylistEvents = await self._request(
+            "GET",
+            f"/api/me/memory-playlists/{playlist_id}/events",
+            access_token,
+            params={"limit": limit, "offset": offset},
         )
         return result
 

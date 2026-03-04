@@ -308,3 +308,77 @@ def test_dashboard_taste_api_error_graceful(client: TestClient, mock_api: AsyncM
     assert response.status_code == 200
     assert "150" in response.text  # Dashboard data still renders
     client.cookies.clear()
+
+
+# --- Memory playlists ---
+
+
+def test_memory_playlists_requires_login(client: TestClient) -> None:
+    response = client.get("/playlists/memory/", follow_redirects=False)
+    assert response.status_code == 303
+
+
+def test_memory_playlists_page(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/playlists/memory/")
+    assert response.status_code == 200
+    assert "My AI Playlist" in response.text
+    assert "15" in response.text  # track_count
+    mock_api.get_memory_playlists.assert_called_once()
+    client.cookies.clear()
+
+
+def test_memory_playlists_empty(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.get_memory_playlists.return_value = {"items": [], "total": 0, "limit": 20, "offset": 0}
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/playlists/memory/")
+    assert response.status_code == 200
+    assert "No AI-created playlists yet" in response.text
+    client.cookies.clear()
+
+
+def test_memory_playlist_detail_page(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/playlists/memory/sp_abc123")
+    assert response.status_code == 200
+    assert "My AI Playlist" in response.text
+    assert "track1" in response.text
+    mock_api.get_memory_playlist.assert_called_once_with("test-jwt", "sp_abc123")
+    client.cookies.clear()
+
+
+def test_memory_playlist_detail_api_error(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.get_memory_playlist.side_effect = ApiError(404, "Not found")
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/playlists/memory/nonexistent")
+    assert response.status_code == 200
+    assert "Not found" in response.text
+    client.cookies.clear()
+
+
+def test_memory_playlist_events_partial(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/playlists/memory/sp_abc123/partials/events?limit=10&offset=0")
+    assert response.status_code == 200
+    mock_api.get_memory_playlist_events.assert_called_once_with("test-jwt", "sp_abc123", limit=10, offset=0)
+    client.cookies.clear()
+
+
+def test_dashboard_shows_memory_playlists_card(client: TestClient, mock_api: AsyncMock) -> None:
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    assert "AI-Created Playlists" in response.text
+    assert "My AI Playlist" in response.text
+    mock_api.get_memory_playlists.assert_called_once()
+    client.cookies.clear()
+
+
+def test_dashboard_memory_playlists_api_error_graceful(client: TestClient, mock_api: AsyncMock) -> None:
+    """Dashboard still loads even if memory playlists API fails."""
+    mock_api.get_memory_playlists.side_effect = ApiError(500, "Memory error")
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/dashboard")
+    assert response.status_code == 200
+    assert "150" in response.text  # Dashboard data still renders
+    client.cookies.clear()
