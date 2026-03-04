@@ -5,7 +5,7 @@
 **Root causes identified and fixed:**
 
 1. **Stale cache bug** (PR #37): `list_playlists` cached `snapshot_id` without track rows; `get_playlist` served empty-tracks cache entries. Fixed by treating empty-tracks cache as a miss.
-2. **Spotify 403 restriction** (PR #37): Spotify Development Mode blocks `GET /playlists/{id}` and `/tracks` (requires Extended Quota Mode). Fixed with graceful degradation — returns metadata + `tracks_restricted` flag.
+2. **Spotify 403 restriction** (PR #37): Spotify Development Mode blocks `GET /playlists/{id}` and `/tracks` (the app must be in Extended Quota Mode). Fixed with graceful degradation — returns metadata + `tracks_restricted` flag.
 3. **Embed fallback** (Phase 11.5): Spotify's embed page (`/embed/playlist/{id}`) returns complete track listings in `__NEXT_DATA__` JSON — no auth required. Used as automatic fallback when API returns 403.
 4. **Backfill tool** (Phase 11.5): New `memory.backfill_playlist` MCP tool imports existing Spotify playlists into the memory ledger in a single call.
 
@@ -29,7 +29,7 @@ We could list playlists and fetch playlist metadata, but **could not retrieve th
 The `list_playlists` tool caches playlist metadata (including `snapshot_id`) but not track data. When `get_playlist` found a matching `snapshot_id` in cache, it returned the cached entry with empty tracks instead of fetching them. Fix: cache entries with empty tracks are treated as misses.
 
 ### Fix 2: Spotify 403 graceful degradation (PR #37)
-Spotify's Development Mode restricts `GET /playlists/{id}` and `GET /playlists/{id}/tracks` endpoints (requires Extended Quota Mode). The handler now catches 403 on both endpoints and returns cached metadata with a `tracks_restricted` flag and explanation.
+Spotify's Development Mode restricts `GET /playlists/{id}` and `GET /playlists/{id}/tracks` endpoints (the app must be in Extended Quota Mode). The handler now catches 403 on both endpoints and returns cached metadata with a `tracks_restricted` flag and explanation.
 
 ### Fix 3: Embed fallback (Phase 11.5)
 Spotify's embed endpoint (`https://open.spotify.com/embed/playlist/{id}`) returns complete track listings in its server-rendered `__NEXT_DATA__` JSON blob. No authentication required. The `get_playlist` tool automatically falls back to this when the API returns 403. Returns `tracks_source: "embed"` to indicate the data source.
