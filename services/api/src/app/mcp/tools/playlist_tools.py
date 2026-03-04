@@ -195,23 +195,36 @@ class PlaylistToolHandlers:
                 logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
                 return cached_data
 
-        # Fetch all tracks via pagination (uses GET /playlists/{id}/tracks)
-        all_track_items = await client.get_playlist_all_tracks(playlist_id)
-        tracks = []
-        for item in all_track_items:
-            if item.track:
-                tracks.append(
-                    {
-                        "id": item.track.id,
-                        "name": item.track.name,
-                        "artists": [{"id": a.id, "name": a.name} for a in item.track.artists],
-                        "added_at": item.added_at,
-                    }
+        # Fetch all tracks via pagination (uses GET /playlists/{id}/tracks).
+        # This endpoint may also return 403 in Spotify dev mode (requires
+        # Extended Quota Mode). In that case, return metadata-only result.
+        tracks: list[dict[str, Any]] = []
+        tracks_restricted = False
+        try:
+            all_track_items = await client.get_playlist_all_tracks(playlist_id)
+            for item in all_track_items:
+                if item.track:
+                    tracks.append(
+                        {
+                            "id": item.track.id,
+                            "name": item.track.name,
+                            "artists": [{"id": a.id, "name": a.name} for a in item.track.artists],
+                            "added_at": item.added_at,
+                        }
+                    )
+        except SpotifyRequestError as exc:
+            if exc.status_code == 403:
+                logger.warning(
+                    "Spotify returned 403 for GET /playlists/%s/tracks — app may need Extended Quota Mode",
+                    playlist_id,
                 )
+                tracks_restricted = True
+            else:
+                raise
 
         # Build result from live API metadata or cached metadata fallback
         if pl is not None:
-            result = {
+            result: dict[str, Any] = {
                 "id": pl.id,
                 "name": pl.name,
                 "description": pl.description,
@@ -231,11 +244,20 @@ class PlaylistToolHandlers:
                 "description": cached_data.get("description") if cached_data else None,
                 "public": cached_data.get("public") if cached_data else None,
                 "owner": cached_data.get("owner") if cached_data else None,
-                "tracks_total": len(tracks),
+                "tracks_total": cached_data.get("tracks_total") if cached_data else 0,
                 "tracks": tracks,
                 "snapshot_id": cached_data.get("snapshot_id") if cached_data else None,
                 "external_urls": cached_data.get("external_urls", {}) if cached_data else {},
             }
+
+        if tracks_restricted:
+            result["tracks_restricted"] = True
+            result["tracks_restricted_reason"] = (
+                "Spotify returned 403 for playlist track listing. "
+                "This app is in Development Mode and GET /playlists/{id}/tracks "
+                "requires Extended Quota Mode. Tracks cannot be retrieved until "
+                "the app is approved for extended access."
+            )
 
         # Cache the full playlist with tracks
         await self._cache.put_playlist(user_id, result, tracks, session)

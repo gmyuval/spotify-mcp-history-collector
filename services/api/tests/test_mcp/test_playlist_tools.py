@@ -531,6 +531,59 @@ def test_get_playlist_403_fallback(client: TestClient, seeded_user: int) -> None
         mock_client.get_playlist_all_tracks.assert_called_once_with("pl_403")
 
 
+def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user: int) -> None:
+    """get_playlist returns metadata with restriction notice when both endpoints 403.
+
+    In Spotify dev mode, both GET /playlists/{id} and GET /playlists/{id}/tracks
+    may return 403 (Extended Quota Mode required). The handler should return
+    cached metadata with a clear restriction message.
+    """
+    from shared.spotify.exceptions import SpotifyRequestError
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        # Both endpoints return 403
+        mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_get_client.return_value = mock_client
+
+        # Seed cache with metadata via list_playlists first
+        mock_client.get_user_playlists = AsyncMock(
+            return_value=UserPlaylistsResponse(
+                items=[
+                    SpotifyPlaylistSimplified(
+                        id="pl_full403",
+                        name="Fully Restricted",
+                        public=True,
+                        owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+                        snapshot_id="snap_full403",
+                        tracks={"total": 10},
+                    )
+                ],
+                total=1,
+            )
+        )
+        client.post(
+            "/mcp/call",
+            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
+        )
+
+        # get_playlist should return metadata + restriction notice
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_full403"},
+        )
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["name"] == "Fully Restricted"
+        assert data["result"]["tracks"] == []
+        assert data["result"]["tracks_restricted"] is True
+        assert "Extended Quota Mode" in data["result"]["tracks_restricted_reason"]
+
+
 def test_get_playlist_large_paginated(client: TestClient, seeded_user: int) -> None:
     """get_playlist returns all tracks even when the playlist has more than one page."""
     mock_playlist = SpotifyPlaylist(
