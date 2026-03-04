@@ -467,6 +467,70 @@ def test_get_playlist_stale_cache_without_tracks(client: TestClient, seeded_user
         mock_client.get_playlist_all_tracks.assert_called_once_with("pl_stale")
 
 
+def test_get_playlist_403_fallback(client: TestClient, seeded_user: int) -> None:
+    """get_playlist falls back to cached metadata when Spotify returns 403.
+
+    Spotify may return 403 for GET /playlists/{id} in dev mode while
+    GET /playlists/{id}/tracks still works. The handler should use cached
+    metadata from list_playlists and fetch tracks via pagination.
+    """
+    from shared.spotify.exceptions import SpotifyRequestError
+
+    mock_all_tracks = [
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(
+                id=f"t{i}",
+                name=f"Track {i}",
+                artists=[SpotifyArtistSimplified(id="a1", name="Artist")],
+            ),
+            added_at="2025-01-01T00:00:00Z",
+        )
+        for i in range(5)
+    ]
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        # Simulate Spotify 403 on GET /playlists/{id}
+        mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks = AsyncMock(return_value=mock_all_tracks)
+        mock_get_client.return_value = mock_client
+
+        # Seed cache with metadata via list_playlists first
+        mock_client.get_user_playlists = AsyncMock(
+            return_value=UserPlaylistsResponse(
+                items=[
+                    SpotifyPlaylistSimplified(
+                        id="pl_403",
+                        name="Forbidden Playlist",
+                        public=True,
+                        owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+                        snapshot_id="snap_403",
+                        tracks={"total": 5},
+                    )
+                ],
+                total=1,
+            )
+        )
+        client.post(
+            "/mcp/call",
+            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
+        )
+
+        # Now get_playlist — should gracefully handle 403 and return tracks
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_403"},
+        )
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["name"] == "Forbidden Playlist"
+        assert len(data["result"]["tracks"]) == 5
+        mock_client.get_playlist_all_tracks.assert_called_once_with("pl_403")
+
+
 def test_get_playlist_large_paginated(client: TestClient, seeded_user: int) -> None:
     """get_playlist returns all tracks even when the playlist has more than one page."""
     mock_playlist = SpotifyPlaylist(

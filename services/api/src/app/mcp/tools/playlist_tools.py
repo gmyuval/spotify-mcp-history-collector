@@ -13,6 +13,7 @@ from app.mcp.schemas import MCPToolParam
 from app.settings import get_settings
 from shared.db.models.user import SpotifyToken
 from shared.spotify.client import SpotifyClient
+from shared.spotify.exceptions import SpotifyRequestError
 
 logger = logging.getLogger(__name__)
 
@@ -171,18 +172,30 @@ class PlaylistToolHandlers:
         cached_snapshots = await self._cache.get_cached_playlist_snapshot_ids(user_id, session)
         cached_snapshot = cached_snapshots.get(playlist_id)
 
-        # Always fetch from API (we need the live snapshot_id to compare)
+        # Try to fetch playlist metadata from Spotify API.
+        # GET /playlists/{id} may return 403 in some Spotify developer modes;
+        # if so, fall back to cached metadata from list_playlists.
         client = await self._get_client(user_id, session)
-        pl = await client.get_playlist(playlist_id)
+        pl = None
+        try:
+            pl = await client.get_playlist(playlist_id)
+        except SpotifyRequestError as exc:
+            if exc.status_code == 403:
+                logger.warning(
+                    "Spotify returned 403 for GET /playlists/%s, falling back to cached metadata",
+                    playlist_id,
+                )
+            else:
+                raise
 
-        if cached_snapshot and pl.snapshot_id == cached_snapshot:
-            # Snapshot matches — try serving from cache
+        if pl is not None and cached_snapshot and pl.snapshot_id == cached_snapshot:
+            # Snapshot matches — try serving from cache (only if tracks are populated)
             cached_data = await self._cache.get_cached_playlist(user_id, playlist_id, session)
             if cached_data is not None and cached_data.get("tracks"):
                 logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
                 return cached_data
 
-        # Cache miss or snapshot changed — fetch all tracks via pagination
+        # Fetch all tracks via pagination (uses GET /playlists/{id}/tracks)
         all_track_items = await client.get_playlist_all_tracks(playlist_id)
         tracks = []
         for item in all_track_items:
@@ -195,17 +208,34 @@ class PlaylistToolHandlers:
                         "added_at": item.added_at,
                     }
                 )
-        result = {
-            "id": pl.id,
-            "name": pl.name,
-            "description": pl.description,
-            "public": pl.public,
-            "owner": pl.owner.display_name if pl.owner else None,
-            "tracks_total": pl.tracks.total if pl.tracks else 0,
-            "tracks": tracks,
-            "snapshot_id": pl.snapshot_id,
-            "external_urls": pl.external_urls,
-        }
+
+        # Build result from live API metadata or cached metadata fallback
+        if pl is not None:
+            result = {
+                "id": pl.id,
+                "name": pl.name,
+                "description": pl.description,
+                "public": pl.public,
+                "owner": pl.owner.display_name if pl.owner else None,
+                "tracks_total": pl.tracks.total if pl.tracks else 0,
+                "tracks": tracks,
+                "snapshot_id": pl.snapshot_id,
+                "external_urls": pl.external_urls,
+            }
+        else:
+            # 403 fallback — use cached metadata from list_playlists
+            cached_data = await self._cache.get_cached_playlist(user_id, playlist_id, session)
+            result = {
+                "id": playlist_id,
+                "name": cached_data.get("name", "") if cached_data else "",
+                "description": cached_data.get("description") if cached_data else None,
+                "public": cached_data.get("public") if cached_data else None,
+                "owner": cached_data.get("owner") if cached_data else None,
+                "tracks_total": len(tracks),
+                "tracks": tracks,
+                "snapshot_id": cached_data.get("snapshot_id") if cached_data else None,
+                "external_urls": cached_data.get("external_urls", {}) if cached_data else {},
+            }
 
         # Cache the full playlist with tracks
         await self._cache.put_playlist(user_id, result, tracks, session)
