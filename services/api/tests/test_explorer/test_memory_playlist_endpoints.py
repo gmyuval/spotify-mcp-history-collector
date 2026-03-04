@@ -234,6 +234,7 @@ class TestListMemoryPlaylists:
 
         # Page past all data
         resp2 = client.get("/api/me/memory-playlists?limit=1&offset=10", cookies=_auth_cookies(jwt_service, user_id))
+        assert resp2.status_code == 200
         assert resp2.json()["items"] == []
 
     def test_requires_auth(self, client: TestClient) -> None:

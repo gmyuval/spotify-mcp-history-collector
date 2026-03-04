@@ -96,8 +96,9 @@ class MemoryPlaylistsRouter:
 
         try:
             events_data = await api.get_memory_playlist_events(token, playlist_id, limit=limit, offset=offset)
-        except ApiError:
-            pass
+        except ApiError as e:
+            if e.status_code == 401:
+                return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "partials/_memory_playlist_events.html",

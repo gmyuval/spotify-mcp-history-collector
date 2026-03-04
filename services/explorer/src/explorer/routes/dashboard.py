@@ -1,5 +1,6 @@
 """Dashboard page — listening stats overview."""
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -7,6 +8,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from explorer.api_client import ApiError, ExplorerApiClient, PaginatedMemoryPlaylists
 from explorer.routes._helpers import require_login
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardRouter:
@@ -48,6 +51,7 @@ class DashboardRouter:
             if e.status_code == 401:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
             # Memory playlists are optional — don't error the page for non-auth failures
+            logger.warning("dashboard memory playlists fetch failed", extra={"status_code": e.status_code})
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "dashboard.html",
