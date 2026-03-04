@@ -309,7 +309,7 @@ class ExplorerService:
         track_ids: list[str] = []
         if pl.latest_snapshot_id is not None:
             snap = await session.get(PlaylistSnapshot, pl.latest_snapshot_id)
-            if snap is not None:
+            if snap is not None and snap.playlist_id == playlist_id:
                 track_ids = [str(t) for t in snap.track_ids]
 
         count_stmt = (
@@ -322,7 +322,7 @@ class ExplorerService:
         events_stmt = (
             select(PlaylistEvent)
             .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
-            .order_by(desc(PlaylistEvent.timestamp))
+            .order_by(desc(PlaylistEvent.timestamp), desc(PlaylistEvent.event_id))
             .limit(20)
         )
         result = await session.execute(events_stmt)
@@ -372,7 +372,7 @@ class ExplorerService:
         stmt = (
             select(PlaylistEvent)
             .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
-            .order_by(desc(PlaylistEvent.timestamp))
+            .order_by(desc(PlaylistEvent.timestamp), desc(PlaylistEvent.event_id))
             .limit(limit)
             .offset(offset)
         )
