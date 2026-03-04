@@ -25,12 +25,14 @@
         {% endif %}
       </td>
       <td>
-        {% if event.payload.track_ids %}
+        {% if event.payload and event.payload.track_ids %}
           {{ event.payload.track_ids | length }} track(s)
-        {% elif event.payload.name %}
+        {% elif event.payload and event.payload.name %}
           Name: {{ event.payload.name }}
-        {% else %}
+        {% elif event.payload %}
           <code class="small">{{ event.payload | tojson(indent=0) }}</code>
+        {% else %}
+          <span class="text-muted">—</span>
         {% endif %}
       </td>
     </tr>

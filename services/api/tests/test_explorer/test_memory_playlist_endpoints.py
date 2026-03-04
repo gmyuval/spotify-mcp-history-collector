@@ -2,6 +2,8 @@
 
 import uuid
 from collections.abc import AsyncGenerator, Generator
+from contextlib import AbstractAsyncContextManager as AsyncContextManager
+from typing import TypedDict
 
 import pytest
 from cryptography.fernet import Fernet
@@ -16,6 +18,15 @@ from shared.db.enums import PlaylistEventType, PlaylistSnapshotSource
 from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnapshot
 from shared.db.models.rbac import Permission, Role, RolePermission, UserRole
 from shared.db.models.user import User
+
+
+class SeededPlaylistData(TypedDict):
+    """Return type for the seeded_playlist fixture."""
+
+    user_id: int
+    playlist_id: str
+    snapshot_id: uuid.UUID
+
 
 TEST_FERNET_KEY = Fernet.generate_key().decode()
 
@@ -93,7 +104,7 @@ async def seeded_users(async_engine: AsyncEngine) -> dict[str, int]:
 
 
 @pytest.fixture
-async def seeded_playlist(async_engine: AsyncEngine, seeded_user: int) -> dict[str, object]:
+async def seeded_playlist(async_engine: AsyncEngine, seeded_user: int) -> SeededPlaylistData:
     """Seed a memory playlist with snapshot and events for the test user."""
     factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
@@ -131,7 +142,7 @@ async def seeded_playlist(async_engine: AsyncEngine, seeded_user: int) -> dict[s
         session.add(event)
         await session.commit()
 
-        return {"user_id": seeded_user, "playlist_id": "sp_abc123", "snapshot_id": snapshot_id}
+        return SeededPlaylistData(user_id=seeded_user, playlist_id="sp_abc123", snapshot_id=snapshot_id)
 
 
 @pytest.fixture
@@ -157,7 +168,7 @@ def client(async_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch) -> Genera
     monkeypatch.setattr("app.auth.middleware.get_settings", _test_settings)
 
     class _TestDBManager:
-        def session(self_inner):  # noqa: N805
+        def session(self_inner) -> AsyncContextManager[AsyncSession]:  # noqa: N805
             @asynccontextmanager
             async def _ctx() -> AsyncGenerator[AsyncSession]:
                 async with session_factory() as s:
@@ -172,7 +183,8 @@ def client(async_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch) -> Genera
 
     monkeypatch.setattr("app.auth.middleware.db_manager", _TestDBManager())
 
-    yield TestClient(app)
+    with TestClient(app) as tc:
+        yield tc
     app.dependency_overrides.clear()
 
 
@@ -198,9 +210,9 @@ class TestListMemoryPlaylists:
         assert data["total"] == 0
 
     def test_with_playlists(
-        self, client: TestClient, seeded_playlist: dict[str, object], jwt_service: JWTService
+        self, client: TestClient, seeded_playlist: SeededPlaylistData, jwt_service: JWTService
     ) -> None:
-        user_id: int = seeded_playlist["user_id"]  # type: ignore[assignment]
+        user_id = seeded_playlist["user_id"]
         resp = client.get("/api/me/memory-playlists", cookies=_auth_cookies(jwt_service, user_id))
         assert resp.status_code == 200
         data = resp.json()
@@ -211,8 +223,8 @@ class TestListMemoryPlaylists:
         assert item["intent_tags"] == ["upbeat", "metal"]
         assert item["track_count"] == 3
 
-    def test_pagination(self, client: TestClient, seeded_playlist: dict[str, object], jwt_service: JWTService) -> None:
-        user_id: int = seeded_playlist["user_id"]  # type: ignore[assignment]
+    def test_pagination(self, client: TestClient, seeded_playlist: SeededPlaylistData, jwt_service: JWTService) -> None:
+        user_id = seeded_playlist["user_id"]
         resp = client.get("/api/me/memory-playlists?limit=1&offset=0", cookies=_auth_cookies(jwt_service, user_id))
         assert resp.status_code == 200
         data = resp.json()
@@ -256,10 +268,12 @@ class TestListMemoryPlaylists:
 
         # User A sees the playlist
         resp_a = client.get("/api/me/memory-playlists", cookies=_auth_cookies(jwt_service, seeded_users["user_a"]))
+        assert resp_a.status_code == 200
         assert resp_a.json()["total"] == 1
 
         # User B does not
         resp_b = client.get("/api/me/memory-playlists", cookies=_auth_cookies(jwt_service, seeded_users["user_b"]))
+        assert resp_b.status_code == 200
         assert resp_b.json()["total"] == 0
 
 
@@ -267,8 +281,8 @@ class TestListMemoryPlaylists:
 
 
 class TestMemoryPlaylistDetail:
-    def test_found(self, client: TestClient, seeded_playlist: dict[str, object], jwt_service: JWTService) -> None:
-        user_id: int = seeded_playlist["user_id"]  # type: ignore[assignment]
+    def test_found(self, client: TestClient, seeded_playlist: SeededPlaylistData, jwt_service: JWTService) -> None:
+        user_id = seeded_playlist["user_id"]
         resp = client.get("/api/me/memory-playlists/sp_abc123", cookies=_auth_cookies(jwt_service, user_id))
         assert resp.status_code == 200
         data = resp.json()
@@ -288,7 +302,7 @@ class TestMemoryPlaylistDetail:
     def test_user_isolation(
         self,
         client: TestClient,
-        seeded_playlist: dict[str, object],
+        seeded_playlist: SeededPlaylistData,
         seeded_users: dict[str, int],
         jwt_service: JWTService,
     ) -> None:
@@ -308,8 +322,10 @@ class TestMemoryPlaylistDetail:
 
 
 class TestMemoryPlaylistEvents:
-    def test_with_events(self, client: TestClient, seeded_playlist: dict[str, object], jwt_service: JWTService) -> None:
-        user_id: int = seeded_playlist["user_id"]  # type: ignore[assignment]
+    def test_with_events(
+        self, client: TestClient, seeded_playlist: SeededPlaylistData, jwt_service: JWTService
+    ) -> None:
+        user_id = seeded_playlist["user_id"]
         resp = client.get("/api/me/memory-playlists/sp_abc123/events", cookies=_auth_cookies(jwt_service, user_id))
         assert resp.status_code == 200
         data = resp.json()
@@ -317,8 +333,8 @@ class TestMemoryPlaylistEvents:
         assert len(data["items"]) == 1
         assert data["items"][0]["type"] == "ADD_TRACKS"
 
-    def test_pagination(self, client: TestClient, seeded_playlist: dict[str, object], jwt_service: JWTService) -> None:
-        user_id: int = seeded_playlist["user_id"]  # type: ignore[assignment]
+    def test_pagination(self, client: TestClient, seeded_playlist: SeededPlaylistData, jwt_service: JWTService) -> None:
+        user_id = seeded_playlist["user_id"]
         resp = client.get(
             "/api/me/memory-playlists/sp_abc123/events?limit=1&offset=0",
             cookies=_auth_cookies(jwt_service, user_id),

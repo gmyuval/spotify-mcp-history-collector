@@ -268,13 +268,22 @@ class ExplorerService:
         result = await session.execute(stmt)
         playlists = result.scalars().all()
 
+        # Batch-load snapshots to avoid N+1 queries
+        snapshot_ids = [pl.latest_snapshot_id for pl in playlists if pl.latest_snapshot_id is not None]
+        snapshots_by_id: dict[uuid.UUID, PlaylistSnapshot] = {}
+        if snapshot_ids:
+            snap_stmt = select(PlaylistSnapshot).where(PlaylistSnapshot.snapshot_id.in_(snapshot_ids))
+            snap_result = await session.execute(snap_stmt)
+            for snap in snap_result.scalars():
+                snapshots_by_id[snap.snapshot_id] = snap
+
         items = []
         for pl in playlists:
             track_count = 0
             if pl.latest_snapshot_id is not None:
-                snap = await session.get(PlaylistSnapshot, pl.latest_snapshot_id)
-                if snap is not None:
-                    track_count = len(snap.track_ids)
+                matched_snap = snapshots_by_id.get(pl.latest_snapshot_id)
+                if matched_snap is not None:
+                    track_count = len(matched_snap.track_ids)
             items.append(
                 MemoryPlaylistSummary(
                     playlist_id=pl.playlist_id,
