@@ -178,7 +178,7 @@ class PlaylistToolHandlers:
         if cached_snapshot and pl.snapshot_id == cached_snapshot:
             # Snapshot matches — try serving from cache
             cached_data = await self._cache.get_cached_playlist(user_id, playlist_id, session)
-            if cached_data is not None:
+            if cached_data is not None and cached_data.get("tracks"):
                 logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
                 return cached_data
 

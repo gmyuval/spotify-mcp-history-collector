@@ -395,6 +395,78 @@ def test_get_playlist(client: TestClient, seeded_user: int) -> None:
         mock_client.get_playlist_all_tracks.assert_called_once_with("pl1")
 
 
+def test_get_playlist_stale_cache_without_tracks(client: TestClient, seeded_user: int) -> None:
+    """get_playlist fetches tracks even when cache has a matching snapshot but no tracks.
+
+    Regression test: list_playlists caches snapshot_ids without track rows.
+    A subsequent get_playlist must NOT return the empty-tracks cache entry.
+    """
+    mock_playlist = SpotifyPlaylist(
+        id="pl_stale",
+        name="Stale Cache Playlist",
+        public=True,
+        owner=SpotifyPlaylistOwner(id="pluser", display_name="Playlist User"),
+        snapshot_id="snap_stale",
+        external_urls={},
+        tracks=SpotifyPlaylistTracks(items=[], total=3),
+    )
+
+    mock_all_tracks = [
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(
+                id=f"t{i}",
+                name=f"Track {i}",
+                artists=[SpotifyArtistSimplified(id="a1", name="Artist")],
+            ),
+            added_at="2025-01-01T00:00:00Z",
+        )
+        for i in range(3)
+    ]
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
+        mock_client.get_playlist_all_tracks = AsyncMock(return_value=mock_all_tracks)
+        mock_get_client.return_value = mock_client
+
+        # First call list_playlists to seed cache with snapshot_id but NO tracks
+        mock_client.get_user_playlists = AsyncMock(
+            return_value=UserPlaylistsResponse(
+                items=[
+                    SpotifyPlaylistSimplified(
+                        id="pl_stale",
+                        name="Stale Cache Playlist",
+                        public=True,
+                        owner=SpotifyPlaylistOwner(id="pluser", display_name="Playlist User"),
+                        snapshot_id="snap_stale",
+                        tracks={"total": 3},
+                    )
+                ],
+                total=1,
+            )
+        )
+        client.post(
+            "/mcp/call",
+            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
+        )
+
+        # Now get_playlist — should NOT return empty tracks from stale cache
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_stale"},
+        )
+        data = resp.json()
+        assert data["success"] is True
+        assert len(data["result"]["tracks"]) == 3, (
+            f"Expected 3 tracks but got {len(data['result']['tracks'])} — stale cache served empty tracks"
+        )
+        # Confirm pagination was actually called (not served from cache)
+        mock_client.get_playlist_all_tracks.assert_called_once_with("pl_stale")
+
+
 def test_get_playlist_large_paginated(client: TestClient, seeded_user: int) -> None:
     """get_playlist returns all tracks even when the playlist has more than one page."""
     mock_playlist = SpotifyPlaylist(
