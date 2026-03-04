@@ -9,7 +9,12 @@ from sqlalchemy.orm import selectinload
 from app.explorer.schemas import (
     ArtistSummary,
     DashboardData,
+    MemoryPlaylistDetail,
+    MemoryPlaylistEventItem,
+    MemoryPlaylistSummary,
     PaginatedHistory,
+    PaginatedMemoryPlaylistEvents,
+    PaginatedMemoryPlaylists,
     PaginatedPreferenceEvents,
     PlayHistoryItem,
     PlaylistDetail,
@@ -23,7 +28,7 @@ from app.explorer.schemas import (
 )
 from app.history.queries import HistoryQueries
 from shared.db.models.cache import CachedPlaylist
-from shared.db.models.memory import PreferenceEvent, TasteProfile
+from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnapshot, PreferenceEvent, TasteProfile
 from shared.db.models.user import SpotifyToken, User
 
 
@@ -243,3 +248,147 @@ class ExplorerService:
         ]
 
         return PaginatedPreferenceEvents(items=items, total=total, limit=limit, offset=offset)
+
+    # ── Memory playlists ──────────────────────────────────────────
+
+    async def get_memory_playlists(
+        self, user_id: int, session: AsyncSession, limit: int = 20, offset: int = 0
+    ) -> PaginatedMemoryPlaylists:
+        """Return paginated memory playlists for the user, ordered by updated_at desc."""
+        count_stmt = select(func.count()).select_from(MemoryPlaylist).where(MemoryPlaylist.user_id == user_id)
+        total = (await session.execute(count_stmt)).scalar_one()
+
+        stmt = (
+            select(MemoryPlaylist)
+            .where(MemoryPlaylist.user_id == user_id)
+            .order_by(desc(MemoryPlaylist.updated_at), desc(MemoryPlaylist.playlist_id))
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await session.execute(stmt)
+        playlists = result.scalars().all()
+
+        # Batch-load snapshots to avoid N+1 queries, keyed by (snapshot_id, playlist_id)
+        snapshot_ids = [pl.latest_snapshot_id for pl in playlists if pl.latest_snapshot_id is not None]
+        snapshots_by_key: dict[tuple[uuid.UUID, str], PlaylistSnapshot] = {}
+        if snapshot_ids:
+            playlist_ids = [pl.playlist_id for pl in playlists]
+            snap_stmt = select(PlaylistSnapshot).where(
+                PlaylistSnapshot.snapshot_id.in_(snapshot_ids),
+                PlaylistSnapshot.playlist_id.in_(playlist_ids),
+            )
+            snap_result = await session.execute(snap_stmt)
+            for snap in snap_result.scalars():
+                snapshots_by_key[(snap.snapshot_id, snap.playlist_id)] = snap
+
+        items = []
+        for pl in playlists:
+            track_count = 0
+            if pl.latest_snapshot_id is not None:
+                matched_snap = snapshots_by_key.get((pl.latest_snapshot_id, pl.playlist_id))
+                if matched_snap is not None:
+                    track_count = len(matched_snap.track_ids)
+            items.append(
+                MemoryPlaylistSummary(
+                    playlist_id=pl.playlist_id,
+                    name=pl.name,
+                    description=pl.description,
+                    created_at=pl.created_at.isoformat(),
+                    updated_at=pl.updated_at.isoformat(),
+                    intent_tags=pl.intent_tags,
+                    track_count=track_count,
+                )
+            )
+
+        return PaginatedMemoryPlaylists(items=items, total=total, limit=limit, offset=offset)
+
+    async def get_memory_playlist_detail(
+        self, user_id: int, playlist_id: str, session: AsyncSession
+    ) -> MemoryPlaylistDetail | None:
+        """Return a single memory playlist with snapshot track IDs and recent events."""
+        pl = await session.get(MemoryPlaylist, playlist_id)
+        if pl is None or pl.user_id != user_id:
+            return None
+
+        track_ids: list[str] = []
+        if pl.latest_snapshot_id is not None:
+            snap = await session.get(PlaylistSnapshot, pl.latest_snapshot_id)
+            if snap is not None and snap.playlist_id == playlist_id:
+                track_ids = [str(t) for t in snap.track_ids]
+
+        count_stmt = (
+            select(func.count())
+            .select_from(PlaylistEvent)
+            .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
+        )
+        total_events = (await session.execute(count_stmt)).scalar_one()
+
+        events_stmt = (
+            select(PlaylistEvent)
+            .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
+            .order_by(desc(PlaylistEvent.timestamp), desc(PlaylistEvent.event_id))
+            .limit(20)
+        )
+        result = await session.execute(events_stmt)
+        events = [
+            MemoryPlaylistEventItem(
+                event_id=str(e.event_id),
+                timestamp=e.timestamp.isoformat(),
+                type=e.type,
+                payload=e.payload_json,
+            )
+            for e in result.scalars().all()
+        ]
+
+        return MemoryPlaylistDetail(
+            playlist_id=pl.playlist_id,
+            name=pl.name,
+            description=pl.description,
+            created_at=pl.created_at.isoformat(),
+            updated_at=pl.updated_at.isoformat(),
+            intent_tags=pl.intent_tags,
+            seed_context=pl.seed_context,
+            track_ids=track_ids,
+            recent_events=events,
+            total_events=total_events,
+        )
+
+    async def get_memory_playlist_events(
+        self,
+        user_id: int,
+        playlist_id: str,
+        session: AsyncSession,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> PaginatedMemoryPlaylistEvents | None:
+        """Return paginated events for a memory playlist, or None if not found."""
+        pl = await session.get(MemoryPlaylist, playlist_id)
+        if pl is None or pl.user_id != user_id:
+            return None
+
+        count_stmt = (
+            select(func.count())
+            .select_from(PlaylistEvent)
+            .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
+        )
+        total = (await session.execute(count_stmt)).scalar_one()
+
+        stmt = (
+            select(PlaylistEvent)
+            .where(PlaylistEvent.playlist_id == playlist_id, PlaylistEvent.user_id == user_id)
+            .order_by(desc(PlaylistEvent.timestamp), desc(PlaylistEvent.event_id))
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await session.execute(stmt)
+        items = [
+            MemoryPlaylistEventItem(
+                event_id=str(e.event_id),
+                timestamp=e.timestamp.isoformat(),
+                type=e.type,
+                payload=e.payload_json,
+            )
+            for e in result.scalars().all()
+        ]
+
+        return PaginatedMemoryPlaylistEvents(items=items, total=total, limit=limit, offset=offset)

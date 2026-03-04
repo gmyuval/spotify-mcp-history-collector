@@ -129,8 +129,11 @@
                     "description": "List of Spotify track IDs. For spotify.add_tracks, spotify.remove_tracks (max 100), and memory.log_playlist_create (max 10000)."
                   },
                   "patch": {
-                    "type": "string",
-                    "description": "For memory.update_profile: JSON merge-patch as a JSON string (e.g. \"{\\\"core_genres\\\": [\\\"metal\\\"], \\\"playlist_rules\\\": {}}\")."
+                    "oneOf": [
+                      {"type": "object"},
+                      {"type": "string"}
+                    ],
+                    "description": "For memory.update_profile: JSON merge-patch. Pass as a JSON object or a JSON string."
                   },
                   "reason": {
                     "type": "string",
@@ -151,8 +154,11 @@
                     "enum": ["like", "dislike", "rule", "feedback", "note"]
                   },
                   "payload": {
-                    "type": "string",
-                    "description": "For memory.append_preference_event and memory.log_playlist_mutation: payload as a JSON string. For mutations: {\"track_ids\": [...]} for ADD/REMOVE/REORDER, {\"name\": \"...\"} for UPDATE_META."
+                    "oneOf": [
+                      {"type": "object"},
+                      {"type": "string"}
+                    ],
+                    "description": "For memory.append_preference_event and memory.log_playlist_mutation: payload. Pass as a JSON object or a JSON string. For mutations: {\"track_ids\": [...]} for ADD/REMOVE/REORDER, {\"name\": \"...\"} for UPDATE_META."
                   },
                   "timestamp": {
                     "type": "string",
@@ -169,12 +175,18 @@
                     "enum": ["ADD_TRACKS", "REMOVE_TRACKS", "REORDER", "UPDATE_META"]
                   },
                   "intent_tags": {
-                    "type": "string",
-                    "description": "For memory.log_playlist_create: JSON array of tags as a string (e.g. \"[\\\"upbeat\\\", \\\"symphonic metal\\\"]\")."
+                    "oneOf": [
+                      {"type": "array", "items": {"type": "string"}, "maxItems": 100},
+                      {"type": "string"}
+                    ],
+                    "description": "For memory.log_playlist_create: intent tags. Pass as a JSON array or a JSON string."
                   },
                   "seed_context": {
-                    "type": "string",
-                    "description": "For memory.log_playlist_create: JSON object of seed context as a string (e.g. \"{\\\"days\\\": 60, \\\"top_artists\\\": [...]}\")."
+                    "oneOf": [
+                      {"type": "object"},
+                      {"type": "string"}
+                    ],
+                    "description": "For memory.log_playlist_create: seed context. Pass as a JSON object or a JSON string."
                   },
                   "idempotency_key": {
                     "type": "string",

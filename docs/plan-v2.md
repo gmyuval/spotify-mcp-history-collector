@@ -29,7 +29,7 @@ Additionally, there are **bugs to fix first**:
 | 8 | Explorer UI: Taste Profile Display + Management | **DONE** |
 | 9 | MCP Memory: Playlist Ledger | **DONE** |
 | 10 | MCP Memory: Search, Export/Delete & ChatGPT Integration | **DONE** |
-| 11 | Explorer UI: Playlist Ledger Pages | Pending |
+| 11 | Explorer UI: Playlist Ledger Pages + ChatGPT OpenAPI Fix | **DONE** |
 | 12 | Admin-Configurable Settings | Pending |
 
 ---
@@ -605,35 +605,17 @@ See [`docs/phase9-playlist-ledger-plan.md`](phase9-playlist-ledger-plan.md) for 
 
 ---
 
-## Phase 11 — PR: Explorer UI: Playlist Ledger Pages
+## Phase 11 — ~~PR: Explorer UI: Playlist Ledger Pages + ChatGPT OpenAPI Fix~~ ✅ DONE
 
-**Goal:** Show assistant-tracked playlists in the explorer frontend so users can see playlists created/edited by their AI assistant, with mutation history and track lists.
+Explorer UI for browsing assistant-tracked playlists from the memory ledger, plus a ChatGPT OpenAPI schema fix for JSON parameter typing.
 
-> **Note:** The taste profile UI was completed in Phase 8. This phase focuses solely on the playlist ledger UI.
+**API:** 3 new endpoints — `GET /api/me/memory-playlists` (list), `GET /api/me/memory-playlists/{id}` (detail with tracks + events), `GET /api/me/memory-playlists/{id}/events` (paginated events). Service layer queries `MemoryPlaylist`, `PlaylistSnapshot`, `PlaylistEvent` with user ownership checks.
 
-### API endpoints (add to api service)
+**Explorer:** New `MemoryPlaylistsRouter` at `/playlists/memory` with list, detail, and HTMX events partial. 3 new templates + 3 new API client methods. Dashboard card shows up to 5 recent AI playlists. Cross-link button between Spotify playlists and AI playlists pages.
 
-- `GET /api/me/memory-playlists` — List playlists from memory ledger (not Spotify cache)
-- `GET /api/me/memory-playlists/{id}` — Playlist detail with events + current track list
+**ChatGPT fix:** Updated `chatgpt-openapi.json` — changed `patch`, `payload`, `intent_tags`, `seed_context` from `"type": "string"` to `oneOf` (object/array + string) so ChatGPT can send native JSON objects instead of only serialized strings.
 
-### Explorer pages
-
-**Memory Playlists page** (`/playlists/memory`):
-- List of assistant-tracked playlists with intent tags
-- Click → detail with track list, mutation history, seed context
-- "Playlists created by your assistant" framing
-
-**Dashboard integration:**
-- Card showing recent assistant playlists (taste profile card already done in Phase 8)
-
-### Tests
-- Explorer route tests (mock API client)
-- API endpoint tests for memory playlist data
-
-### Verification
-- Memory playlists page shows tracked playlists
-- Dashboard card links to detail page
-- Responsive on mobile
+**Tests:** 13 API endpoint tests (list/detail/events with pagination, auth, user isolation) + 8 explorer route tests (pages, partials, auth, dashboard integration).
 
 ---
 
@@ -742,11 +724,11 @@ Phase 7  (taste profile + events)           ✅ DONE
 Phase 8  (explorer taste UI)                ✅ DONE
 Phase 9  (playlist ledger)                  ✅ DONE
 Phase 10 (search, export/delete, ChatGPT)   ✅ DONE
-Phase 11 (explorer UI: playlist ledger)     ← NEXT (depends on Phases 9, 10)
-Phase 12 (admin-configurable settings)      Pending (depends on Phase 5)
+Phase 11 (explorer UI: playlist ledger)     ✅ DONE
+Phase 12 (admin-configurable settings)      ← NEXT (depends on Phase 5)
 ```
 
-Remaining order: **11 → 12**
+Remaining order: **12**
 
 ---
 
