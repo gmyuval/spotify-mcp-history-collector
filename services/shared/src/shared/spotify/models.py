@@ -399,3 +399,17 @@ class SpotifySnapshotResponse(BaseModel):
     """Response from add/remove tracks operations."""
 
     snapshot_id: str
+
+
+# ---------------------------------------------------------------------------
+# Embed (no-auth fallback)
+# ---------------------------------------------------------------------------
+
+
+class EmbedTrackItem(BaseModel):
+    """A track extracted from Spotify's embed page ``__NEXT_DATA__`` blob."""
+
+    track_id: str
+    name: str = ""
+    artists: list[str] = Field(default_factory=list)
+    duration_ms: int = 0

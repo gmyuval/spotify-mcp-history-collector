@@ -1,6 +1,7 @@
 """Tests for user-facing explorer API endpoints (/api/me/*)."""
 
 from collections.abc import AsyncGenerator, Generator
+from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -165,7 +166,7 @@ def client(
 
     # Monkeypatch middleware's db_manager for request.state.db_session
     class _TestDBManager:
-        def session(self_inner):  # noqa: N805
+        def session(self_inner) -> AbstractAsyncContextManager[AsyncSession]:  # noqa: N805
             @asynccontextmanager
             async def _ctx() -> AsyncGenerator[AsyncSession]:
                 async with session_factory() as s:

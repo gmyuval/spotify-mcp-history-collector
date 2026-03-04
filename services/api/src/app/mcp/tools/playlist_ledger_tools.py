@@ -1,4 +1,4 @@
-"""MCP tool handlers for playlist ledger — log, list, get, reconstruct."""
+"""MCP tool handlers for playlist ledger — log, list, get, reconstruct, backfill."""
 
 import json
 import logging
@@ -61,79 +61,6 @@ def _validate_playlist_id(args: dict[str, Any]) -> str:
     if not isinstance(playlist_id, str) or not playlist_id.strip():
         raise ValueError("playlist_id must be a non-empty string")
     return playlist_id.strip()
-
-
-async def _reconstruct_track_list(
-    playlist_id: str,
-    session: AsyncSession,
-    snapshot: PlaylistSnapshot | None = None,
-    before_time: datetime | None = None,
-) -> ReconstructionResult:
-    """Reconstruct a playlist's track list by replaying events on a snapshot.
-
-    Starts from the given snapshot's track list (or empty if no snapshot),
-    then fetches all mutation events after the snapshot and before ``before_time``,
-    applying each in chronological order to produce the final track list.
-
-    Args:
-        playlist_id: Spotify playlist ID to reconstruct.
-        session: Active database session.
-        snapshot: Base snapshot to start from (None = start empty).
-        before_time: Only apply events up to this timestamp (None = all events).
-    """
-    # Initialize from the base snapshot, or start with an empty list
-    if snapshot is not None:
-        track_ids: list[str] = [str(t) for t in snapshot.track_ids]
-        used_snapshot_id = str(snapshot.snapshot_id)
-        base_time = snapshot.created_at
-    else:
-        track_ids = []
-        used_snapshot_id = None
-        base_time = None
-
-    # Fetch mutation events after the snapshot's timestamp, ordered chronologically
-    stmt = select(PlaylistEvent).where(PlaylistEvent.playlist_id == playlist_id).order_by(PlaylistEvent.timestamp)
-    if base_time is not None:
-        stmt = stmt.where(PlaylistEvent.timestamp > base_time)
-    if before_time is not None:
-        stmt = stmt.where(PlaylistEvent.timestamp <= before_time)
-
-    result = await session.execute(stmt)
-    events = result.scalars().all()
-
-    # Replay each event to reconstruct the current track list.
-    # Each event type modifies the track list differently:
-    #   ADD_TRACKS:    append (or insert at position) new tracks
-    #   REMOVE_TRACKS: filter out matching track IDs
-    #   REORDER:       replace entire list with the new ordering
-    #   UPDATE_META:   no track changes (name/description only)
-    for event in events:
-        payload = event.payload_json
-        raw_tids = payload.get("track_ids")
-        p_track_ids = list(raw_tids) if isinstance(raw_tids, list) else []
-
-        if event.type == PlaylistEventType.ADD_TRACKS:
-            new_ids = [str(t) for t in p_track_ids]
-            insert_at = payload.get("insert_at")
-            if insert_at is not None and isinstance(insert_at, int) and 0 <= insert_at <= len(track_ids):
-                # Insert tracks at the specified position, preserving order
-                for i, tid in enumerate(new_ids):
-                    track_ids.insert(insert_at + i, tid)
-            else:
-                track_ids.extend(new_ids)
-
-        elif event.type == PlaylistEventType.REMOVE_TRACKS:
-            remove_ids = {str(t) for t in p_track_ids}
-            track_ids = [t for t in track_ids if t not in remove_ids]
-
-        elif event.type == PlaylistEventType.REORDER:
-            new_order = [str(t) for t in p_track_ids]
-            if new_order:
-                track_ids = new_order
-
-        # UPDATE_META events don't affect the track list — skip silently
-
-    return ReconstructionResult(track_ids, used_snapshot_id, len(events))
 
 
 class PlaylistLedgerToolHandlers:
@@ -250,6 +177,39 @@ class PlaylistLedgerToolHandlers:
                 ),
             ],
         )(self.reconstruct_playlist)
+
+        registry.register(
+            name="memory.backfill_playlist",
+            description=(
+                "Import an existing Spotify playlist into the memory ledger. "
+                "Fetches tracks via API or embed fallback and creates a ledger entry in one call."
+            ),
+            category="memory",
+            parameters=[
+                _USER_PARAM,
+                MCPToolParam(name="playlist_id", type="string", description="Spotify playlist ID to backfill"),
+                MCPToolParam(
+                    name="intent_tags",
+                    type="array",
+                    description='Tags describing playlist intent (e.g. ["upbeat", "symphonic metal"])',
+                    required=False,
+                    default=[],
+                ),
+                MCPToolParam(
+                    name="seed_context",
+                    type="object",
+                    description="Context that inspired the playlist",
+                    required=False,
+                    default={},
+                ),
+                MCPToolParam(
+                    name="idempotency_key",
+                    type="string",
+                    description="Idempotency key to prevent duplicate backfills",
+                    required=False,
+                ),
+            ],
+        )(self.backfill_playlist)
 
     # ── memory.log_playlist_create ────────────────────────────────────
 
@@ -474,7 +434,7 @@ class PlaylistLedgerToolHandlers:
             return None
 
         # Reconstruct current track list and create new snapshot
-        reconstruction = await _reconstruct_track_list(playlist.playlist_id, session, snapshot=latest_snapshot)
+        reconstruction = await self._reconstruct_track_list(playlist.playlist_id, session, snapshot=latest_snapshot)
         track_ids = reconstruction.track_ids
 
         new_snapshot_id = uuid.uuid4()
@@ -495,6 +455,62 @@ class PlaylistLedgerToolHandlers:
             count,
         )
         return new_snapshot_id
+
+    async def _reconstruct_track_list(
+        self,
+        playlist_id: str,
+        session: AsyncSession,
+        snapshot: PlaylistSnapshot | None = None,
+        before_time: datetime | None = None,
+    ) -> ReconstructionResult:
+        """Reconstruct a playlist's track list by replaying events on a snapshot.
+
+        Starts from the given snapshot's track list (or empty if no snapshot),
+        then fetches all mutation events after the snapshot and before
+        ``before_time``, applying each in chronological order.
+        """
+        if snapshot is not None:
+            track_ids: list[str] = [str(t) for t in snapshot.track_ids]
+            used_snapshot_id = str(snapshot.snapshot_id)
+            base_time = snapshot.created_at
+        else:
+            track_ids = []
+            used_snapshot_id = None
+            base_time = None
+
+        stmt = select(PlaylistEvent).where(PlaylistEvent.playlist_id == playlist_id).order_by(PlaylistEvent.timestamp)
+        if base_time is not None:
+            stmt = stmt.where(PlaylistEvent.timestamp > base_time)
+        if before_time is not None:
+            stmt = stmt.where(PlaylistEvent.timestamp <= before_time)
+
+        result = await session.execute(stmt)
+        events = result.scalars().all()
+
+        for event in events:
+            payload = event.payload_json
+            raw_tids = payload.get("track_ids")
+            p_track_ids = list(raw_tids) if isinstance(raw_tids, list) else []
+
+            if event.type == PlaylistEventType.ADD_TRACKS:
+                new_ids = [str(t) for t in p_track_ids]
+                insert_at = payload.get("insert_at")
+                if insert_at is not None and isinstance(insert_at, int) and 0 <= insert_at <= len(track_ids):
+                    for i, tid in enumerate(new_ids):
+                        track_ids.insert(insert_at + i, tid)
+                else:
+                    track_ids.extend(new_ids)
+
+            elif event.type == PlaylistEventType.REMOVE_TRACKS:
+                remove_ids = {str(t) for t in p_track_ids}
+                track_ids = [t for t in track_ids if t not in remove_ids]
+
+            elif event.type == PlaylistEventType.REORDER:
+                new_order = [str(t) for t in p_track_ids]
+                if new_order:
+                    track_ids = new_order
+
+        return ReconstructionResult(track_ids, used_snapshot_id, len(events))
 
     # ── memory.get_playlists ──────────────────────────────────────────
 
@@ -678,7 +694,9 @@ class PlaylistLedgerToolHandlers:
         result = await session.execute(stmt)
         snapshot = result.scalar_one_or_none()
 
-        reconstruction = await _reconstruct_track_list(playlist_id, session, snapshot=snapshot, before_time=at_time)
+        reconstruction = await self._reconstruct_track_list(
+            playlist_id, session, snapshot=snapshot, before_time=at_time
+        )
 
         as_of = at_time.isoformat() if at_time else datetime.now(UTC).isoformat()
 
@@ -691,6 +709,122 @@ class PlaylistLedgerToolHandlers:
                 "applied_event_count": reconstruction.applied_event_count,
             },
         }
+
+    # ── memory.backfill_playlist ─────────────────────────────────────
+
+    async def backfill_playlist(self, args: dict[str, Any], session: AsyncSession) -> dict[str, Any]:
+        """Import an existing Spotify playlist into the memory ledger.
+
+        Fetches the playlist's tracks via the ``spotify.get_playlist`` tool
+        handler (API with embed fallback) and creates a MemoryPlaylist +
+        initial snapshot in a single call. Idempotent — returns existing
+        record if the playlist is already in the ledger.
+        """
+        from app.mcp.tools.playlist_tools import _instance as playlist_handlers
+
+        user_id = _validate_user_id(args)
+        playlist_id = _validate_playlist_id(args)
+
+        intent_tags = _parse_json_param(args.get("intent_tags", []), "intent_tags")
+        if not isinstance(intent_tags, list):
+            raise ValueError("intent_tags must be an array")
+
+        seed_context = _parse_json_param(args.get("seed_context", {}), "seed_context")
+        if not isinstance(seed_context, dict):
+            raise ValueError("seed_context must be an object")
+
+        idempotency_key = args.get("idempotency_key")
+
+        # Idempotency check via key
+        if idempotency_key:
+            stmt = select(MemoryPlaylist).where(MemoryPlaylist.idempotency_key == idempotency_key)
+            result = await session.execute(stmt)
+            existing = result.scalar_one_or_none()
+            if existing is not None:
+                stored_count = 0
+                if existing.latest_snapshot_id:
+                    snap = await session.get(PlaylistSnapshot, existing.latest_snapshot_id)
+                    if snap:
+                        stored_count = len(snap.track_ids)
+                return {
+                    "playlist_id": existing.playlist_id,
+                    "name": existing.name,
+                    "snapshot_id": str(existing.latest_snapshot_id) if existing.latest_snapshot_id else None,
+                    "stored_track_count": stored_count,
+                    "already_existed": True,
+                }
+
+        # Check if playlist_id already exists in ledger
+        existing_playlist = await session.get(MemoryPlaylist, playlist_id)
+        if existing_playlist is not None:
+            stored_count = 0
+            if existing_playlist.latest_snapshot_id:
+                snap = await session.get(PlaylistSnapshot, existing_playlist.latest_snapshot_id)
+                if snap:
+                    stored_count = len(snap.track_ids)
+            return {
+                "playlist_id": existing_playlist.playlist_id,
+                "name": existing_playlist.name,
+                "snapshot_id": str(existing_playlist.latest_snapshot_id)
+                if existing_playlist.latest_snapshot_id
+                else None,
+                "stored_track_count": stored_count,
+                "already_existed": True,
+            }
+
+        # Fetch playlist data via spotify.get_playlist handler (API + embed fallback)
+        playlist_data = await playlist_handlers.get_playlist({"user_id": user_id, "playlist_id": playlist_id}, session)
+
+        name = playlist_data.get("name", "")
+        description = playlist_data.get("description")
+        track_ids = [t["id"] for t in playlist_data.get("tracks", []) if t.get("id")]
+        tracks_source = playlist_data.get("tracks_source", "api")
+
+        if not track_ids and not playlist_data.get("tracks_restricted"):
+            # Empty playlist — still create the ledger entry with empty snapshot
+            pass
+
+        # Create memory playlist record
+        playlist = MemoryPlaylist(
+            playlist_id=playlist_id,
+            user_id=user_id,
+            name=name,
+            description=description,
+            intent_tags=intent_tags,
+            seed_context=seed_context,
+            latest_snapshot_id=None,
+            idempotency_key=idempotency_key,
+        )
+        session.add(playlist)
+        await session.flush()
+
+        # Create initial snapshot
+        snapshot_id = uuid.uuid4()
+        snapshot = PlaylistSnapshot(
+            snapshot_id=snapshot_id,
+            playlist_id=playlist_id,
+            track_ids=track_ids,
+            source=PlaylistSnapshotSource.BACKFILL,
+        )
+        session.add(snapshot)
+        await session.flush()
+
+        playlist.latest_snapshot_id = snapshot_id
+        await session.flush()
+
+        result_data: dict[str, Any] = {
+            "playlist_id": playlist_id,
+            "name": name,
+            "snapshot_id": str(snapshot_id),
+            "stored_track_count": len(track_ids),
+            "tracks_source": tracks_source,
+            "already_existed": False,
+        }
+
+        if playlist_data.get("tracks_restricted"):
+            result_data["tracks_restricted"] = True
+
+        return result_data
 
 
 _instance = PlaylistLedgerToolHandlers()

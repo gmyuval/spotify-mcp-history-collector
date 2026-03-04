@@ -1,0 +1,264 @@
+"""Tests for memory.backfill_playlist MCP tool."""
+
+from collections.abc import AsyncGenerator, Generator
+from typing import Any
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+
+from app.dependencies import db_manager
+from app.main import app
+from app.settings import AppSettings, get_settings
+from shared.db.base import Base
+from shared.db.models.user import User
+
+TEST_FERNET_KEY = Fernet.generate_key().decode()
+
+
+def _test_settings() -> AppSettings:
+    return AppSettings(
+        SPOTIFY_CLIENT_ID="test",
+        SPOTIFY_CLIENT_SECRET="test",
+        TOKEN_ENCRYPTION_KEY=TEST_FERNET_KEY,
+        RATE_LIMIT_MCP_PER_MINUTE=10000,
+    )
+
+
+@pytest.fixture
+async def async_engine() -> AsyncGenerator[AsyncEngine]:
+    engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
+
+
+@pytest.fixture
+def override_deps(async_engine: AsyncEngine) -> Generator[None]:
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def _override() -> AsyncGenerator[AsyncSession]:
+        async with factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    app.dependency_overrides[db_manager.dependency] = _override
+    app.dependency_overrides[get_settings] = _test_settings
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(override_deps: None) -> TestClient:
+    return TestClient(app)
+
+
+@pytest.fixture
+async def seeded_user(async_engine: AsyncEngine) -> int:
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        user = User(spotify_user_id="backfill_user", display_name="Backfill User")
+        session.add(user)
+        await session.flush()
+        uid = user.id
+        await session.commit()
+    return uid
+
+
+def _call(client: TestClient, tool: str, **kwargs: object) -> dict[str, Any]:
+    resp = client.post("/mcp/call", json={"tool": tool, **kwargs})
+    assert resp.status_code == 200
+    return resp.json()  # type: ignore[no-any-return]
+
+
+def _mock_get_playlist_result(
+    playlist_id: str = "pl_backfill",
+    name: str = "Test Playlist",
+    tracks_source: str = "api",
+    track_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build a fake result dict matching what spotify.get_playlist returns."""
+    if track_ids is None:
+        track_ids = ["t1", "t2", "t3"]
+    return {
+        "id": playlist_id,
+        "name": name,
+        "description": "A test playlist",
+        "public": True,
+        "owner": "Test User",
+        "tracks_total": len(track_ids),
+        "tracks": [{"id": tid, "name": f"Track {tid}", "artists": [{"name": "Artist"}]} for tid in track_ids],
+        "tracks_source": tracks_source,
+        "snapshot_id": "snap_test",
+        "external_urls": {},
+    }
+
+
+class TestBackfillPlaylist:
+    def test_backfill_success(self, client: TestClient, seeded_user: int) -> None:
+        """Backfill creates a memory playlist with tracks from Spotify."""
+        mock_result = _mock_get_playlist_result()
+
+        with patch(
+            "app.mcp.tools.playlist_ledger_tools.PlaylistLedgerToolHandlers.backfill_playlist",
+            wraps=None,
+        ):
+            # We need to mock the spotify.get_playlist call inside backfill
+            with patch(
+                "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ):
+                data = _call(
+                    client,
+                    "memory.backfill_playlist",
+                    user_id=seeded_user,
+                    playlist_id="pl_backfill",
+                    intent_tags=["rock", "classic"],
+                )
+
+        assert data["success"] is True
+        result = data["result"]
+        assert result["playlist_id"] == "pl_backfill"
+        assert result["name"] == "Test Playlist"
+        assert result["stored_track_count"] == 3
+        assert result["tracks_source"] == "api"
+        assert result["already_existed"] is False
+
+    def test_backfill_idempotent(self, client: TestClient, seeded_user: int) -> None:
+        """Calling backfill twice for the same playlist returns existing record."""
+        mock_result = _mock_get_playlist_result()
+
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            # First call
+            data1 = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_idem",
+            )
+            assert data1["success"] is True
+            assert data1["result"]["already_existed"] is False
+
+            # Second call — same playlist_id
+            data2 = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_idem",
+            )
+            assert data2["success"] is True
+            assert data2["result"]["already_existed"] is True
+            assert data2["result"]["stored_track_count"] == 3
+
+    def test_backfill_embed_source(self, client: TestClient, seeded_user: int) -> None:
+        """Backfill reports tracks_source='embed' when tracks come from embed fallback."""
+        mock_result = _mock_get_playlist_result(
+            playlist_id="pl_embed_bf",
+            tracks_source="embed",
+        )
+
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_embed_bf",
+            )
+
+        assert data["success"] is True
+        assert data["result"]["tracks_source"] == "embed"
+
+    def test_backfill_empty_playlist(self, client: TestClient, seeded_user: int) -> None:
+        """Backfill works for a playlist with zero tracks."""
+        mock_result = _mock_get_playlist_result(
+            playlist_id="pl_empty",
+            track_ids=[],
+        )
+
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_empty",
+            )
+
+        assert data["success"] is True
+        assert data["result"]["stored_track_count"] == 0
+
+    def test_backfill_invalid_user_id(self, client: TestClient) -> None:
+        """Backfill rejects non-integer user_id."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id="not_an_int",
+            playlist_id="pl_test",
+        )
+        assert data["success"] is False
+
+    def test_backfill_idempotency_key(self, client: TestClient, seeded_user: int) -> None:
+        """Idempotency key prevents duplicate backfills."""
+        mock_result = _mock_get_playlist_result(playlist_id="pl_key1")
+
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            data1 = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_key1",
+                idempotency_key="key-123",
+            )
+            assert data1["success"] is True
+            assert data1["result"]["already_existed"] is False
+
+        # Second call with different playlist_id but same idempotency_key
+        mock_result2 = _mock_get_playlist_result(playlist_id="pl_key2")
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            return_value=mock_result2,
+        ):
+            data2 = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_key2",
+                idempotency_key="key-123",
+            )
+            assert data2["success"] is True
+            assert data2["result"]["already_existed"] is True
+            assert data2["result"]["playlist_id"] == "pl_key1"  # Returns original
+
+
+class TestBackfillToolRegistered:
+    def test_registered(self, client: TestClient) -> None:
+        """memory.backfill_playlist appears in the tool catalog."""
+        resp = client.get("/mcp/tools")
+        names = {t["name"] for t in resp.json()}
+        assert "memory.backfill_playlist" in names

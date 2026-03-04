@@ -163,6 +163,22 @@ class ActionResponse(BaseModel):
     message: str
 
 
+# --- Cache Invalidation ---
+
+
+class CacheInvalidatePlaylistsRequest(BaseModel):
+    """Request to invalidate playlist cache(s) for a user."""
+
+    user_id: int = Field(..., ge=1, description="User ID")
+    playlist_id: str | None = Field(None, description="Specific playlist ID, or omit to invalidate all")
+
+
+class CacheInvalidateAllRequest(BaseModel):
+    """Request to invalidate all caches for a user."""
+
+    user_id: int = Field(..., ge=1, description="User ID")
+
+
 # --- User Spotify Credentials ---
 
 

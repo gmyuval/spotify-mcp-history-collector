@@ -59,7 +59,7 @@ def override_deps(async_engine):  # type: ignore[no-untyped-def]
     from app.middleware import RateLimitMiddleware
 
     for mw in app.user_middleware:
-        if mw.cls is RateLimitMiddleware:
+        if mw.cls is RateLimitMiddleware:  # type: ignore[comparison-overlap]
             mw.kwargs.setdefault("auth_limit", 10)
             break
     # Walk the ASGI app stack to find the live middleware instance.

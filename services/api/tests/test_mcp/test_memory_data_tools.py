@@ -1,6 +1,7 @@
 """Tests for memory.search, memory.export_user_data, memory.delete_user_data."""
 
 from collections.abc import AsyncGenerator, Generator
+from typing import Any
 
 import pytest
 from cryptography.fernet import Fernet
@@ -84,10 +85,10 @@ async def second_user(async_engine: AsyncEngine) -> int:
     return uid
 
 
-def _call(client: TestClient, tool: str, **kwargs: object) -> dict:
+def _call(client: TestClient, tool: str, **kwargs: object) -> dict[str, Any]:
     resp = client.post("/mcp/call", json={"tool": tool, **kwargs})
     assert resp.status_code == 200
-    return resp.json()
+    return resp.json()  # type: ignore[no-any-return]
 
 
 def _seed_profile(client: TestClient, user_id: int) -> None:

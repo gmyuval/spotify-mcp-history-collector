@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from typing import cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
@@ -138,12 +139,16 @@ async def test_query_heatmap(seeded_session: tuple[AsyncSession, int]) -> None:
     session, user_id = seeded_session
     cells = await query_heatmap(user_id, session, days=3650)
     assert len(cells) > 0
-    total = sum(c["play_count"] for c in cells)
+    total: int = sum(cast(int, c["play_count"]) for c in cells)
     assert total == 5
     # All weekday values should be 0-6
     for c in cells:
-        assert 0 <= c["weekday"] <= 6
-        assert 0 <= c["hour"] <= 23
+        weekday = c["weekday"]
+        hour = c["hour"]
+        assert isinstance(weekday, int)
+        assert isinstance(hour, int)
+        assert 0 <= weekday <= 6
+        assert 0 <= hour <= 23
 
 
 async def test_query_coverage(seeded_session: tuple[AsyncSession, int]) -> None:

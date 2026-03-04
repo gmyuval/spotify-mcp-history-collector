@@ -17,6 +17,8 @@ from app.admin.schemas import (
     DEFAULT_PAGE_LIMIT,
     MAX_PAGE_LIMIT,
     ActionResponse,
+    CacheInvalidateAllRequest,
+    CacheInvalidatePlaylistsRequest,
     CreateRoleRequest,
     GlobalSyncStatus,
     ImportJobResponse,
@@ -36,6 +38,7 @@ from app.admin.schemas import (
 )
 from app.admin.service import AdminService
 from app.auth.crypto import TokenEncryptor
+from app.cache.service import SpotifyCacheService
 from app.dependencies import db_manager
 from app.settings import AppSettings, get_settings
 from shared.db.enums import ImportStatus
@@ -123,6 +126,20 @@ class AdminRouter:
         # Logs
         r.add_api_route("/logs", self.list_logs, methods=["GET"], response_model=PaginatedResponse[LogEntry])
         r.add_api_route("/maintenance/purge-logs", self.purge_logs, methods=["POST"], response_model=ActionResponse)
+
+        # Cache management
+        r.add_api_route(
+            "/cache/playlists/invalidate",
+            self.invalidate_playlist_cache,
+            methods=["POST"],
+            response_model=ActionResponse,
+        )
+        r.add_api_route(
+            "/cache/all/invalidate",
+            self.invalidate_all_caches,
+            methods=["POST"],
+            response_model=ActionResponse,
+        )
 
     # --- User Management ---
 
@@ -464,6 +481,44 @@ class AdminRouter:
             return await self._service.set_user_roles(user_id, body.role_ids, session)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # --- Cache Management ---
+
+    async def invalidate_playlist_cache(
+        self,
+        body: CacheInvalidatePlaylistsRequest,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+        settings: Annotated[AppSettings, Depends(get_settings)],
+    ) -> ActionResponse:
+        """Invalidate playlist cache(s) for a user."""
+        await self._ensure_user_exists(body.user_id, session)
+        cache = SpotifyCacheService(cache_ttl_hours=settings.SPOTIFY_CACHE_TTL_HOURS)
+        if body.playlist_id:
+            await cache.invalidate_playlist(body.user_id, body.playlist_id, session)
+            return ActionResponse(
+                success=True,
+                message=f"Playlist cache invalidated for user {body.user_id}, playlist {body.playlist_id}",
+            )
+        await cache.invalidate_all_playlists(body.user_id, session)
+        return ActionResponse(
+            success=True,
+            message=f"All playlist caches invalidated for user {body.user_id}",
+        )
+
+    async def invalidate_all_caches(
+        self,
+        body: CacheInvalidateAllRequest,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+        settings: Annotated[AppSettings, Depends(get_settings)],
+    ) -> ActionResponse:
+        """Invalidate all caches for a user (playlist caches are per-user)."""
+        await self._ensure_user_exists(body.user_id, session)
+        cache = SpotifyCacheService(cache_ttl_hours=settings.SPOTIFY_CACHE_TTL_HOURS)
+        await cache.invalidate_all_playlists(body.user_id, session)
+        return ActionResponse(
+            success=True,
+            message=f"All caches invalidated for user {body.user_id}",
+        )
 
     # --- Helpers ---
 
