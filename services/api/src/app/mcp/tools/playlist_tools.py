@@ -189,9 +189,15 @@ class PlaylistToolHandlers:
                 raise
 
         if pl is not None and cached_snapshot and pl.snapshot_id == cached_snapshot:
-            # Snapshot matches — try serving from cache (only if tracks are populated)
+            # Snapshot matches — try serving from cache.
+            # Accept cache hit if tracks are populated, playlist is legitimately empty,
+            # or tracks were previously marked as restricted (403).
             cached_data = await self._cache.get_cached_playlist(user_id, playlist_id, session)
-            if cached_data is not None and cached_data.get("tracks"):
+            if cached_data is not None and (
+                cached_data.get("tracks")
+                or cached_data.get("tracks_total") == 0
+                or cached_data.get("tracks_restricted") is True
+            ):
                 logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
                 return cached_data
 
@@ -238,16 +244,21 @@ class PlaylistToolHandlers:
         else:
             # 403 fallback — use cached metadata from list_playlists
             cached_data = await self._cache.get_cached_playlist(user_id, playlist_id, session)
+            if cached_data is None:
+                raise ValueError(
+                    "Spotify returned 403 for playlist metadata and no cached metadata is available. "
+                    "Call spotify.list_playlists first to populate the cache, then retry."
+                )
             result = {
                 "id": playlist_id,
-                "name": cached_data.get("name", "") if cached_data else "",
-                "description": cached_data.get("description") if cached_data else None,
-                "public": cached_data.get("public") if cached_data else None,
-                "owner": cached_data.get("owner") if cached_data else None,
-                "tracks_total": cached_data.get("tracks_total") if cached_data else 0,
+                "name": cached_data.get("name", ""),
+                "description": cached_data.get("description"),
+                "public": cached_data.get("public"),
+                "owner": cached_data.get("owner"),
+                "tracks_total": cached_data.get("tracks_total", 0),
                 "tracks": tracks,
-                "snapshot_id": cached_data.get("snapshot_id") if cached_data else None,
-                "external_urls": cached_data.get("external_urls", {}) if cached_data else {},
+                "snapshot_id": cached_data.get("snapshot_id"),
+                "external_urls": cached_data.get("external_urls", {}),
             }
 
         if tracks_restricted:

@@ -584,6 +584,29 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user: int) -
         assert "Extended Quota Mode" in data["result"]["tracks_restricted_reason"]
 
 
+def test_get_playlist_403_no_cache(client: TestClient, seeded_user: int) -> None:
+    """get_playlist raises error when 403 and no cached metadata available."""
+    from shared.spotify.exceptions import SpotifyRequestError
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_get_client.return_value = mock_client
+
+        # No list_playlists call — no cache seeded
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_nocache"},
+        )
+        data = resp.json()
+        assert data["success"] is False
+        assert "no cached metadata" in data["error"].lower()
+
+
 def test_get_playlist_large_paginated(client: TestClient, seeded_user: int) -> None:
     """get_playlist returns all tracks even when the playlist has more than one page."""
     mock_playlist = SpotifyPlaylist(

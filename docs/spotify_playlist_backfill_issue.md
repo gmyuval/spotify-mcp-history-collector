@@ -1,58 +1,38 @@
-# Issue: Spotify playlist backfill is blocked because playlist track lists are not retrievable
+# Issue: Spotify playlist backfill — track retrieval blocked (RESOLVED)
 
-## Summary
-We can list playlists and fetch playlist metadata, but **we cannot retrieve the track contents** of a playlist via the current Spotify MCP tools. This prevents us from backfilling playlists into the MCP memory store because memory logging requires a non-empty ordered list of `track_ids`.
+## Status: RESOLVED (PR #37 + Phase 11.5)
 
-## Evidence / Symptoms
-- `spotify.list_playlists` works and returns playlist IDs + `tracks_total`.
-- `spotify.get_playlist(playlist_id)` returns correct metadata:
-  - `tracks_total` is correct
-  - but `tracks` is always an **empty array** (`tracks: []`)
-- When attempting to backfill a playlist into memory:
-  - `memory.log_playlist_create` fails with: **`track_ids must be a non-empty array`**
-  - because we currently cannot obtain any `track_ids` from Spotify for that playlist.
+**Root causes identified and fixed:**
 
-## Impact
-- Cannot backfill existing Spotify playlists into MCP memory.
-- Cannot reconstruct or reason about historical playlists unless they were created by the assistant and logged at creation time.
-- Taste profiling from the “playlist corpus” is blocked (only possible from chat-created/logged playlists).
+1. **Stale cache bug** (PR #37): `list_playlists` cached `snapshot_id` without track rows; `get_playlist` served empty-tracks cache entries. Fixed by treating empty-tracks cache as a miss.
+2. **Spotify 403 restriction** (PR #37): Spotify Development Mode blocks `GET /playlists/{id}` and `/tracks` (requires Extended Quota Mode). Fixed with graceful degradation — returns metadata + `tracks_restricted` flag.
+3. **Embed fallback** (Phase 11.5): Spotify's embed page (`/embed/playlist/{id}`) returns complete track listings in `__NEXT_DATA__` JSON — no auth required. Used as automatic fallback when API returns 403.
+4. **Backfill tool** (Phase 11.5): New `memory.backfill_playlist` MCP tool imports existing Spotify playlists into the memory ledger in a single call.
 
-## Expected Behavior
-Provide a way to return the **ordered Spotify track IDs** for a playlist, including pagination for large playlists.
+## Original Report (historical)
 
-## Proposed Fix (pick one)
+We could list playlists and fetch playlist metadata, but **could not retrieve the track contents** of a playlist via the Spotify MCP tools. This prevented backfilling playlists into the MCP memory store because memory logging requires a non-empty ordered list of `track_ids`.
 
-### Option A (preferred): Fix/extend `spotify.get_playlist`
-- Add a flag or default behavior to include playlist items:
-  - return `tracks` as a list of items containing at least:
-    - `track_id` (Spotify track ID)
-    - (optional) track name, artist(s)
-- Must support pagination (Spotify playlists can exceed 100 items).
-- Ensure returned order matches Spotify order.
+### Previous symptoms
+- `spotify.list_playlists` worked and returned playlist IDs + `tracks_total`.
+- `spotify.get_playlist(playlist_id)` returned correct metadata but `tracks` was always an **empty array** (`tracks: []`).
+- `memory.log_playlist_create` failed with **`track_ids must be a non-empty array`**.
 
-### Option B: Add a dedicated playlist-items tool
-Implement a new tool:
+### Previous impact
+- Could not backfill existing Spotify playlists into MCP memory.
+- Could not reconstruct or reason about historical playlists unless they were created by the assistant and logged at creation time.
+- Taste profiling from the "playlist corpus" was blocked.
 
-#### `spotify.get_playlist_tracks`
-- **Inputs:**
-  - `playlist_id` (string)
-  - `limit` (int, <= 100)
-  - `offset` (int, >= 0)
-- **Outputs:**
-  - `track_ids` (array of strings)
-  - `next_offset` (int | null)
-- Optional: also return rich items:
-  - `items: [{ track_id, name, artists, added_at }]`
+## Resolution Details
 
-## Acceptance Criteria
-- For a playlist with `tracks_total > 0`, we can retrieve a non-empty set of `track_ids`.
-- We can iterate through all pages and reconstruct the full ordered track list.
-- After retrieving `track_ids`, calling `memory.log_playlist_create` succeeds for that playlist.
-- Works for both:
-  - small playlists (e.g., 10 tracks)
-  - large playlists (e.g., 180 tracks like “Metal Classics”).
+### Fix 1: Stale cache (PR #37)
+The `list_playlists` tool caches playlist metadata (including `snapshot_id`) but not track data. When `get_playlist` found a matching `snapshot_id` in cache, it returned the cached entry with empty tracks instead of fetching them. Fix: cache entries with empty tracks are treated as misses.
 
-## Notes
-- This is not a “memory” bug: memory endpoints are functioning.
-- The blocker is the Spotify connector/tool not returning playlist items.
-- If Spotify scopes are the cause, confirm required OAuth scopes for reading playlist items and ensure they are granted.
+### Fix 2: Spotify 403 graceful degradation (PR #37)
+Spotify's Development Mode restricts `GET /playlists/{id}` and `GET /playlists/{id}/tracks` endpoints (requires Extended Quota Mode). The handler now catches 403 on both endpoints and returns cached metadata with a `tracks_restricted` flag and explanation.
+
+### Fix 3: Embed fallback (Phase 11.5)
+Spotify's embed endpoint (`https://open.spotify.com/embed/playlist/{id}`) returns complete track listings in its server-rendered `__NEXT_DATA__` JSON blob. No authentication required. The `get_playlist` tool automatically falls back to this when the API returns 403. Returns `tracks_source: "embed"` to indicate the data source.
+
+### Fix 4: Backfill tool (Phase 11.5)
+New `memory.backfill_playlist` MCP tool that fetches a playlist's tracks (via API or embed) and creates the memory ledger entry in a single call. Eliminates the previous 3-step manual workflow.
