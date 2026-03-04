@@ -176,7 +176,7 @@
                   },
                   "intent_tags": {
                     "oneOf": [
-                      {"type": "array", "items": {"type": "string"}},
+                      {"type": "array", "items": {"type": "string"}, "maxItems": 100},
                       {"type": "string"}
                     ],
                     "description": "For memory.log_playlist_create: intent tags. Pass as a JSON array or a JSON string."

@@ -71,7 +71,8 @@ All tools require `user_id` (integer) unless noted otherwise.
 - All parameters go as **top-level fields** alongside `"tool"` in the callTool request. Do NOT nest in `"arguments"` or `"args"`.
 - Example: `{"tool": "history.taste_summary", "user_id": 1, "days": 90}`
 - `user_id` is always an integer.
-- Fields like `patch`, `payload`, `intent_tags`, `seed_context` accept either native JSON objects/arrays or JSON-encoded strings. The server handles both formats.
+- `patch`, `payload`, and `seed_context` accept either native JSON objects or JSON-encoded strings.
+- `intent_tags` accepts either a native JSON string array or a JSON-encoded string.
 - Use `"search_type"` (not `"type"`) for spotify.search.
 - Use `"event_type"` (not `"type"`) for memory.append_preference_event.
 - Use `"mutation_type"` (not `"type"`) for memory.log_playlist_mutation.

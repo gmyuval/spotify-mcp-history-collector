@@ -724,11 +724,11 @@ Phase 7  (taste profile + events)           ✅ DONE
 Phase 8  (explorer taste UI)                ✅ DONE
 Phase 9  (playlist ledger)                  ✅ DONE
 Phase 10 (search, export/delete, ChatGPT)   ✅ DONE
-Phase 11 (explorer UI: playlist ledger)     ← NEXT (depends on Phases 9, 10)
-Phase 12 (admin-configurable settings)      Pending (depends on Phase 5)
+Phase 11 (explorer UI: playlist ledger)     ✅ DONE
+Phase 12 (admin-configurable settings)      ← NEXT (depends on Phase 5)
 ```
 
-Remaining order: **11 → 12**
+Remaining order: **12**
 
 ---
 

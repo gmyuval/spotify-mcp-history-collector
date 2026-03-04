@@ -252,7 +252,7 @@ class TestListMemoryPlaylists:
                 session.add(pl)
                 await session.commit()
 
-        asyncio.get_event_loop().run_until_complete(_seed_playlist_for_user_a())
+        asyncio.run(_seed_playlist_for_user_a())
 
         # User A sees the playlist
         resp_a = client.get("/api/me/memory-playlists", cookies=_auth_cookies(jwt_service, seeded_users["user_a"]))
