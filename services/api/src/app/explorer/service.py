@@ -261,27 +261,31 @@ class ExplorerService:
         stmt = (
             select(MemoryPlaylist)
             .where(MemoryPlaylist.user_id == user_id)
-            .order_by(desc(MemoryPlaylist.updated_at))
+            .order_by(desc(MemoryPlaylist.updated_at), desc(MemoryPlaylist.playlist_id))
             .limit(limit)
             .offset(offset)
         )
         result = await session.execute(stmt)
         playlists = result.scalars().all()
 
-        # Batch-load snapshots to avoid N+1 queries
+        # Batch-load snapshots to avoid N+1 queries, keyed by (snapshot_id, playlist_id)
         snapshot_ids = [pl.latest_snapshot_id for pl in playlists if pl.latest_snapshot_id is not None]
-        snapshots_by_id: dict[uuid.UUID, PlaylistSnapshot] = {}
+        snapshots_by_key: dict[tuple[uuid.UUID, str], PlaylistSnapshot] = {}
         if snapshot_ids:
-            snap_stmt = select(PlaylistSnapshot).where(PlaylistSnapshot.snapshot_id.in_(snapshot_ids))
+            playlist_ids = [pl.playlist_id for pl in playlists]
+            snap_stmt = select(PlaylistSnapshot).where(
+                PlaylistSnapshot.snapshot_id.in_(snapshot_ids),
+                PlaylistSnapshot.playlist_id.in_(playlist_ids),
+            )
             snap_result = await session.execute(snap_stmt)
             for snap in snap_result.scalars():
-                snapshots_by_id[snap.snapshot_id] = snap
+                snapshots_by_key[(snap.snapshot_id, snap.playlist_id)] = snap
 
         items = []
         for pl in playlists:
             track_count = 0
             if pl.latest_snapshot_id is not None:
-                matched_snap = snapshots_by_id.get(pl.latest_snapshot_id)
+                matched_snap = snapshots_by_key.get((pl.latest_snapshot_id, pl.playlist_id))
                 if matched_snap is not None:
                     track_count = len(matched_snap.track_ids)
             items.append(
