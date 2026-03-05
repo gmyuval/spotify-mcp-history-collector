@@ -409,7 +409,8 @@ class SpotifySnapshotResponse(BaseModel):
 class EmbedTrackItem(BaseModel):
     """A track extracted from Spotify's embed page ``__NEXT_DATA__`` blob."""
 
-    track_id: str = Field(..., min_length=1)
+    track_id: str | None = Field(None)
     name: str = ""
     artists: list[str] = Field(default_factory=list)
     duration_ms: int = Field(0, ge=0)
+    unavailable: bool = False

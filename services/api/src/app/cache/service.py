@@ -195,7 +195,7 @@ class SpotifyCacheService:
                 CachedPlaylistTrack(
                     cached_playlist_id=playlist_row.id,
                     spotify_track_id=track.get("id"),
-                    track_name=track.get("name", ""),
+                    track_name=track.get("name") or "",
                     artists_json=json.dumps(track.get("artists", [])),
                     added_at=track.get("added_at"),
                     position=i,
@@ -313,14 +313,15 @@ class SpotifyCacheService:
         tracks = []
         for tr in track_rows:
             artists = json.loads(tr.artists_json) if tr.artists_json else []
-            tracks.append(
-                {
-                    "id": tr.spotify_track_id,
-                    "name": tr.track_name,
-                    "artists": artists,
-                    "added_at": tr.added_at,
-                }
-            )
+            track: dict[str, Any] = {
+                "id": tr.spotify_track_id,
+                "name": tr.track_name or None,
+                "artists": artists,
+                "added_at": tr.added_at,
+            }
+            if tr.spotify_track_id is None:
+                track["unavailable"] = True
+            tracks.append(track)
 
         return {
             "id": row.spotify_playlist_id,

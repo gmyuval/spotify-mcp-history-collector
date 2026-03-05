@@ -186,8 +186,6 @@ class SpotifyEmbedClient:
         tracks: list[EmbedTrackItem] = []
         for item in track_list:
             track_id = SpotifyEmbedClient._extract_track_id(item)
-            if not track_id:
-                continue
 
             subtitle: str = item.get("subtitle", "")
             artists = [a.strip() for a in subtitle.split(",") if a.strip()] if subtitle else []
@@ -198,6 +196,7 @@ class SpotifyEmbedClient:
                     name=item.get("title", ""),
                     artists=artists,
                     duration_ms=item.get("duration", 0),
+                    unavailable=track_id is None,
                 )
             )
 

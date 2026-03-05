@@ -201,7 +201,7 @@ class PlaylistToolHandlers:
                 or cached_data.get("tracks_restricted") is True
             ):
                 logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
-                return cached_data
+                return self._with_fidelity_metrics(cached_data)
 
         # If metadata was 403, resolve cached metadata now — fail fast before
         # attempting the tracks endpoint (which will also 403).
@@ -231,6 +231,17 @@ class PlaylistToolHandlers:
                             "added_at": item.added_at,
                         }
                     )
+                else:
+                    # Unavailable/removed track — preserve as placeholder
+                    tracks.append(
+                        {
+                            "id": None,
+                            "name": None,
+                            "artists": [],
+                            "added_at": item.added_at,
+                            "unavailable": True,
+                        }
+                    )
         except SpotifyRequestError as exc:
             if exc.status_code == 403:
                 logger.warning(
@@ -240,15 +251,26 @@ class PlaylistToolHandlers:
                 # Try embed endpoint as fallback
                 try:
                     embed_items = await self._embed_client.fetch_playlist_tracks(playlist_id)
-                    tracks = [
-                        {
-                            "id": item.track_id,
-                            "name": item.name,
-                            "artists": [{"name": a} for a in item.artists],
-                            "duration_ms": item.duration_ms,
-                        }
-                        for item in embed_items
-                    ]
+                    for embed_item in embed_items:
+                        if embed_item.track_id:
+                            tracks.append(
+                                {
+                                    "id": embed_item.track_id,
+                                    "name": embed_item.name,
+                                    "artists": [{"name": a} for a in embed_item.artists],
+                                    "duration_ms": embed_item.duration_ms,
+                                }
+                            )
+                        else:
+                            tracks.append(
+                                {
+                                    "id": None,
+                                    "name": embed_item.name or None,
+                                    "artists": [{"name": a} for a in embed_item.artists],
+                                    "duration_ms": embed_item.duration_ms,
+                                    "unavailable": True,
+                                }
+                            )
                     tracks_source = "embed"
                     logger.info(
                         "Embed fallback returned %d tracks for playlist %s",
@@ -264,6 +286,10 @@ class PlaylistToolHandlers:
                     tracks_restricted = True
             else:
                 raise
+
+        # Track fidelity metrics
+        tracks_returned = len(tracks)
+        tracks_unavailable = sum(1 for t in tracks if t.get("unavailable"))
 
         # Build result from live API metadata or cached metadata fallback
         if pl is not None:
@@ -295,6 +321,18 @@ class PlaylistToolHandlers:
                 "external_urls": cached_metadata.get("external_urls", {}),
             }
 
+        # Add fidelity metrics (same logic as _with_fidelity_metrics, but we already
+        # have tracks_returned/tracks_unavailable computed above so apply directly)
+        result["tracks_returned"] = tracks_returned
+        if tracks_unavailable:
+            result["tracks_unavailable"] = tracks_unavailable
+        tracks_total = result.get("tracks_total", 0)
+        if tracks_returned != tracks_total and not tracks_restricted:
+            result["tracks_mismatch_warning"] = (
+                f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
+                f"{tracks_unavailable} unavailable placeholder(s) included."
+            )
+
         if tracks_restricted:
             result["tracks_restricted"] = True
             result["tracks_restricted_reason"] = (
@@ -303,6 +341,31 @@ class PlaylistToolHandlers:
 
         # Cache the full playlist with tracks
         await self._cache.put_playlist(user_id, result, tracks, session)
+        return result
+
+    @staticmethod
+    def _with_fidelity_metrics(result: dict[str, Any]) -> dict[str, Any]:
+        """Inject tracks_returned / tracks_unavailable / tracks_mismatch_warning.
+
+        Applied to both live responses and cache-hit responses so the output
+        shape is always consistent.
+        """
+        tracks: list[dict[str, Any]] = result.get("tracks", [])
+        tracks_returned = len(tracks)
+        tracks_unavailable = sum(1 for t in tracks if t.get("unavailable"))
+        result["tracks_returned"] = tracks_returned
+        if tracks_unavailable:
+            result["tracks_unavailable"] = tracks_unavailable
+        else:
+            result.pop("tracks_unavailable", None)
+        tracks_total: int = result.get("tracks_total") or 0
+        if tracks_returned != tracks_total and not result.get("tracks_restricted"):
+            result["tracks_mismatch_warning"] = (
+                f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
+                f"{tracks_unavailable} unavailable placeholder(s) included."
+            )
+        else:
+            result.pop("tracks_mismatch_warning", None)
         return result
 
     async def create_playlist(self, args: dict[str, Any], session: AsyncSession) -> Any:
