@@ -720,6 +720,7 @@ class PlaylistLedgerToolHandlers:
         initial snapshot in a single call. Idempotent — returns existing
         record if the playlist is already in the ledger.
         """
+        # Late import to avoid circular dependency with playlist_tools
         from app.mcp.tools.playlist_tools import _instance as playlist_handlers
 
         user_id = _validate_user_id(args)

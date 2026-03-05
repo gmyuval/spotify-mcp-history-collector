@@ -30,3 +30,5 @@ EMBED_BASE_URL = "https://open.spotify.com/embed/playlist"
 DEFAULT_EMBED_REQUEST_TIMEOUT = 15.0  # seconds
 DEFAULT_EMBED_MIN_REQUEST_INTERVAL = 2.0  # seconds — rate limit between requests
 DEFAULT_EMBED_USER_AGENT = "Mozilla/5.0 (compatible; SpotifyMCP/1.0)"
+DEFAULT_EMBED_MAX_RETRIES = 3
+DEFAULT_EMBED_RETRY_BASE_DELAY = 1.0  # seconds

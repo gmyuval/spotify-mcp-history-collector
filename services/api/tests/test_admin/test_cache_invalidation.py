@@ -105,7 +105,7 @@ def test_invalidate_all_caches(client: TestClient, seeded_user: int) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True
-    assert "All caches invalidated" in data["message"]
+    assert "All playlist caches invalidated" in data["message"]
 
 
 def test_invalidate_cache_user_not_found(client: TestClient) -> None:

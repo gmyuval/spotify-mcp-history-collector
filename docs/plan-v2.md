@@ -628,7 +628,7 @@ Explorer UI for browsing assistant-tracked playlists from the memory ledger, plu
 ### Embed-based playlist track fetcher (new module)
 
 **`services/shared/src/shared/spotify/embed.py`**:
-- `async fetch_playlist_tracks_from_embed(playlist_id) -> list[EmbedTrackItem]`
+- `SpotifyEmbedClient` with `async fetch_playlist_tracks(playlist_id) -> list[EmbedTrackItem]`
 - Fetches `https://open.spotify.com/embed/playlist/{id}` via httpx
 - Parses `__NEXT_DATA__` JSON blob, extracts `trackList` array
 - Returns: `track_id`, `name`, `artists` (list[str]), `duration_ms` per track

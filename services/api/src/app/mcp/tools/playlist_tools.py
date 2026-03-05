@@ -255,10 +255,11 @@ class PlaylistToolHandlers:
                         len(tracks),
                         playlist_id,
                     )
-                except SpotifyEmbedError:
+                except SpotifyEmbedError as embed_exc:
                     logger.warning(
-                        "Embed fallback also failed for playlist %s",
+                        "Embed fallback also failed for playlist %s: %s",
                         playlist_id,
+                        embed_exc,
                     )
                     tracks_restricted = True
             else:

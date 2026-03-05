@@ -493,7 +493,7 @@ class AdminRouter:
         """Invalidate playlist cache(s) for a user."""
         await self._ensure_user_exists(body.user_id, session)
         cache = SpotifyCacheService(cache_ttl_hours=settings.SPOTIFY_CACHE_TTL_HOURS)
-        if body.playlist_id:
+        if body.playlist_id is not None:
             await cache.invalidate_playlist(body.user_id, body.playlist_id, session)
             return ActionResponse(
                 success=True,
@@ -517,7 +517,7 @@ class AdminRouter:
         await cache.invalidate_all_playlists(body.user_id, session)
         return ActionResponse(
             success=True,
-            message=f"All caches invalidated for user {body.user_id}",
+            message=f"All playlist caches invalidated for user {body.user_id}",
         )
 
     # --- Helpers ---

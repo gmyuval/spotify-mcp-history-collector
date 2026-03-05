@@ -8,6 +8,7 @@ Spotify Web API returns 403 (Development Mode restriction).
 import asyncio
 import json
 import logging
+import random
 import re
 import time
 from functools import reduce
@@ -16,8 +17,10 @@ from typing import Any
 import httpx
 
 from shared.spotify.constants import (
+    DEFAULT_EMBED_MAX_RETRIES,
     DEFAULT_EMBED_MIN_REQUEST_INTERVAL,
     DEFAULT_EMBED_REQUEST_TIMEOUT,
+    DEFAULT_EMBED_RETRY_BASE_DELAY,
     DEFAULT_EMBED_USER_AGENT,
     EMBED_BASE_URL,
 )
@@ -63,10 +66,14 @@ class SpotifyEmbedClient:
         request_timeout: float = DEFAULT_EMBED_REQUEST_TIMEOUT,
         min_request_interval: float = DEFAULT_EMBED_MIN_REQUEST_INTERVAL,
         user_agent: str = DEFAULT_EMBED_USER_AGENT,
+        max_retries: int = DEFAULT_EMBED_MAX_RETRIES,
+        retry_base_delay: float = DEFAULT_EMBED_RETRY_BASE_DELAY,
     ) -> None:
         self._request_timeout = request_timeout
         self._min_request_interval = min_request_interval
         self._user_agent = user_agent
+        self._max_retries = max_retries
+        self._retry_base_delay = retry_base_delay
         self._last_request_time: float = 0.0
 
     # ── Public API ────────────────────────────────────────────────────
@@ -86,18 +93,56 @@ class SpotifyEmbedClient:
         await self._enforce_rate_limit()
 
         url = f"{EMBED_BASE_URL}/{playlist_id}"
+        last_exc: Exception | None = None
 
-        try:
-            async with httpx.AsyncClient(timeout=self._request_timeout) as client:
-                response = await client.get(url, headers={"User-Agent": self._user_agent})
-            self._last_request_time = time.monotonic()
-        except httpx.HTTPError as exc:
-            raise SpotifyEmbedError(f"Failed to fetch embed page for playlist {playlist_id}: {exc}") from exc
+        for attempt in range(self._max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self._request_timeout) as client:
+                    response = await client.get(url, headers={"User-Agent": self._user_agent})
+                self._last_request_time = time.monotonic()
+            except httpx.HTTPError as exc:
+                last_exc = exc
+                if attempt < self._max_retries:
+                    delay = self._retry_base_delay * (2**attempt) + random.uniform(0, 0.5)
+                    logger.warning(
+                        "Embed request failed (attempt %d/%d): %s — retrying in %.1fs",
+                        attempt + 1,
+                        self._max_retries + 1,
+                        exc,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                raise SpotifyEmbedError(f"Failed to fetch embed page for playlist {playlist_id}: {exc}") from exc
 
-        if response.status_code != 200:
-            raise SpotifyEmbedError(f"Embed page returned HTTP {response.status_code} for playlist {playlist_id}")
+            if response.status_code == 429 or response.status_code >= 500:
+                last_exc = SpotifyEmbedError(
+                    f"Embed page returned HTTP {response.status_code} for playlist {playlist_id}"
+                )
+                if attempt < self._max_retries:
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after and response.status_code == 429:
+                        delay = float(retry_after)
+                    else:
+                        delay = self._retry_base_delay * (2**attempt) + random.uniform(0, 0.5)
+                    logger.warning(
+                        "Embed returned %d (attempt %d/%d) — retrying in %.1fs",
+                        response.status_code,
+                        attempt + 1,
+                        self._max_retries + 1,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                raise last_exc
 
-        return self._parse_embed_html(response.text, playlist_id)
+            if response.status_code != 200:
+                raise SpotifyEmbedError(f"Embed page returned HTTP {response.status_code} for playlist {playlist_id}")
+
+            return self._parse_embed_html(response.text, playlist_id)
+
+        # Should not reach here, but satisfy type checker
+        raise last_exc or SpotifyEmbedError(f"Failed to fetch embed page for playlist {playlist_id}")
 
     # ── Private helpers ───────────────────────────────────────────────
 

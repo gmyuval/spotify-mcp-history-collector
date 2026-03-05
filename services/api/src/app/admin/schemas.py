@@ -170,7 +170,7 @@ class CacheInvalidatePlaylistsRequest(BaseModel):
     """Request to invalidate playlist cache(s) for a user."""
 
     user_id: int = Field(..., ge=1, description="User ID")
-    playlist_id: str | None = Field(None, description="Specific playlist ID, or omit to invalidate all")
+    playlist_id: str | None = Field(None, min_length=1, description="Specific playlist ID, or omit to invalidate all")
 
 
 class CacheInvalidateAllRequest(BaseModel):

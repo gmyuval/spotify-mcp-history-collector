@@ -109,22 +109,17 @@ class TestBackfillPlaylist:
         mock_result = _mock_get_playlist_result()
 
         with patch(
-            "app.mcp.tools.playlist_ledger_tools.PlaylistLedgerToolHandlers.backfill_playlist",
-            wraps=None,
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            return_value=mock_result,
         ):
-            # We need to mock the spotify.get_playlist call inside backfill
-            with patch(
-                "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
-                new_callable=AsyncMock,
-                return_value=mock_result,
-            ):
-                data = _call(
-                    client,
-                    "memory.backfill_playlist",
-                    user_id=seeded_user,
-                    playlist_id="pl_backfill",
-                    intent_tags=["rock", "classic"],
-                )
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_backfill",
+                intent_tags=["rock", "classic"],
+            )
 
         assert data["success"] is True
         result = data["result"]
