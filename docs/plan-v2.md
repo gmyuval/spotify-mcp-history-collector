@@ -30,6 +30,7 @@ Additionally, there are **bugs to fix first**:
 | 9 | MCP Memory: Playlist Ledger | **DONE** |
 | 10 | MCP Memory: Search, Export/Delete & ChatGPT Integration | **DONE** |
 | 11 | Explorer UI: Playlist Ledger Pages + ChatGPT OpenAPI Fix | **DONE** |
+| 11.6 | Playlist Track Fidelity Fix (PR #39) | **DONE** |
 | 12 | Admin-Configurable Settings | Pending |
 
 ---
