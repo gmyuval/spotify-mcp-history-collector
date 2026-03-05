@@ -358,7 +358,7 @@ class PlaylistToolHandlers:
             result["tracks_unavailable"] = tracks_unavailable
         else:
             result.pop("tracks_unavailable", None)
-        tracks_total = result.get("tracks_total", 0)
+        tracks_total: int = result.get("tracks_total") or 0
         if tracks_returned != tracks_total and not result.get("tracks_restricted"):
             result["tracks_mismatch_warning"] = (
                 f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
