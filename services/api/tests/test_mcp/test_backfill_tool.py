@@ -74,6 +74,18 @@ async def seeded_user(async_engine: AsyncEngine) -> int:
     return uid
 
 
+@pytest.fixture
+async def second_user(async_engine: AsyncEngine) -> int:
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        user = User(spotify_user_id="backfill_user_2", display_name="Backfill User 2")
+        session.add(user)
+        await session.flush()
+        uid = user.id
+        await session.commit()
+    return uid
+
+
 def _call(client: TestClient, tool: str, **kwargs: object) -> dict[str, Any]:
     resp = client.post("/mcp/call", json={"tool": tool, **kwargs})
     assert resp.status_code == 200
@@ -249,6 +261,45 @@ class TestBackfillPlaylist:
             assert data2["success"] is True
             assert data2["result"]["already_existed"] is True
             assert data2["result"]["playlist_id"] == "pl_key1"  # Returns original
+
+
+class TestBackfillCrossUserIsolation:
+    """Ensure backfill idempotency lookups are scoped per user."""
+
+    def test_idempotency_key_not_leaked_cross_user(
+        self, client: TestClient, seeded_user: int, second_user: int
+    ) -> None:
+        """User B querying with own idempotency_key doesn't see user A's playlist."""
+        mock_a = _mock_get_playlist_result(playlist_id="pl_iso_a")
+
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            return_value=mock_a,
+        ):
+            data_a = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_iso_a",
+                idempotency_key="key-user-a",
+            )
+            assert data_a["success"] is True
+            assert data_a["result"]["already_existed"] is False
+
+        # User B re-calls with user A's idempotency_key — should NOT see it
+        data_b = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=second_user,
+            playlist_id="pl_iso_a",
+            idempotency_key="key-user-a",
+        )
+        # The idempotency lookup is user-scoped, so it won't match.
+        # But the DB has a global unique constraint on idempotency_key,
+        # so the insert will fail — this is correct: idempotency keys
+        # must be globally unique to prevent cross-user collisions.
+        assert data_b["success"] is False
 
 
 class TestBackfillToolRegistered:

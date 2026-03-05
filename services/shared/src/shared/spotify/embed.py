@@ -75,6 +75,7 @@ class SpotifyEmbedClient:
         self._max_retries = max_retries
         self._retry_base_delay = retry_base_delay
         self._last_request_time: float = 0.0
+        self._lock = asyncio.Lock()
 
     # ── Public API ────────────────────────────────────────────────────
 
@@ -90,6 +91,11 @@ class SpotifyEmbedClient:
         Raises:
             SpotifyEmbedError: If the embed page can't be fetched or parsed.
         """
+        async with self._lock:
+            return await self._fetch_with_retries(playlist_id)
+
+    async def _fetch_with_retries(self, playlist_id: str) -> list[EmbedTrackItem]:
+        """Fetch with rate limiting and retry logic. Must be called under ``_lock``."""
         await self._enforce_rate_limit()
 
         url = f"{EMBED_BASE_URL}/{playlist_id}"
@@ -120,11 +126,7 @@ class SpotifyEmbedClient:
                     f"Embed page returned HTTP {response.status_code} for playlist {playlist_id}"
                 )
                 if attempt < self._max_retries:
-                    retry_after = response.headers.get("Retry-After")
-                    if retry_after and response.status_code == 429:
-                        delay = float(retry_after)
-                    else:
-                        delay = self._retry_base_delay * (2**attempt) + random.uniform(0, 0.5)
+                    delay = self._compute_retry_delay(response, attempt)
                     logger.warning(
                         "Embed returned %d (attempt %d/%d) — retrying in %.1fs",
                         response.status_code,
@@ -143,6 +145,19 @@ class SpotifyEmbedClient:
 
         # Should not reach here, but satisfy type checker
         raise last_exc or SpotifyEmbedError(f"Failed to fetch embed page for playlist {playlist_id}")
+
+    def _compute_retry_delay(self, response: httpx.Response, attempt: int) -> float:
+        """Compute retry delay, honouring Retry-After header on 429."""
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    return max(float(retry_after), 0.0)
+                except ValueError:
+                    pass
+        jitter: float = random.uniform(0, 0.5)
+        delay: float = self._retry_base_delay * (2**attempt) + jitter
+        return delay
 
     # ── Private helpers ───────────────────────────────────────────────
 

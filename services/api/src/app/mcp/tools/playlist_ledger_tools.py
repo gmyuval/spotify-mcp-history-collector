@@ -736,9 +736,12 @@ class PlaylistLedgerToolHandlers:
 
         idempotency_key = args.get("idempotency_key")
 
-        # Idempotency check via key
+        # Idempotency check via key (scoped to user)
         if idempotency_key:
-            stmt = select(MemoryPlaylist).where(MemoryPlaylist.idempotency_key == idempotency_key)
+            stmt = select(MemoryPlaylist).where(
+                MemoryPlaylist.idempotency_key == idempotency_key,
+                MemoryPlaylist.user_id == user_id,
+            )
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
             if existing is not None:
@@ -755,8 +758,13 @@ class PlaylistLedgerToolHandlers:
                     "already_existed": True,
                 }
 
-        # Check if playlist_id already exists in ledger
-        existing_playlist = await session.get(MemoryPlaylist, playlist_id)
+        # Check if playlist_id already exists in ledger for this user
+        stmt = select(MemoryPlaylist).where(
+            MemoryPlaylist.playlist_id == playlist_id,
+            MemoryPlaylist.user_id == user_id,
+        )
+        result = await session.execute(stmt)
+        existing_playlist = result.scalar_one_or_none()
         if existing_playlist is not None:
             stored_count = 0
             if existing_playlist.latest_snapshot_id:
