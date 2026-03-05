@@ -32,7 +32,7 @@ track_ids = [t["id"] for t in playlist_data.get("tracks", []) if t.get("id")]
 
 ### Why duplicates appear correct but counts mismatch
 Duplicates are preserved (no de-dup). But `tracks_total` counts all items
-including unavailable ones that get dropped, so e.g. `tracks_total=67` but
+including unavailable ones that are dropped, so e.g. `tracks_total=67` but
 only 64 items are returned.
 
 ### No mismatch detection

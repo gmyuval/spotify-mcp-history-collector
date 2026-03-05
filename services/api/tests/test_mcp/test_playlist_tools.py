@@ -1188,6 +1188,68 @@ def test_get_playlist_embed_unavailable_placeholder(client: TestClient, seeded_u
         assert result["tracks_source"] == "embed"
 
 
+def test_get_playlist_cache_hit_fidelity_fields(client: TestClient, seeded_user: int) -> None:
+    """Cache-hit responses include tracks_returned / tracks_unavailable / tracks_mismatch_warning."""
+    mock_playlist = SpotifyPlaylist(
+        id="pl_cache_fidelity",
+        name="Cache Fidelity",
+        public=True,
+        owner=SpotifyPlaylistOwner(id="pluser", display_name="Playlist User"),
+        snapshot_id="snap_cf",
+        external_urls={},
+        # Spotify reports 3 but we'll return 2 available + 1 unavailable
+        tracks=SpotifyPlaylistTracks(items=[], total=3),
+    )
+
+    mock_all_tracks = [
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(id="t1", name="Track 1", artists=[SpotifyArtistSimplified(id="a1", name="A1")]),
+            added_at="2025-01-15T10:00:00Z",
+        ),
+        # Unavailable track
+        SpotifyPlaylistTrackItem(track=None, added_at="2025-01-16T12:00:00Z"),
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(id="t3", name="Track 3", artists=[SpotifyArtistSimplified(id="a3", name="A3")]),
+            added_at="2025-01-17T14:00:00Z",
+        ),
+    ]
+
+    def _assert_fidelity(result: dict) -> None:
+        assert result["tracks_returned"] == 3
+        assert result["tracks_unavailable"] == 1
+        assert "tracks_mismatch_warning" not in result  # returned == total (3 == 3)
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
+        mock_client.get_playlist_all_tracks = AsyncMock(return_value=mock_all_tracks)
+        mock_get_client.return_value = mock_client
+
+        # First call — live fetch, populates cache
+        resp1 = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_cache_fidelity"},
+        )
+        data1 = resp1.json()
+        assert data1["success"] is True
+        _assert_fidelity(data1["result"])
+
+        # Second call — should hit cache (snapshot_id matches)
+        resp2 = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_cache_fidelity"},
+        )
+        data2 = resp2.json()
+        assert data2["success"] is True
+        # Fidelity fields must be present even from cache
+        _assert_fidelity(data2["result"])
+        # get_playlist_all_tracks should only have been called once (cache hit on second)
+        mock_client.get_playlist_all_tracks.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # Tool registration check
 # ---------------------------------------------------------------------------

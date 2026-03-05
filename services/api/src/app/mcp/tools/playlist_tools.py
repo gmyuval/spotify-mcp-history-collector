@@ -201,7 +201,7 @@ class PlaylistToolHandlers:
                 or cached_data.get("tracks_restricted") is True
             ):
                 logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
-                return cached_data
+                return self._with_fidelity_metrics(cached_data)
 
         # If metadata was 403, resolve cached metadata now — fail fast before
         # attempting the tracks endpoint (which will also 403).
@@ -321,7 +321,8 @@ class PlaylistToolHandlers:
                 "external_urls": cached_metadata.get("external_urls", {}),
             }
 
-        # Add fidelity metrics
+        # Add fidelity metrics (same logic as _with_fidelity_metrics, but we already
+        # have tracks_returned/tracks_unavailable computed above so apply directly)
         result["tracks_returned"] = tracks_returned
         if tracks_unavailable:
             result["tracks_unavailable"] = tracks_unavailable
@@ -340,6 +341,31 @@ class PlaylistToolHandlers:
 
         # Cache the full playlist with tracks
         await self._cache.put_playlist(user_id, result, tracks, session)
+        return result
+
+    @staticmethod
+    def _with_fidelity_metrics(result: dict[str, Any]) -> dict[str, Any]:
+        """Inject tracks_returned / tracks_unavailable / tracks_mismatch_warning.
+
+        Applied to both live responses and cache-hit responses so the output
+        shape is always consistent.
+        """
+        tracks: list[dict[str, Any]] = result.get("tracks", [])
+        tracks_returned = len(tracks)
+        tracks_unavailable = sum(1 for t in tracks if t.get("unavailable"))
+        result["tracks_returned"] = tracks_returned
+        if tracks_unavailable:
+            result["tracks_unavailable"] = tracks_unavailable
+        else:
+            result.pop("tracks_unavailable", None)
+        tracks_total = result.get("tracks_total", 0)
+        if tracks_returned != tracks_total and not result.get("tracks_restricted"):
+            result["tracks_mismatch_warning"] = (
+                f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
+                f"{tracks_unavailable} unavailable placeholder(s) included."
+            )
+        else:
+            result.pop("tracks_mismatch_warning", None)
         return result
 
     async def create_playlist(self, args: dict[str, Any], session: AsyncSession) -> Any:
