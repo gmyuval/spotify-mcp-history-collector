@@ -287,6 +287,14 @@ class PlaylistToolHandlers:
             else:
                 raise
 
+        # Determine if restricted playlist is private — embed only works for public playlists
+        _is_private = False
+        if tracks_restricted:
+            if pl is not None:
+                _is_private = pl.public is False
+            elif cached_metadata is not None:
+                _is_private = cached_metadata.get("public") is False
+
         # Track fidelity metrics
         tracks_returned = len(tracks)
         tracks_unavailable = sum(1 for t in tracks if t.get("unavailable"))
@@ -335,9 +343,16 @@ class PlaylistToolHandlers:
 
         if tracks_restricted:
             result["tracks_restricted"] = True
-            result["tracks_restricted_reason"] = (
-                "Spotify API returned 403 and embed fallback failed. Tracks cannot be retrieved for this playlist."
-            )
+            if _is_private:
+                result["tracks_restricted_reason"] = (
+                    "Private playlist: Spotify API returned 403 and the embed fallback requires "
+                    "authentication for private playlists. If you know the track IDs, use "
+                    "memory.backfill_playlist with an explicit track_ids parameter to log this playlist."
+                )
+            else:
+                result["tracks_restricted_reason"] = (
+                    "Spotify API returned 403 and embed fallback failed. Tracks cannot be retrieved for this playlist."
+                )
 
         # Cache the full playlist with tracks
         await self._cache.put_playlist(user_id, result, tracks, session)

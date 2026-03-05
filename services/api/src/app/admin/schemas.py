@@ -246,3 +246,35 @@ class UserRolesResponse(BaseModel):
 
     user_id: int
     roles: list[RoleSummary]
+
+
+# --- Settings ---
+
+
+class SettingDetail(BaseModel):
+    """Detail for a single configurable setting."""
+
+    key: str
+    value_json: object
+    default_value: object
+    description: str | None
+    category: str
+    updated_at: datetime
+
+
+class SettingsListResponse(BaseModel):
+    """All settings grouped by category."""
+
+    by_category: dict[str, list[SettingDetail]]
+
+
+class UpdateSettingRequest(BaseModel):
+    """Request to update a setting value."""
+
+    value_json: object = Field(..., description="New value (int, float, str, list, or object)")
+
+
+class ResetSettingsRequest(BaseModel):
+    """Request to reset one or all settings to their defaults."""
+
+    key: str | None = Field(None, description="Setting key to reset, or omit to reset all")

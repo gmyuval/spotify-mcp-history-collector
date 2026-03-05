@@ -1,0 +1,34 @@
+<tr id="setting-{{ setting.key | replace('.', '-') }}">
+  <td>
+    <code class="small">{{ setting.key }}</code>
+  </td>
+  <td class="text-muted small">{{ setting.description or '' }}</td>
+  <td>
+    {% if flash is defined %}
+    <span class="badge bg-success me-1">{{ flash }}</span>
+    {% endif %}
+    {% if flash_error is defined %}
+    <span class="badge bg-danger me-1">{{ flash_error }}</span>
+    {% endif %}
+    <form hx-post="{{ base_path }}/settings/{{ setting.key }}"
+          hx-target="#setting-{{ setting.key | replace('.', '-') }}"
+          hx-swap="outerHTML"
+          class="d-flex gap-1 align-items-center">
+      <input type="text"
+             name="value"
+             class="form-control form-control-sm font-monospace"
+             value="{{ setting.value_json | tojson }}"
+             style="min-width:80px">
+      <button type="submit" class="btn btn-sm btn-primary">Save</button>
+    </form>
+  </td>
+  <td>
+    <button class="btn btn-sm btn-outline-secondary"
+            hx-post="{{ base_path }}/settings/{{ setting.key }}/reset"
+            hx-target="#setting-{{ setting.key | replace('.', '-') }}"
+            hx-swap="outerHTML"
+            title="Reset to default: {{ setting.default_value | tojson if setting.default_value is defined else '' }}">
+      Reset
+    </button>
+  </td>
+</tr>

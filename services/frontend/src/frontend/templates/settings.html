@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2>Settings</h2>
+  <button class="btn btn-sm btn-outline-secondary"
+          hx-post="{{ base_path }}/settings/reset"
+          hx-include="[name='key']"
+          hx-target="#settings-alert"
+          hx-swap="innerHTML"
+          hx-confirm="Reset ALL settings to their defaults?"
+          onclick="this.form && this.form.submit ? null : null">
+    Reset All to Defaults
+  </button>
+</div>
+
+<div id="settings-alert" class="mb-3"></div>
+
+{% if by_category %}
+<div class="accordion" id="settingsAccordion">
+  {% for category, settings_list in by_category.items() %}
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="heading-{{ category }}">
+      <button class="accordion-button" type="button"
+              data-bs-toggle="collapse"
+              data-bs-target="#collapse-{{ category }}"
+              aria-expanded="true"
+              aria-controls="collapse-{{ category }}">
+        <strong>{{ category | capitalize }}</strong>
+        <span class="badge bg-secondary ms-2">{{ settings_list | length }}</span>
+      </button>
+    </h2>
+    <div id="collapse-{{ category }}" class="accordion-collapse collapse show"
+         aria-labelledby="heading-{{ category }}"
+         data-bs-parent="#settingsAccordion">
+      <div class="accordion-body p-0">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:30%">Key</th>
+              <th style="width:35%">Description</th>
+              <th style="width:20%">Value</th>
+              <th style="width:15%">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for setting in settings_list %}
+            {% include "partials/_setting_row.html" %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">No settings found.</div>
+{% endif %}
+{% endblock %}

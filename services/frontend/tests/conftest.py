@@ -49,6 +49,49 @@ def _default_mock_api() -> AsyncMock:
     api.upload_import.return_value = {"id": 42, "status": "pending"}
     api.purge_logs.return_value = {"message": "Purged 10 logs"}
 
+    # Settings defaults
+    api.list_settings.return_value = {
+        "by_category": {
+            "search": [
+                {
+                    "key": "search.default_limit",
+                    "value_json": 25,
+                    "default_value": 25,
+                    "description": "Default results per search",
+                    "category": "search",
+                    "updated_at": "2024-01-01T00:00:00",
+                },
+                {
+                    "key": "search.max_limit",
+                    "value_json": 200,
+                    "default_value": 200,
+                    "description": "Max results per search",
+                    "category": "search",
+                    "updated_at": "2024-01-01T00:00:00",
+                },
+            ],
+            "playlist": [
+                {
+                    "key": "playlist.snapshot_compaction_threshold",
+                    "value_json": 10,
+                    "default_value": 10,
+                    "description": "Auto-snapshot every N mutations",
+                    "category": "playlist",
+                    "updated_at": "2024-01-01T00:00:00",
+                },
+            ],
+        }
+    }
+    api.update_setting.return_value = {
+        "key": "search.default_limit",
+        "value_json": 10,
+        "default_value": 25,
+        "description": "Default results per search",
+        "category": "search",
+        "updated_at": "2024-01-01T00:00:00",
+    }
+    api.reset_settings.return_value = {"success": True, "reset_count": 1}
+
     # RBAC defaults
     api.list_roles.return_value = [
         {

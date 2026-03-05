@@ -232,6 +232,23 @@ class AdminApiClient:
         """PUT /admin/users/{user_id}/roles — set user's roles."""
         return await self._request("PUT", f"/admin/users/{user_id}/roles", json={"role_ids": role_ids})
 
+    # --- Settings ---
+
+    async def list_settings(self) -> dict[str, Any]:
+        """GET /admin/settings — list all settings grouped by category."""
+        return await self._request("GET", "/admin/settings")
+
+    async def update_setting(self, key: str, value_json: object) -> dict[str, Any]:
+        """PUT /admin/settings/{key} — update a setting value."""
+        return await self._request("PUT", f"/admin/settings/{key}", json={"value_json": value_json})
+
+    async def reset_settings(self, key: str | None = None) -> dict[str, Any]:
+        """POST /admin/settings/reset — reset one or all settings to defaults."""
+        body: dict[str, Any] = {}
+        if key is not None:
+            body["key"] = key
+        return await self._request("POST", "/admin/settings/reset", json=body)
+
     async def close(self) -> None:
         """Close the underlying HTTP client."""
         await self._client.aclose()

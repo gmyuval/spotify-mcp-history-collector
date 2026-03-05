@@ -302,6 +302,115 @@ class TestBackfillCrossUserIsolation:
         assert data_b["success"] is False
 
 
+class TestBackfillWithTrackIds:
+    """Tests for the manual track_ids override path (private playlist workaround)."""
+
+    def test_track_ids_skips_spotify_fetch(self, client: TestClient, seeded_user: int) -> None:
+        """When track_ids is provided, Spotify fetch is skipped and source is 'manual'."""
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            side_effect=Exception("should not be called"),
+        ):
+            # Metadata fetch will also raise — name must be provided explicitly
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_manual",
+                track_ids=["spotify:track:aaa", "spotify:track:bbb"],
+                name="Private Playlist",
+            )
+
+        assert data["success"] is True
+        result = data["result"]
+        assert result["tracks_source"] == "manual"
+        assert result["stored_track_count"] == 2
+        assert result["playlist_id"] == "pl_manual"
+        assert result["name"] == "Private Playlist"
+        assert result["already_existed"] is False
+
+    def test_track_ids_uses_metadata_name_when_available(self, client: TestClient, seeded_user: int) -> None:
+        """When metadata fetch succeeds, name comes from Spotify (no name override needed)."""
+        mock_result = _mock_get_playlist_result(
+            playlist_id="pl_manual_meta",
+            name="Fetched Name",
+            track_ids=["t1"],  # These tracks should be ignored — manual_track_ids take priority
+        )
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_manual_meta",
+                track_ids=["manual_t1", "manual_t2", "manual_t3"],
+                # No name override — should come from metadata
+            )
+
+        assert data["success"] is True
+        result = data["result"]
+        assert result["name"] == "Fetched Name"
+        assert result["tracks_source"] == "manual"
+        assert result["stored_track_count"] == 3  # manual count, not metadata count
+
+    def test_track_ids_requires_name_when_metadata_fails(self, client: TestClient, seeded_user: int) -> None:
+        """If metadata fetch fails and no name override, raises an error."""
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            side_effect=Exception("403 Forbidden"),
+        ):
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_manual_no_name",
+                track_ids=["t1"],
+                # No name — should fail
+            )
+
+        assert data["success"] is False
+        assert "name" in data.get("error", "").lower() or "name" in str(data).lower()
+
+    def test_track_ids_invalid_type_returns_error(self, client: TestClient, seeded_user: int) -> None:
+        """Passing track_ids as a non-array raises a validation error."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_bad_ids",
+            track_ids="not-a-list",
+            name="Whatever",
+        )
+        assert data["success"] is False
+
+    def test_track_ids_empty_list_stores_zero_tracks(self, client: TestClient, seeded_user: int) -> None:
+        """Passing an empty track_ids list enters the manual path with 0 tracks stored."""
+        # [] is not None, so it enters the manual override path.
+        # Metadata fetch succeeds, providing the name.
+        mock_result = _mock_get_playlist_result(playlist_id="pl_empty_ids", track_ids=["t1"])
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_empty_ids",
+                track_ids=[],
+            )
+        assert data["success"] is True
+        result = data["result"]
+        assert result["tracks_source"] == "manual"
+        assert result["stored_track_count"] == 0
+
+
 class TestBackfillToolRegistered:
     def test_registered(self, client: TestClient) -> None:
         """memory.backfill_playlist appears in the tool catalog."""

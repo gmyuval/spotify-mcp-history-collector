@@ -309,3 +309,19 @@ Format Notes section to reflect both formats are accepted.
 - When Spotify API returns 403, tracks are fetched from Spotify's embed page (no auth required)
 - `memory.backfill_playlist` imports an existing Spotify playlist into the memory ledger in a single call — fetches tracks automatically
 - Backfill is idempotent: calling it twice for the same playlist returns the existing record
+
+### Phase 12 — Admin-Configurable Settings + Private Playlist Fix (current)
+
+**OpenAPI schema:** Replace with `docs/chatgpt-openapi.json`:
+- Added 2 new parameters to `memory.backfill_playlist`:
+  - `track_ids`: `oneOf: [{type: array, items: {type: string}}, {type: string}]` — explicit track IDs to bypass Spotify fetch
+  - `name`: `{type: string}` — playlist name override when metadata is unavailable
+
+**Instructions:** Add to PLAYLIST MEMORY section (after the embed fallback note):
+- For **private playlists** where `spotify.get_playlist` returns `tracks_restricted: true` (Spotify API 403 + embed requires auth), use `memory.backfill_playlist` with explicit `track_ids` and `name` to log the playlist. The user must supply the track IDs manually (e.g., from their Spotify app or URLs). Set `tracks_source` is automatically set to `"manual"` for these entries.
+
+**Knowledge file:** Re-upload `docs/chatgpt-tool-catalog.md` — update `memory.backfill_playlist` entry to document `track_ids` and `name` parameters.
+
+**Backend changes (no GPT action update needed):**
+- Admin settings page at `/admin/settings` — change limits and scoring weights without code deployment
+- Search limits (`search.default_limit`, `search.max_limit`), score weights, and playlist thresholds are now DB-configurable

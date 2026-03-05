@@ -193,6 +193,17 @@
                     "type": "string",
                     "description": "For memory.log_playlist_create and memory.backfill_playlist: idempotency key to prevent duplicate creates on retry."
                   },
+                  "track_ids": {
+                    "oneOf": [
+                      {"type": "array", "items": {"type": "string"}},
+                      {"type": "string"}
+                    ],
+                    "description": "For memory.backfill_playlist: explicit track IDs to store directly, bypassing the Spotify fetch. Use for private playlists where the API returns 403 and the embed fallback fails. Pass as a JSON array of Spotify track ID strings."
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "For memory.backfill_playlist: playlist name override. Required when track_ids is provided and metadata cannot be fetched (e.g. private playlist with 403)."
+                  },
                   "client_event_id": {
                     "type": "string",
                     "description": "For memory.log_playlist_mutation: client-generated UUID for idempotent mutation logging."
