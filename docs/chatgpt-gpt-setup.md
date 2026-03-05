@@ -277,7 +277,7 @@ with all 33 tools, descriptions, parameters, and format notes.
 
 **Conversation starters:** Added "Search my music memory for metal playlists"
 
-### Phase 11 — Explorer UI: Playlist Ledger Pages + ChatGPT OpenAPI Fix (current)
+### Phase 11 — Explorer UI: Playlist Ledger Pages + ChatGPT OpenAPI Fix
 
 **OpenAPI schema:** Replace with `docs/chatgpt-openapi.json` — fixes 4 parameter
 types from `"type": "string"` to `oneOf` so ChatGPT can send native JSON objects:
@@ -294,3 +294,18 @@ JSON-encoded strings.
 Format Notes section to reflect both formats are accepted.
 
 **No tool enum or conversation starter changes needed.**
+
+### Phase 11.5 — Playlist Track Access: Embed Fallback + Backfill Tool (current)
+
+**OpenAPI schema:** Replace with `docs/chatgpt-openapi.json`:
+- Added `memory.backfill_playlist` to tool enum (34 tools total)
+- Updated `intent_tags`, `seed_context`, `idempotency_key` descriptions to include backfill tool
+
+**Knowledge file:** Re-upload `docs/chatgpt-tool-catalog.md`:
+- Added `memory.backfill_playlist` to Playlist Ledger table
+
+**Behavioral notes:**
+- `spotify.get_playlist` now returns a `tracks_source` field: `"api"` or `"embed"`
+- When Spotify API returns 403, tracks are fetched from Spotify's embed page (no auth required)
+- `memory.backfill_playlist` imports an existing Spotify playlist into the memory ledger in a single call — fetches tracks automatically
+- Backfill is idempotent: calling it twice for the same playlist returns the existing record

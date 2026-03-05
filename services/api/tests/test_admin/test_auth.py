@@ -1,7 +1,7 @@
 """Tests for admin authentication middleware."""
 
 import base64
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Callable, Generator
 
 import pytest
 from cryptography.fernet import Fernet
@@ -60,7 +60,7 @@ async def async_engine() -> AsyncGenerator[AsyncEngine]:
     await engine.dispose()
 
 
-def _make_client(async_engine: AsyncEngine, settings_fn: type) -> tuple[TestClient, Generator[None]]:
+def _make_client(async_engine: AsyncEngine, settings_fn: Callable[[], AppSettings]) -> TestClient:
     session_factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _override_session() -> AsyncGenerator[AsyncSession]:

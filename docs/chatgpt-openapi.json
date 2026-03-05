@@ -60,7 +60,8 @@
                       "memory.reconstruct_playlist",
                       "memory.search",
                       "memory.export_user_data",
-                      "memory.delete_user_data"
+                      "memory.delete_user_data",
+                      "memory.backfill_playlist"
                     ]
                   },
                   "user_id": {
@@ -179,18 +180,18 @@
                       {"type": "array", "items": {"type": "string"}, "maxItems": 100},
                       {"type": "string"}
                     ],
-                    "description": "For memory.log_playlist_create: intent tags. Pass as a JSON array or a JSON string."
+                    "description": "For memory.log_playlist_create and memory.backfill_playlist: intent tags. Pass as a JSON array or a JSON string."
                   },
                   "seed_context": {
                     "oneOf": [
                       {"type": "object"},
                       {"type": "string"}
                     ],
-                    "description": "For memory.log_playlist_create: seed context. Pass as a JSON object or a JSON string."
+                    "description": "For memory.log_playlist_create and memory.backfill_playlist: seed context. Pass as a JSON object or a JSON string."
                   },
                   "idempotency_key": {
                     "type": "string",
-                    "description": "For memory.log_playlist_create: idempotency key to prevent duplicate creates on retry."
+                    "description": "For memory.log_playlist_create and memory.backfill_playlist: idempotency key to prevent duplicate creates on retry."
                   },
                   "client_event_id": {
                     "type": "string",

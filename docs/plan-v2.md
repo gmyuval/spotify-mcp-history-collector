@@ -619,6 +619,82 @@ Explorer UI for browsing assistant-tracked playlists from the memory ledger, plu
 
 ---
 
+## Phase 11.5 — PR: Playlist Track Access (Embed Fallback + Backfill Tool)
+
+**Goal:** Solve the Spotify Development Mode 403 restriction on `GET /playlists/{id}/tracks` by using Spotify's embed endpoint as a fallback for track data. Add a `memory.backfill_playlist` tool so ChatGPT can import existing playlists into the memory ledger in a single call. Add admin cache management endpoints.
+
+**Background:** Spotify Development Mode blocks `GET /playlists/{id}` and `/tracks` endpoints (requires Extended Quota Mode, impractical to obtain). However, Spotify's embed page (`/embed/playlist/{id}`) returns complete track listings in its `__NEXT_DATA__` JSON — no auth required. Tested and confirmed working. PR #37 added graceful 403 degradation; this phase adds the embed fallback to actually retrieve tracks.
+
+### Embed-based playlist track fetcher (new module)
+
+**`services/shared/src/shared/spotify/embed.py`**:
+- `SpotifyEmbedClient` with `async fetch_playlist_tracks(playlist_id) -> list[EmbedTrackItem]`
+- Fetches `https://open.spotify.com/embed/playlist/{id}` via httpx
+- Parses `__NEXT_DATA__` JSON blob, extracts `trackList` array
+- Returns: `track_id`, `name`, `artists` (list[str]), `duration_ms` per track
+- Rate limiting: minimum 2s between requests
+- New exception: `SpotifyEmbedError` in `exceptions.py`
+
+### Wire embed fallback into `spotify.get_playlist`
+
+**`services/api/src/app/mcp/tools/playlist_tools.py`** (modify):
+- When `get_playlist_all_tracks()` returns 403, fall back to embed fetcher
+- Convert embed results to same dict format as API tracks
+- Add `tracks_source` field in response: `"api"` or `"embed"`
+- Cache results normally
+
+### New MCP tool: `memory.backfill_playlist`
+
+**`services/api/src/app/mcp/tools/playlist_ledger_tools.py`** (modify):
+- **Inputs:** `user_id`, `playlist_id`, `intent_tags` (optional), `seed_context` (optional), `idempotency_key` (optional)
+- **Flow:**
+  1. Check if playlist already exists in memory (idempotent — return existing)
+  2. Fetch playlist via `spotify.get_playlist` tool handler internally (API or embed)
+  3. Create MemoryPlaylist + initial PlaylistSnapshot (source: `BACKFILL`)
+  4. Return: `playlist_id`, `name`, `snapshot_id`, `stored_track_count`, `tracks_source`
+- New enum value: `PlaylistSnapshotSource.BACKFILL = "backfill"`
+
+### Admin cache invalidation endpoints
+
+**`services/api/src/app/admin/router.py`** (modify):
+- `POST /admin/cache/playlists/invalidate` — body: `{user_id, playlist_id?}` — invalidate single or all playlist caches
+- `POST /admin/cache/all/invalidate` — body: `{user_id}` — clear all caches for user
+
+### Files to create
+
+- `services/shared/src/shared/spotify/embed.py` — Embed track fetcher
+- `services/api/tests/test_spotify/test_embed.py` — Embed fetcher unit tests
+- `services/api/tests/test_mcp/test_backfill_tool.py` — Backfill tool tests
+- `services/api/tests/test_admin/test_cache_invalidation.py` — Cache admin tests
+
+### Files to modify
+
+- `services/shared/src/shared/spotify/__init__.py` — Export embed module
+- `services/shared/src/shared/spotify/exceptions.py` — Add `SpotifyEmbedError`
+- `services/shared/src/shared/db/enums.py` — Add `BACKFILL` to `PlaylistSnapshotSource`
+- `services/api/src/app/mcp/tools/playlist_tools.py` — Embed fallback in `get_playlist`
+- `services/api/src/app/mcp/tools/playlist_ledger_tools.py` — Add `backfill_playlist` tool
+- `services/api/src/app/admin/router.py` — Cache invalidation endpoints
+- `services/api/tests/test_mcp/test_playlist_tools.py` — Update tests for embed fallback
+- `docs/chatgpt-openapi.json` — Add `memory.backfill_playlist` tool
+- `docs/chatgpt-tool-catalog.md` — Add tool entry
+- `docs/chatgpt-gpt-setup.md` — Update changelog
+
+### Tests
+
+- Embed fetcher: successful parse, HTTP errors, malformed HTML, missing trackList
+- `spotify.get_playlist`: API success (no embed), API 403 with embed fallback, both fail
+- `memory.backfill_playlist`: success, already-exists (idempotent), empty playlist, Spotify error
+- Admin cache invalidation: single playlist, all playlists, all caches, invalid user
+
+### Verification
+
+- `pytest services/api/tests/` — all pass
+- `ruff check` + `mypy` — clean
+- Deploy to production, verify `spotify.get_playlist` returns tracks via embed
+
+---
+
 ## Phase 12 — PR: Admin-Configurable Settings
 
 **Goal:** Replace hardcoded constants (magic numbers) across the codebase with a DB-backed settings system, manageable through the admin UI. This includes search parameters, limits, scoring weights, and other operational tunables that are currently embedded as constants.

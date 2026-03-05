@@ -13,7 +13,8 @@ from app.mcp.schemas import MCPToolParam
 from app.settings import get_settings
 from shared.db.models.user import SpotifyToken
 from shared.spotify.client import SpotifyClient
-from shared.spotify.exceptions import SpotifyRequestError
+from shared.spotify.embed import SpotifyEmbedClient
+from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class PlaylistToolHandlers:
     def __init__(self) -> None:
         settings = get_settings()
         self._cache = SpotifyCacheService(cache_ttl_hours=settings.SPOTIFY_CACHE_TTL_HOURS)
+        self._embed_client = SpotifyEmbedClient()
         self._register()
 
     def _register(self) -> None:
@@ -213,9 +215,9 @@ class PlaylistToolHandlers:
                 )
 
         # Fetch all tracks via pagination (uses GET /playlists/{id}/tracks).
-        # This endpoint may also return 403 in Spotify dev mode (requires
-        # Extended Quota Mode). In that case, return metadata-only result.
+        # If API returns 403 (Spotify Development Mode), fall back to embed endpoint.
         tracks: list[dict[str, Any]] = []
+        tracks_source = "api"
         tracks_restricted = False
         try:
             all_track_items = await client.get_playlist_all_tracks(playlist_id)
@@ -232,10 +234,34 @@ class PlaylistToolHandlers:
         except SpotifyRequestError as exc:
             if exc.status_code == 403:
                 logger.warning(
-                    "Spotify returned 403 for GET /playlists/%s/tracks — app may need Extended Quota Mode",
+                    "Spotify returned 403 for GET /playlists/%s/tracks — trying embed fallback",
                     playlist_id,
                 )
-                tracks_restricted = True
+                # Try embed endpoint as fallback
+                try:
+                    embed_items = await self._embed_client.fetch_playlist_tracks(playlist_id)
+                    tracks = [
+                        {
+                            "id": item.track_id,
+                            "name": item.name,
+                            "artists": [{"name": a} for a in item.artists],
+                            "duration_ms": item.duration_ms,
+                        }
+                        for item in embed_items
+                    ]
+                    tracks_source = "embed"
+                    logger.info(
+                        "Embed fallback returned %d tracks for playlist %s",
+                        len(tracks),
+                        playlist_id,
+                    )
+                except SpotifyEmbedError as embed_exc:
+                    logger.warning(
+                        "Embed fallback also failed for playlist %s: %s",
+                        playlist_id,
+                        embed_exc,
+                    )
+                    tracks_restricted = True
             else:
                 raise
 
@@ -249,6 +275,7 @@ class PlaylistToolHandlers:
                 "owner": pl.owner.display_name if pl.owner else None,
                 "tracks_total": pl.tracks.total if pl.tracks else 0,
                 "tracks": tracks,
+                "tracks_source": tracks_source,
                 "snapshot_id": pl.snapshot_id,
                 "external_urls": pl.external_urls,
             }
@@ -263,6 +290,7 @@ class PlaylistToolHandlers:
                 "owner": cached_metadata.get("owner"),
                 "tracks_total": cached_metadata.get("tracks_total", 0),
                 "tracks": tracks,
+                "tracks_source": tracks_source,
                 "snapshot_id": cached_metadata.get("snapshot_id"),
                 "external_urls": cached_metadata.get("external_urls", {}),
             }
@@ -270,10 +298,7 @@ class PlaylistToolHandlers:
         if tracks_restricted:
             result["tracks_restricted"] = True
             result["tracks_restricted_reason"] = (
-                "Spotify returned 403 for playlist track listing. "
-                "This app is in Development Mode and GET /playlists/{id}/tracks "
-                "requires Extended Quota Mode. Tracks cannot be retrieved until "
-                "the app is approved for extended access."
+                "Spotify API returned 403 and embed fallback failed. Tracks cannot be retrieved for this playlist."
             )
 
         # Cache the full playlist with tracks

@@ -538,7 +538,8 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user: int) -
     may return 403 (Extended Quota Mode required). The handler should return
     cached metadata with a clear restriction message.
     """
-    from shared.spotify.exceptions import SpotifyRequestError
+    from app.mcp.tools.playlist_tools import _instance as playlist_instance
+    from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
 
     with patch(
         "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
@@ -572,16 +573,23 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user: int) -
         )
 
         # get_playlist should return metadata + restriction notice
-        resp = client.post(
-            "/mcp/call",
-            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_full403"},
-        )
+        # Mock embed fallback to also fail
+        with patch.object(
+            playlist_instance._embed_client,
+            "fetch_playlist_tracks",
+            new_callable=AsyncMock,
+            side_effect=SpotifyEmbedError("Embed failed"),
+        ):
+            resp = client.post(
+                "/mcp/call",
+                json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_full403"},
+            )
         data = resp.json()
         assert data["success"] is True
         assert data["result"]["name"] == "Fully Restricted"
         assert data["result"]["tracks"] == []
         assert data["result"]["tracks_restricted"] is True
-        assert "Extended Quota Mode" in data["result"]["tracks_restricted_reason"]
+        assert "embed fallback failed" in data["result"]["tracks_restricted_reason"]
 
 
 def test_get_playlist_403_no_cache(client: TestClient, seeded_user: int) -> None:
@@ -891,6 +899,73 @@ def test_create_playlist_no_token(client: TestClient, seeded_user: int) -> None:
     data = resp.json()
     assert data["success"] is False
     assert "No token found" in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# Embed fallback tests
+# ---------------------------------------------------------------------------
+
+
+def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user: int) -> None:
+    """get_playlist falls back to embed endpoint when API returns 403, and returns tracks."""
+    from app.mcp.tools.playlist_tools import _instance as playlist_instance
+    from shared.spotify.exceptions import SpotifyRequestError
+    from shared.spotify.models import EmbedTrackItem
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_get_client.return_value = mock_client
+
+        # Seed cache via list_playlists
+        mock_client.get_user_playlists = AsyncMock(
+            return_value=UserPlaylistsResponse(
+                items=[
+                    SpotifyPlaylistSimplified(
+                        id="pl_embed",
+                        name="Embed Playlist",
+                        public=True,
+                        owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+                        snapshot_id="snap_embed",
+                        tracks={"total": 2},
+                    )
+                ],
+                total=1,
+            )
+        )
+        client.post(
+            "/mcp/call",
+            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
+        )
+
+        # Mock embed to return tracks
+        embed_tracks = [
+            EmbedTrackItem(track_id="t1", name="Track 1", artists=["Artist A"], duration_ms=180000),
+            EmbedTrackItem(track_id="t2", name="Track 2", artists=["Artist B", "Artist C"], duration_ms=240000),
+        ]
+        with patch.object(
+            playlist_instance._embed_client,
+            "fetch_playlist_tracks",
+            new_callable=AsyncMock,
+            return_value=embed_tracks,
+        ):
+            resp = client.post(
+                "/mcp/call",
+                json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_embed"},
+            )
+
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["name"] == "Embed Playlist"
+        assert len(data["result"]["tracks"]) == 2
+        assert data["result"]["tracks"][0]["id"] == "t1"
+        assert data["result"]["tracks"][0]["name"] == "Track 1"
+        assert data["result"]["tracks_source"] == "embed"
+        assert "tracks_restricted" not in data["result"]
 
 
 # ---------------------------------------------------------------------------

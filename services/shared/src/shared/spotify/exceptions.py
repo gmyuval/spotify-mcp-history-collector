@@ -36,3 +36,7 @@ class SpotifyRequestError(SpotifyClientError):
         self.status_code = status_code
         self.detail = detail
         super().__init__(f"Spotify request error: HTTP {status_code}" + (f" — {detail}" if detail else ""))
+
+
+class SpotifyEmbedError(SpotifyClientError):
+    """Failed to fetch or parse track data from Spotify's embed endpoint."""

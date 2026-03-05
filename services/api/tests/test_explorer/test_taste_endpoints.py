@@ -1,6 +1,7 @@
 """Tests for taste profile explorer API endpoints (/api/me/taste-profile, /api/me/preference-events)."""
 
 from collections.abc import AsyncGenerator, Generator
+from contextlib import AbstractAsyncContextManager
 
 import pytest
 from cryptography.fernet import Fernet
@@ -86,7 +87,7 @@ def client(async_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch) -> Genera
     monkeypatch.setattr("app.auth.middleware.get_settings", _test_settings)
 
     class _TestDBManager:
-        def session(self_inner):  # noqa: N805
+        def session(self_inner) -> AbstractAsyncContextManager[AsyncSession]:  # noqa: N805
             @asynccontextmanager
             async def _ctx() -> AsyncGenerator[AsyncSession]:
                 async with session_factory() as s:

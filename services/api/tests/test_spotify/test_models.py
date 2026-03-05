@@ -80,6 +80,7 @@ def test_spotify_artist_full() -> None:
     artist = SpotifyArtistFull.model_validate(data)
     assert artist.genres == ["rock", "pop"]
     assert artist.popularity == 75
+    assert artist.images is not None
     assert len(artist.images) == 1
 
 

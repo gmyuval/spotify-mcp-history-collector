@@ -1,5 +1,7 @@
 """Tests for MCPToolRegistry."""
 
+from typing import Any
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,8 +21,8 @@ def test_register_and_catalog(fresh_registry: MCPToolRegistry) -> None:
         category="test",
         parameters=[MCPToolParam(name="msg", type="str", description="Message")],
     )
-    async def echo(args: dict, session: AsyncSession) -> str:
-        return args["msg"]
+    async def echo(args: dict[str, Any], session: AsyncSession) -> str:
+        return str(args["msg"])
 
     catalog = fresh_registry.get_catalog()
     assert len(catalog) == 1
@@ -35,7 +37,7 @@ def test_is_registered(fresh_registry: MCPToolRegistry) -> None:
         category="test",
         parameters=[],
     )
-    async def ping(args: dict, session: AsyncSession) -> str:
+    async def ping(args: dict[str, Any], session: AsyncSession) -> str:
         return "pong"
 
     assert fresh_registry.is_registered("test.ping")
@@ -49,8 +51,8 @@ async def test_invoke_success(fresh_registry: MCPToolRegistry) -> None:
         category="test",
         parameters=[],
     )
-    async def add(args: dict, session: AsyncSession) -> int:
-        return args["a"] + args["b"]
+    async def add(args: dict[str, Any], session: AsyncSession) -> int:
+        return int(args["a"] + args["b"])
 
     # Pass None as session since handler doesn't use it
     result = await fresh_registry.invoke("test.add", {"a": 2, "b": 3}, None)  # type: ignore[arg-type]
@@ -66,7 +68,7 @@ def test_catalog_sorted(fresh_registry: MCPToolRegistry) -> None:
     for name in ["c.tool", "a.tool", "b.tool"]:
 
         @fresh_registry.register(name=name, description=name, category="test", parameters=[])
-        async def handler(args: dict, session: AsyncSession) -> None:
+        async def handler(args: dict[str, Any], session: AsyncSession) -> None:
             pass
 
     names = [t.name for t in fresh_registry.get_catalog()]

@@ -78,6 +78,7 @@ class PlaylistSnapshotSource(enum.StrEnum):
     CREATE = "create"
     PERIODIC = "periodic"
     MANUAL = "manual"
+    BACKFILL = "backfill"
 
 
 class PlaylistEventType(enum.StrEnum):
