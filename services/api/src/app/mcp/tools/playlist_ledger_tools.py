@@ -786,7 +786,9 @@ class PlaylistLedgerToolHandlers:
 
         name = playlist_data.get("name", "")
         description = playlist_data.get("description")
-        track_ids = [t["id"] for t in playlist_data.get("tracks", []) if t.get("id")]
+        all_tracks = playlist_data.get("tracks", [])
+        track_ids = [t["id"] for t in all_tracks if t.get("id")]
+        unavailable_count = sum(1 for t in all_tracks if t.get("unavailable"))
         tracks_source = playlist_data.get("tracks_source", "api")
 
         if not track_ids and not playlist_data.get("tracks_restricted"):
@@ -827,8 +829,12 @@ class PlaylistLedgerToolHandlers:
             "snapshot_id": str(snapshot_id),
             "stored_track_count": len(track_ids),
             "tracks_source": tracks_source,
+            "tracks_total": playlist_data.get("tracks_total", 0),
             "already_existed": False,
         }
+
+        if unavailable_count:
+            result_data["unavailable_count"] = unavailable_count
 
         if playlist_data.get("tracks_restricted"):
             result_data["tracks_restricted"] = True

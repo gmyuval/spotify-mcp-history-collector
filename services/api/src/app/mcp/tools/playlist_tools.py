@@ -231,6 +231,17 @@ class PlaylistToolHandlers:
                             "added_at": item.added_at,
                         }
                     )
+                else:
+                    # Unavailable/removed track — preserve as placeholder
+                    tracks.append(
+                        {
+                            "id": None,
+                            "name": None,
+                            "artists": [],
+                            "added_at": item.added_at,
+                            "unavailable": True,
+                        }
+                    )
         except SpotifyRequestError as exc:
             if exc.status_code == 403:
                 logger.warning(
@@ -240,15 +251,26 @@ class PlaylistToolHandlers:
                 # Try embed endpoint as fallback
                 try:
                     embed_items = await self._embed_client.fetch_playlist_tracks(playlist_id)
-                    tracks = [
-                        {
-                            "id": item.track_id,
-                            "name": item.name,
-                            "artists": [{"name": a} for a in item.artists],
-                            "duration_ms": item.duration_ms,
-                        }
-                        for item in embed_items
-                    ]
+                    for embed_item in embed_items:
+                        if embed_item.track_id:
+                            tracks.append(
+                                {
+                                    "id": embed_item.track_id,
+                                    "name": embed_item.name,
+                                    "artists": [{"name": a} for a in embed_item.artists],
+                                    "duration_ms": embed_item.duration_ms,
+                                }
+                            )
+                        else:
+                            tracks.append(
+                                {
+                                    "id": None,
+                                    "name": embed_item.name or None,
+                                    "artists": [{"name": a} for a in embed_item.artists],
+                                    "duration_ms": embed_item.duration_ms,
+                                    "unavailable": True,
+                                }
+                            )
                     tracks_source = "embed"
                     logger.info(
                         "Embed fallback returned %d tracks for playlist %s",
@@ -264,6 +286,10 @@ class PlaylistToolHandlers:
                     tracks_restricted = True
             else:
                 raise
+
+        # Track fidelity metrics
+        tracks_returned = len(tracks)
+        tracks_unavailable = sum(1 for t in tracks if t.get("unavailable"))
 
         # Build result from live API metadata or cached metadata fallback
         if pl is not None:
@@ -294,6 +320,17 @@ class PlaylistToolHandlers:
                 "snapshot_id": cached_metadata.get("snapshot_id"),
                 "external_urls": cached_metadata.get("external_urls", {}),
             }
+
+        # Add fidelity metrics
+        result["tracks_returned"] = tracks_returned
+        if tracks_unavailable:
+            result["tracks_unavailable"] = tracks_unavailable
+        tracks_total = result.get("tracks_total", 0)
+        if tracks_returned != tracks_total and not tracks_restricted:
+            result["tracks_mismatch_warning"] = (
+                f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
+                f"{tracks_unavailable} unavailable placeholder(s) included."
+            )
 
         if tracks_restricted:
             result["tracks_restricted"] = True

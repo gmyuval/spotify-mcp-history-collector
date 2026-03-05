@@ -195,7 +195,7 @@ class SpotifyCacheService:
                 CachedPlaylistTrack(
                     cached_playlist_id=playlist_row.id,
                     spotify_track_id=track.get("id"),
-                    track_name=track.get("name", ""),
+                    track_name=track.get("name") or "",
                     artists_json=json.dumps(track.get("artists", [])),
                     added_at=track.get("added_at"),
                     position=i,

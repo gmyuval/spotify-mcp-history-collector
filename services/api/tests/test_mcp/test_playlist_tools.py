@@ -968,6 +968,226 @@ def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user
         assert "tracks_restricted" not in data["result"]
 
 
+def test_get_playlist_unavailable_tracks_placeholder(client: TestClient, seeded_user: int) -> None:
+    """Unavailable tracks (track=None) are included as placeholder entries."""
+    mock_playlist = SpotifyPlaylist(
+        id="pl_unavail",
+        name="Mixed Playlist",
+        public=True,
+        owner=SpotifyPlaylistOwner(id="pluser", display_name="Playlist User"),
+        snapshot_id="snap_unavail",
+        external_urls={},
+        tracks=SpotifyPlaylistTracks(items=[], total=3),
+    )
+
+    mock_all_tracks = [
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(
+                id="t1",
+                name="Track 1",
+                artists=[SpotifyArtistSimplified(id="a1", name="Artist One")],
+            ),
+            added_at="2025-01-15T10:00:00Z",
+        ),
+        # Unavailable track (removed / not in market)
+        SpotifyPlaylistTrackItem(track=None, added_at="2025-01-16T12:00:00Z"),
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(
+                id="t3",
+                name="Track 3",
+                artists=[SpotifyArtistSimplified(id="a3", name="Artist Three")],
+            ),
+            added_at="2025-01-17T14:00:00Z",
+        ),
+    ]
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
+        mock_client.get_playlist_all_tracks = AsyncMock(return_value=mock_all_tracks)
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_unavail"},
+        )
+        data = resp.json()
+        assert data["success"] is True
+        result = data["result"]
+        assert len(result["tracks"]) == 3
+        assert result["tracks_returned"] == 3
+        assert result["tracks_unavailable"] == 1
+        # First track is normal
+        assert result["tracks"][0]["id"] == "t1"
+        assert "unavailable" not in result["tracks"][0]
+        # Second track is placeholder
+        assert result["tracks"][1]["id"] is None
+        assert result["tracks"][1]["unavailable"] is True
+        assert result["tracks"][1]["added_at"] == "2025-01-16T12:00:00Z"
+        # Third track is normal
+        assert result["tracks"][2]["id"] == "t3"
+
+
+def test_get_playlist_mismatch_warning(client: TestClient, seeded_user: int) -> None:
+    """When tracks_returned != tracks_total, a mismatch warning is included."""
+    mock_playlist = SpotifyPlaylist(
+        id="pl_mismatch",
+        name="Mismatched Playlist",
+        public=True,
+        owner=SpotifyPlaylistOwner(id="pluser", display_name="Playlist User"),
+        snapshot_id="snap_mm",
+        external_urls={},
+        # Spotify says 5 tracks, but API only returns 3
+        tracks=SpotifyPlaylistTracks(items=[], total=5),
+    )
+
+    mock_all_tracks = [
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(id="t1", name="Track 1", artists=[SpotifyArtistSimplified(id="a1", name="A1")]),
+            added_at="2025-01-15T10:00:00Z",
+        ),
+        SpotifyPlaylistTrackItem(track=None, added_at="2025-01-16T12:00:00Z"),
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(id="t3", name="Track 3", artists=[SpotifyArtistSimplified(id="a3", name="A3")]),
+            added_at="2025-01-17T14:00:00Z",
+        ),
+    ]
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
+        mock_client.get_playlist_all_tracks = AsyncMock(return_value=mock_all_tracks)
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_mismatch"},
+        )
+        data = resp.json()
+        assert data["success"] is True
+        result = data["result"]
+        assert result["tracks_returned"] == 3
+        assert result["tracks_total"] == 5
+        assert "tracks_mismatch_warning" in result
+        assert "5 tracks but 3 were returned" in result["tracks_mismatch_warning"]
+
+
+def test_get_playlist_no_mismatch_when_counts_match(client: TestClient, seeded_user: int) -> None:
+    """No mismatch warning when tracks_returned == tracks_total."""
+    mock_playlist = SpotifyPlaylist(
+        id="pl_ok",
+        name="OK Playlist",
+        public=True,
+        owner=SpotifyPlaylistOwner(id="pluser", display_name="Playlist User"),
+        snapshot_id="snap_ok",
+        external_urls={},
+        tracks=SpotifyPlaylistTracks(items=[], total=2),
+    )
+
+    mock_all_tracks = [
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(id="t1", name="Track 1", artists=[SpotifyArtistSimplified(id="a1", name="A1")]),
+            added_at="2025-01-15T10:00:00Z",
+        ),
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(id="t2", name="Track 2", artists=[SpotifyArtistSimplified(id="a2", name="A2")]),
+            added_at="2025-01-16T12:00:00Z",
+        ),
+    ]
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
+        mock_client.get_playlist_all_tracks = AsyncMock(return_value=mock_all_tracks)
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_ok"},
+        )
+        data = resp.json()
+        assert data["success"] is True
+        result = data["result"]
+        assert result["tracks_returned"] == 2
+        assert "tracks_mismatch_warning" not in result
+        assert "tracks_unavailable" not in result
+
+
+def test_get_playlist_embed_unavailable_placeholder(client: TestClient, seeded_user: int) -> None:
+    """Embed fallback includes unavailable placeholders for tracks without IDs."""
+    from app.mcp.tools.playlist_tools import _instance as playlist_instance
+    from shared.spotify.exceptions import SpotifyRequestError
+    from shared.spotify.models import EmbedTrackItem
+
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_get_client.return_value = mock_client
+
+        # Seed cache via list_playlists
+        mock_client.get_user_playlists = AsyncMock(
+            return_value=UserPlaylistsResponse(
+                items=[
+                    SpotifyPlaylistSimplified(
+                        id="pl_emb_unavail",
+                        name="Embed Unavail",
+                        public=True,
+                        owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+                        snapshot_id="snap_eu",
+                        tracks={"total": 3},
+                    )
+                ],
+                total=1,
+            )
+        )
+        client.post(
+            "/mcp/call",
+            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
+        )
+
+        embed_tracks = [
+            EmbedTrackItem(track_id="t1", name="Track 1", artists=["Artist A"], duration_ms=180000),
+            EmbedTrackItem(
+                track_id=None, name="Gone Track", artists=["Artist B"], duration_ms=200000, unavailable=True
+            ),
+            EmbedTrackItem(track_id="t3", name="Track 3", artists=["Artist C"], duration_ms=220000),
+        ]
+        with patch.object(
+            playlist_instance._embed_client,
+            "fetch_playlist_tracks",
+            new_callable=AsyncMock,
+            return_value=embed_tracks,
+        ):
+            resp = client.post(
+                "/mcp/call",
+                json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_emb_unavail"},
+            )
+
+        data = resp.json()
+        assert data["success"] is True
+        result = data["result"]
+        assert len(result["tracks"]) == 3
+        assert result["tracks"][0]["id"] == "t1"
+        assert result["tracks"][1]["id"] is None
+        assert result["tracks"][1]["unavailable"] is True
+        assert result["tracks"][1]["name"] == "Gone Track"
+        assert result["tracks"][2]["id"] == "t3"
+        assert result["tracks_source"] == "embed"
+
+
 # ---------------------------------------------------------------------------
 # Tool registration check
 # ---------------------------------------------------------------------------

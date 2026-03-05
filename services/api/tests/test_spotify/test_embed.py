@@ -59,8 +59,8 @@ class TestParseEmbedHtml:
         assert len(result) == 1
         assert result[0].track_id == "uri123"
 
-    def test_parse_skips_non_tracks(self) -> None:
-        """Items without spotify:track: prefix should be skipped."""
+    def test_parse_includes_unavailable_placeholders(self) -> None:
+        """Items without spotify:track: prefix are included as unavailable placeholders."""
         tracks_data = [
             {"uid": "spotify:track:valid1", "title": "Valid", "subtitle": "A", "duration": 100000},
             {"uid": "spotify:episode:ep1", "title": "Episode", "subtitle": "Podcast", "duration": 500000},
@@ -69,8 +69,16 @@ class TestParseEmbedHtml:
         html = _build_embed_html(tracks_data)
         result = SpotifyEmbedClient._parse_embed_html(html, "test_pl")
 
-        assert len(result) == 1
+        assert len(result) == 3
         assert result[0].track_id == "valid1"
+        assert result[0].unavailable is False
+        # Episode — no spotify:track: prefix → unavailable placeholder
+        assert result[1].track_id is None
+        assert result[1].unavailable is True
+        assert result[1].name == "Episode"
+        # No UID at all → unavailable placeholder
+        assert result[2].track_id is None
+        assert result[2].unavailable is True
 
     def test_parse_empty_track_list(self) -> None:
         html = _build_embed_html([])
