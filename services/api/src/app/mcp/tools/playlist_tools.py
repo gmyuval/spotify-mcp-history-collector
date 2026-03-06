@@ -200,13 +200,21 @@ class PlaylistToolHandlers:
             # Do NOT serve from cache when the cached result was tracks_restricted —
             # re-authorization may have fixed access, so always retry the live API.
             cached_data = await self._cache.get_cached_playlist(user_id, playlist_id, session)
-            if (
-                cached_data is not None
-                and not cached_data.get("tracks_restricted")
-                and (cached_data.get("tracks") or cached_data.get("tracks_total") == 0)
-            ):
-                logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
-                return self._with_fidelity_metrics(cached_data)
+            if cached_data is not None and not cached_data.get("tracks_restricted"):
+                cached_tracks = cached_data.get("tracks", [])
+                cached_total = cached_data.get("tracks_total") or 0
+                # Serve from cache only if tracks are complete (or playlist is empty).
+                # Skip cache when fewer tracks are cached than reported — stale cache
+                # from before pagination was added.
+                if cached_total == 0 or len(cached_tracks) >= cached_total:
+                    logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
+                    return self._with_fidelity_metrics(cached_data)
+                logger.info(
+                    "Stale cache for %s: %d cached tracks vs %d total — re-fetching",
+                    playlist_id,
+                    len(cached_tracks),
+                    cached_total,
+                )
 
         # If metadata was 403, resolve cached metadata now — fail fast before
         # attempting the tracks endpoint (which will also 403).

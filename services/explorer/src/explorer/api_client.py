@@ -37,6 +37,14 @@ class MemoryPlaylistEvent(TypedDict):
     payload: dict[str, Any]
 
 
+class MemoryPlaylistTrack(TypedDict):
+    """A resolved track in a memory playlist."""
+
+    spotify_track_id: str
+    track_name: str | None
+    artists: list[dict[str, Any]]
+
+
 class MemoryPlaylistDetail(TypedDict):
     """Full memory playlist detail with tracks and recent events."""
 
@@ -47,7 +55,7 @@ class MemoryPlaylistDetail(TypedDict):
     updated_at: str
     intent_tags: list[str]
     seed_context: dict[str, Any]
-    track_ids: list[str]
+    tracks: list[MemoryPlaylistTrack]
     recent_events: list[MemoryPlaylistEvent]
     total_events: int
 
@@ -145,6 +153,13 @@ class ExplorerApiClient:
     async def get_playlist(self, access_token: str, spotify_playlist_id: str) -> dict[str, Any]:
         """GET /api/me/playlists/{spotify_playlist_id}"""
         result: dict[str, Any] = await self._request("GET", f"/api/me/playlists/{spotify_playlist_id}", access_token)
+        return result
+
+    async def fetch_playlist_tracks(self, access_token: str, spotify_playlist_id: str) -> dict[str, Any]:
+        """POST /api/me/playlists/{spotify_playlist_id}/fetch-tracks"""
+        result: dict[str, Any] = await self._request(
+            "POST", f"/api/me/playlists/{spotify_playlist_id}/fetch-tracks", access_token
+        )
         return result
 
     async def get_taste_profile(self, access_token: str) -> dict[str, Any]:

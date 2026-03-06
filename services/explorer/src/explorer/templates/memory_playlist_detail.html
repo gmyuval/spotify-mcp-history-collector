@@ -23,7 +23,7 @@
     <span class="text-muted">Updated:</span> {{ playlist.updated_at[:10] }}
   </div>
   <div class="col-auto">
-    <span class="text-muted">Tracks:</span> {{ playlist.track_ids | length }}
+    <span class="text-muted">Tracks:</span> {{ playlist.tracks | length }}
   </div>
 </div>
 
@@ -49,26 +49,33 @@
 </div>
 {% endif %}
 
-<!-- Track IDs -->
+<!-- Tracks -->
 <div class="card mb-4">
   <div class="card-header d-flex justify-content-between">
-    <strong>Tracks ({{ playlist.track_ids | length }})</strong>
-    <span class="text-muted small">Spotify Track IDs</span>
+    <strong>Tracks ({{ playlist.tracks | length }})</strong>
   </div>
   <div class="card-body p-0">
-    {% if playlist.track_ids %}
+    {% if playlist.tracks %}
     <table class="table table-hover mb-0">
       <thead>
         <tr>
           <th style="width: 50px">#</th>
-          <th>Track ID</th>
+          <th>Track</th>
+          <th>Artists</th>
         </tr>
       </thead>
       <tbody>
-        {% for tid in playlist.track_ids %}
+        {% for track in playlist.tracks %}
         <tr>
           <td class="rank-number">{{ loop.index }}</td>
-          <td><code>{{ tid }}</code></td>
+          <td>{{ track.track_name or track.spotify_track_id }}</td>
+          <td class="text-muted">
+            {% if track.artists %}
+              {% for a in track.artists %}{{ a.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>

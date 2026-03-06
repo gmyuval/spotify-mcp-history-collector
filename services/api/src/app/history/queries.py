@@ -90,11 +90,16 @@ class HistoryQueries:
         """Aggregate play stats: total plays, unique tracks/artists, total ms played."""
         cutoff = HistoryQueries._cutoff(days)
 
-        stmt = select(
-            func.count(Play.id).label("total_plays"),
-            func.count(distinct(Play.track_id)).label("unique_tracks"),
-            func.coalesce(func.sum(Play.ms_played), 0).label("total_ms_played"),
-        ).where(Play.user_id == user_id, Play.played_at >= cutoff)
+        stmt = (
+            select(
+                func.count(Play.id).label("total_plays"),
+                func.count(distinct(Play.track_id)).label("unique_tracks"),
+                func.coalesce(func.sum(func.coalesce(Play.ms_played, Track.duration_ms)), 0).label("total_ms_played"),
+            )
+            .select_from(Play)
+            .join(Track, Play.track_id == Track.id)
+            .where(Play.user_id == user_id, Play.played_at >= cutoff)
+        )
         result = await session.execute(stmt)
         row = result.one()
 
@@ -203,7 +208,7 @@ class HistoryQueries:
                 Track.id.label("track_id"),
                 Track.name.label("track_name"),
                 func.coalesce(primary_artist.c.artist_name, literal("Unknown")).label("artist_name"),
-                Play.ms_played,
+                func.coalesce(Play.ms_played, Track.duration_ms).label("ms_played"),
             )
             .select_from(Play)
             .join(Track, Play.track_id == Track.id)

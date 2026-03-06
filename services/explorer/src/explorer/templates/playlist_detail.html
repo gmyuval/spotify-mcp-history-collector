@@ -39,11 +39,42 @@
         </tr>
         {% endfor %}
         {% if not playlist.tracks %}
-        <tr><td colspan="3" class="text-muted text-center py-4">No tracks in this playlist</td></tr>
+        <tr><td colspan="3" class="text-center py-4">
+          {% if playlist.total_tracks and playlist.total_tracks > 0 %}
+            <p class="text-muted mb-2">Track data not yet loaded ({{ playlist.total_tracks }} tracks reported).</p>
+            {% if fetch_error %}
+            <div class="alert alert-danger alert-dismissible fade show d-inline-block mb-2" role="alert">
+              {{ fetch_error }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            <br>
+            {% endif %}
+            <form id="fetch-tracks-form" method="post" action="/playlists/{{ playlist.spotify_playlist_id }}/fetch-tracks">
+              <button id="fetch-tracks-btn" type="submit" class="btn btn-outline-spotify btn-sm">
+                Fetch Tracks from Spotify
+              </button>
+            </form>
+          {% else %}
+            <span class="text-muted">No tracks in this playlist</span>
+          {% endif %}
+        </td></tr>
         {% endif %}
       </tbody>
     </table>
   </div>
 </div>
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  (function() {
+    var form = document.getElementById('fetch-tracks-form');
+    if (!form) return;
+    form.addEventListener('submit', function() {
+      var btn = document.getElementById('fetch-tracks-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Fetching tracks…';
+    });
+  })();
+</script>
 {% endblock %}

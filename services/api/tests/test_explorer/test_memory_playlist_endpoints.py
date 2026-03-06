@@ -289,7 +289,7 @@ class TestMemoryPlaylistDetail:
         data = resp.json()
         assert data["playlist_id"] == "sp_abc123"
         assert data["name"] == "My AI Playlist"
-        assert data["track_ids"] == ["track1", "track2", "track3"]
+        assert [t["spotify_track_id"] for t in data["tracks"]] == ["track1", "track2", "track3"]
         assert data["intent_tags"] == ["upbeat", "metal"]
         assert data["seed_context"]["days"] == 30
         assert data["total_events"] == 1

@@ -3,7 +3,8 @@
 {% block content %}
 <h2 class="mb-4">Your Listening Dashboard</h2>
 
-<!-- Stat cards -->
+<!-- Stat cards (all-time) -->
+<p class="text-muted mb-2"><small>All Time</small></p>
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-3">
     <div class="card stat-card">
@@ -125,7 +126,7 @@
     <div class="card">
       <div class="card-header d-flex justify-content-between">
         <strong>AI-Created Playlists</strong>
-        <a href="/playlists/memory" class="text-muted small">View All</a>
+        <a href="/playlists/memory/" class="text-muted small">View All</a>
       </div>
       <div class="card-body">
         {% if memory_playlists and memory_playlists["items"] %}
@@ -138,7 +139,7 @@
             {% endfor %}
           </div>
         {% else %}
-        <p class="text-muted mb-0">No AI-created playlists yet. <a href="/playlists/memory">View</a></p>
+        <p class="text-muted mb-0">No AI-created playlists yet. <a href="/playlists/memory/">View</a></p>
         {% endif %}
       </div>
     </div>

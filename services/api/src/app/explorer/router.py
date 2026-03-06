@@ -1,11 +1,13 @@
 """User-facing explorer API endpoints — JWT-gated, own data only."""
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.auth import require_permission
+from app.auth.exceptions import TokenNotFoundError, TokenRefreshError
 from app.dependencies import db_manager
 from app.explorer.schemas import (
     DashboardData,
@@ -25,6 +27,9 @@ from app.explorer.schemas import (
 from app.explorer.service import ExplorerService
 from app.history.schemas import ArtistCount
 from app.history.service import HistoryService
+from shared.spotify.exceptions import SpotifyAuthError, SpotifyClientError, SpotifyRateLimitError, SpotifyRequestError
+
+logger = logging.getLogger(__name__)
 
 RequireOwnDataView = Annotated[int, Depends(require_permission("own_data.view"))]
 DBSession = Annotated[AsyncSession, Depends(db_manager.dependency)]
@@ -48,6 +53,7 @@ class ExplorerRouter:
         r.add_api_route("/profile", self.profile, methods=["GET"])
         r.add_api_route("/playlists", self.playlists, methods=["GET"])
         r.add_api_route("/playlists/{spotify_playlist_id}", self.playlist_detail, methods=["GET"])
+        r.add_api_route("/playlists/{spotify_playlist_id}/fetch-tracks", self.fetch_playlist_tracks, methods=["POST"])
         r.add_api_route("/taste-profile", self.taste_profile, methods=["GET"])
         r.add_api_route("/taste-profile", self.update_taste_profile, methods=["PATCH"])
         r.add_api_route("/taste-profile", self.clear_taste_profile, methods=["DELETE"])
@@ -109,6 +115,30 @@ class ExplorerRouter:
         session: DBSession,
     ) -> PlaylistDetail:
         result = await self._service.get_playlist_detail(user_id, spotify_playlist_id, session)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Playlist not found")
+        return result
+
+    async def fetch_playlist_tracks(
+        self,
+        spotify_playlist_id: str,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+    ) -> PlaylistDetail:
+        """Fetch tracks from Spotify and cache them."""
+        try:
+            result = await self._service.fetch_playlist_tracks(user_id, spotify_playlist_id, session)
+        except (TokenNotFoundError, TokenRefreshError, SpotifyAuthError) as exc:
+            logger.warning("Auth failure fetching tracks for playlist %s: %s", spotify_playlist_id, exc)
+            raise HTTPException(status_code=401, detail="Spotify authentication failed") from exc
+        except SpotifyRateLimitError as exc:
+            raise HTTPException(status_code=429, detail="Spotify rate limit exceeded, try again later") from exc
+        except SpotifyRequestError as exc:
+            status = 404 if exc.status_code in (403, 404) else 502
+            raise HTTPException(status_code=status, detail=f"Spotify error: {exc.detail}") from exc
+        except SpotifyClientError as exc:
+            logger.error("Spotify error fetching tracks for playlist %s: %s", spotify_playlist_id, exc)
+            raise HTTPException(status_code=502, detail="Spotify service unavailable") from exc
         if result is None:
             raise HTTPException(status_code=404, detail="Playlist not found")
         return result
