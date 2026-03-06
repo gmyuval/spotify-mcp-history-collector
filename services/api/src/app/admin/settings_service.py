@@ -37,6 +37,27 @@ class SettingsService:
 
     _CACHE_TTL: float = 300.0  # seconds
 
+    #: Minimum allowed values for integer settings (None = no lower bound).
+    _INT_BOUNDS: dict[str, int] = {
+        "search.max_query_length": 1,
+        "search.default_limit": 1,
+        "search.max_limit": 1,
+        "search.snippet_max_length": 1,
+        "playlist.snapshot_compaction_threshold": 1,
+        "playlist.default_page_size": 1,
+        "playlist.max_page_size": 1,
+        "playlist.recent_events_limit": 0,
+    }
+
+    #: Minimum allowed values for float settings (None = no lower bound).
+    _FLOAT_BOUNDS: dict[str, float] = {
+        "search.score_playlist_name": 0.0,
+        "search.score_playlist_description": 0.0,
+        "search.score_playlist_tags": 0.0,
+        "search.score_preference_event": 0.0,
+        "search.score_profile": 0.0,
+    }
+
     #: Canonical defaults — authoritative source of truth for all settings.
     #: (default_value, human-readable description, category)
     DEFAULTS: dict[str, _SettingDef] = {
@@ -108,10 +129,17 @@ class SettingsService:
         if expected is int:
             if not isinstance(value, int) or isinstance(value, bool):
                 raise ValueError(f"Setting {key!r} expects an integer, got {type(value).__name__!r}")
+            min_v = self._INT_BOUNDS.get(key)
+            if min_v is not None and value < min_v:
+                raise ValueError(f"Setting {key!r} must be >= {min_v}, got {value}")
             return value
         if expected is float:
             if isinstance(value, (int, float)) and not isinstance(value, bool):
-                return float(value)
+                fv = float(value)
+                min_v_f = self._FLOAT_BOUNDS.get(key)
+                if min_v_f is not None and fv < min_v_f:
+                    raise ValueError(f"Setting {key!r} must be >= {min_v_f}, got {fv}")
+                return fv
             raise ValueError(f"Setting {key!r} expects a number, got {type(value).__name__!r}")
         if not isinstance(value, expected):
             raise ValueError(f"Setting {key!r} expects {expected.__name__!r}, got {type(value).__name__!r}")

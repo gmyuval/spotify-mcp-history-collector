@@ -220,7 +220,6 @@ class PlaylistToolHandlers:
                 )
 
         # Fetch all tracks via pagination (uses GET /playlists/{id}/tracks).
-        # Fetch all tracks via pagination (uses GET /playlists/{id}/tracks).
         # On 403: force-refresh the token once (picks up new scopes from re-auth) and
         # retry. If still 403, fall back to the embed endpoint. If embed also fails,
         # mark as restricted.

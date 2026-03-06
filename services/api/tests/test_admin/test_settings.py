@@ -128,6 +128,21 @@ class TestUpdateSetting:
         resp = client.put("/admin/settings/no.such.key", json={"value_json": 99})
         assert resp.status_code == 404
 
+    def test_update_wrong_type_returns_400(self, client: TestClient) -> None:
+        resp = client.put("/admin/settings/search.default_limit", json={"value_json": "not-an-int"})
+        assert resp.status_code == 400
+        assert "expects an integer" in resp.json()["detail"]
+
+    def test_update_below_min_bound_returns_400(self, client: TestClient) -> None:
+        resp = client.put("/admin/settings/search.default_limit", json={"value_json": 0})
+        assert resp.status_code == 400
+        assert ">=" in resp.json()["detail"]
+
+    def test_update_negative_float_score_returns_400(self, client: TestClient) -> None:
+        resp = client.put("/admin/settings/search.score_playlist_name", json={"value_json": -0.5})
+        assert resp.status_code == 400
+        assert ">=" in resp.json()["detail"]
+
     def test_update_invalidates_cache_and_persists(self, client: TestClient) -> None:
         # Update
         client.put("/admin/settings/search.default_limit", json={"value_json": 7})
