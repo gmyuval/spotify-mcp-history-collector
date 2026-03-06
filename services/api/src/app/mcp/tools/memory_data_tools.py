@@ -23,6 +23,25 @@ from shared.db.search import text_match
 
 logger = logging.getLogger(__name__)
 
+
+def _as_int(value: Any, default: int, *, minimum: int = 1) -> int:
+    """Coerce *value* to a positive int, falling back to *default*."""
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return max(value, minimum)
+    return default
+
+
+def _as_float(value: Any, default: float, *, minimum: float = 0.0) -> float:
+    """Coerce *value* to a non-negative float, falling back to *default*."""
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return max(float(value), minimum)
+    return default
+
+
 _USER_PARAM = MCPToolParam(name="user_id", type="int", description="User ID")
 
 
@@ -98,9 +117,9 @@ class MemoryDataToolHandlers:
         """
         user_id = _validate_user_id(args)
 
-        max_query_length = await _settings_service.get("search.max_query_length", 500, session)
-        default_limit = await _settings_service.get("search.default_limit", 25, session)
-        max_limit = await _settings_service.get("search.max_limit", 200, session)
+        max_query_length = _as_int(await _settings_service.get("search.max_query_length", 500, session), 500)
+        default_limit = _as_int(await _settings_service.get("search.default_limit", 25, session), 25)
+        max_limit = _as_int(await _settings_service.get("search.max_limit", 200, session), 200)
 
         query = args.get("query")
         if not isinstance(query, str) or not query.strip():
@@ -115,13 +134,15 @@ class MemoryDataToolHandlers:
         limit = min(limit, max_limit)
 
         dialect = session.bind.dialect.name if session.bind else "postgresql"
-        snippet_max = await _settings_service.get("search.snippet_max_length", 100, session)
+        snippet_max = _as_int(await _settings_service.get("search.snippet_max_length", 100, session), 100)
         scores = {
-            "name": await _settings_service.get("search.score_playlist_name", 1.0, session),
-            "description": await _settings_service.get("search.score_playlist_description", 0.8, session),
-            "tags": await _settings_service.get("search.score_playlist_tags", 0.7, session),
-            "event": await _settings_service.get("search.score_preference_event", 0.5, session),
-            "profile": await _settings_service.get("search.score_profile", 0.3, session),
+            "name": _as_float(await _settings_service.get("search.score_playlist_name", 1.0, session), 1.0),
+            "description": _as_float(
+                await _settings_service.get("search.score_playlist_description", 0.8, session), 0.8
+            ),
+            "tags": _as_float(await _settings_service.get("search.score_playlist_tags", 0.7, session), 0.7),
+            "event": _as_float(await _settings_service.get("search.score_preference_event", 0.5, session), 0.5),
+            "profile": _as_float(await _settings_service.get("search.score_profile", 0.3, session), 0.3),
         }
         results: list[dict[str, Any]] = []
 
