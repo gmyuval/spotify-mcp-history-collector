@@ -97,11 +97,32 @@ class SettingsService:
         self._cache[key] = (row.value_json, time.monotonic() + self._CACHE_TTL)
         return row.value_json
 
+    def _validate_value_type(self, key: str, value: Any) -> Any:
+        """Validate and coerce *value* to match the type of the hardcoded default for *key*."""
+        expected_default, _, _ = self.DEFAULTS[key]
+        expected = type(expected_default)
+        if expected is bool:
+            if not isinstance(value, bool):
+                raise ValueError(f"Setting {key!r} expects a boolean, got {type(value).__name__!r}")
+            return value
+        if expected is int:
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(f"Setting {key!r} expects an integer, got {type(value).__name__!r}")
+            return value
+        if expected is float:
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return float(value)
+            raise ValueError(f"Setting {key!r} expects a number, got {type(value).__name__!r}")
+        if not isinstance(value, expected):
+            raise ValueError(f"Setting {key!r} expects {expected.__name__!r}, got {type(value).__name__!r}")
+        return value
+
     async def set(self, key: str, value: Any, session: AsyncSession) -> AppSetting:
         """Upsert *key* to *value* in the DB and invalidate the cache entry."""
         if key not in self.DEFAULTS:
             raise KeyError(f"Unknown setting key: {key!r}")
 
+        value = self._validate_value_type(key, value)
         _, description, category = self.DEFAULTS[key]
 
         # Use PostgreSQL upsert; fall back to merge for SQLite (tests)

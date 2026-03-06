@@ -768,7 +768,12 @@ class PlaylistLedgerToolHandlers:
                 raise ValueError("track_ids must contain non-empty strings")
             manual_track_ids = [str(t).strip() for t in manual_track_ids_raw]
 
-        name_override: str | None = args.get("name")
+        raw_name = args.get("name")
+        name_override: str | None = None
+        if raw_name is not None:
+            if not isinstance(raw_name, str) or not raw_name.strip():
+                raise ValueError("'name' must be a non-empty string when provided")
+            name_override = raw_name.strip()
 
         # Idempotency check via key (scoped to user)
         if idempotency_key:
@@ -817,27 +822,17 @@ class PlaylistLedgerToolHandlers:
 
         # Determine track list and playlist metadata
         if manual_track_ids is not None:
-            # Manual override path — skip Spotify fetch, try metadata fetch separately
+            # Manual override path — skip all Spotify calls, use caller-supplied data
+            if name_override is None:
+                raise ValueError(
+                    "When 'track_ids' is provided, 'name' is required (Spotify cannot be queried for private playlists)."
+                )
             track_ids = manual_track_ids
             tracks_source = "manual"
             unavailable_count = 0
             tracks_total = len(track_ids)
-            name = name_override or ""
+            name = name_override
             description: str | None = None
-            # Attempt metadata fetch (best-effort, tolerate 403)
-            try:
-                playlist_data = await playlist_handlers.get_playlist(
-                    {"user_id": user_id, "playlist_id": playlist_id}, session
-                )
-                name = name or playlist_data.get("name", "")
-                description = playlist_data.get("description")
-                tracks_total = playlist_data.get("tracks_total", tracks_total)
-            except Exception:
-                logger.debug("backfill_playlist: metadata fetch failed for %s, using overrides", playlist_id)
-            if not name:
-                raise ValueError(
-                    "Playlist name could not be determined from Spotify (403). Provide the 'name' parameter explicitly."
-                )
             tracks_restricted = False
         else:
             # Normal path — fetch via spotify.get_playlist (API + embed fallback)

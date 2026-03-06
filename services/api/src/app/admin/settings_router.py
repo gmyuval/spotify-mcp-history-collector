@@ -119,7 +119,7 @@ class SettingsRouter:
             row = await self._svc.set(key, body.value_json, session)
         except Exception as exc:
             logger.exception("Failed to update setting %r", key)
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            raise HTTPException(status_code=500, detail="Failed to update setting") from exc
         return _row_to_detail(row, self._svc)
 
     async def reset_settings(
@@ -134,7 +134,7 @@ class SettingsRouter:
             count = await self._svc.reset_to_default(body.key, session)
         except Exception as exc:
             logger.exception("Failed to reset settings")
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            raise HTTPException(status_code=500, detail="Failed to reset settings") from exc
         noun = f"setting {body.key!r}" if body.key else f"{count} settings"
         return ActionResponse(success=True, message=f"Reset {noun} to default.")
 

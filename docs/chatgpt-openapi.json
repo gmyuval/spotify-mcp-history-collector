@@ -113,7 +113,7 @@
                   },
                   "name": {
                     "type": "string",
-                    "description": "Playlist name. For spotify.create_playlist, spotify.update_playlist, and memory.log_playlist_create."
+                    "description": "Playlist name. For spotify.create_playlist, spotify.update_playlist, memory.log_playlist_create, and memory.backfill_playlist (required when track_ids is provided)."
                   },
                   "description": {
                     "type": "string",
@@ -124,10 +124,11 @@
                     "description": "Whether the playlist is public. For spotify.create_playlist and spotify.update_playlist."
                   },
                   "track_ids": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "maxItems": 10000,
-                    "description": "List of Spotify track IDs. For spotify.add_tracks, spotify.remove_tracks (max 100), and memory.log_playlist_create (max 10000)."
+                    "oneOf": [
+                      {"type": "array", "items": {"type": "string"}, "maxItems": 10000},
+                      {"type": "string"}
+                    ],
+                    "description": "List of Spotify track IDs. For spotify.add_tracks, spotify.remove_tracks (max 100), memory.log_playlist_create (max 10000), and memory.backfill_playlist (explicit tracks for private playlists). Pass as a JSON array or a JSON string."
                   },
                   "patch": {
                     "oneOf": [
@@ -192,17 +193,6 @@
                   "idempotency_key": {
                     "type": "string",
                     "description": "For memory.log_playlist_create and memory.backfill_playlist: idempotency key to prevent duplicate creates on retry."
-                  },
-                  "track_ids": {
-                    "oneOf": [
-                      {"type": "array", "items": {"type": "string"}},
-                      {"type": "string"}
-                    ],
-                    "description": "For memory.backfill_playlist: explicit track IDs to store directly, bypassing the Spotify fetch. Use for private playlists where the API returns 403 and the embed fallback fails. Pass as a JSON array of Spotify track ID strings."
-                  },
-                  "name": {
-                    "type": "string",
-                    "description": "For memory.backfill_playlist: playlist name override. Required when track_ids is provided and metadata cannot be fetched (e.g. private playlist with 403)."
                   },
                   "client_event_id": {
                     "type": "string",

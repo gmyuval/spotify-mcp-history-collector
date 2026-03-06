@@ -318,7 +318,7 @@ Format Notes section to reflect both formats are accepted.
   - `name`: `{type: string}` — playlist name override when metadata is unavailable
 
 **Instructions:** Add to PLAYLIST MEMORY section (after the embed fallback note):
-- For **private playlists** where `spotify.get_playlist` returns `tracks_restricted: true` (Spotify API 403 + embed requires auth), use `memory.backfill_playlist` with explicit `track_ids` and `name` to log the playlist. The user must supply the track IDs manually (e.g., from their Spotify app or URLs). Set `tracks_source` is automatically set to `"manual"` for these entries.
+- For **private playlists** where `spotify.get_playlist` returns `tracks_restricted: true` (Spotify API 403 + embed requires auth), use `memory.backfill_playlist` with explicit `track_ids` and `name` to log the playlist. The user must supply the track IDs manually (e.g., from their Spotify app or URLs). `tracks_source` is automatically set to `"manual"` for these entries.
 
 **Knowledge file:** Re-upload `docs/chatgpt-tool-catalog.md` — update `memory.backfill_playlist` entry to document `track_ids` and `name` parameters.
 

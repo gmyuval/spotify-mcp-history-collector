@@ -119,7 +119,7 @@ DB unreachable — ensures resilience during startup or migrations.
 
 Class-based `SettingsRouter`, mounted under `/admin`:
 
-```
+```text
 GET  /admin/settings          → list all, grouped by category
 GET  /admin/settings/{key}    → single setting with default_value included
 PUT  /admin/settings/{key}    → body: {value_json} → update + invalidate cache
@@ -149,9 +149,9 @@ POST /admin/settings/reset    → body: {key?: str} → reset one or all to defa
 ### B6. Admin Frontend Page
 
 **New file: `services/frontend/src/frontend/routes/settings.py`** — `SettingsRouter`:
-- `GET /settings` → settings page
-- `POST /settings/{key}` → HTMX update (returns updated row partial)
-- `POST /settings/{key}/reset` → HTMX reset to default
+- `GET /admin/settings` → settings page
+- `POST /admin/settings/{key}` → HTMX update (returns updated row partial)
+- `POST /admin/settings/{key}/reset` → HTMX reset to default
 
 **New file: `services/frontend/src/frontend/templates/settings.html`:**
 - Bootstrap accordion, one card per category
@@ -186,6 +186,7 @@ POST /admin/settings/reset    → body: {key?: str} → reset one or all to defa
 ## Files Added / Modified
 
 ### New files
+
 | File | Purpose |
 |------|---------|
 | `services/shared/src/shared/db/models/settings.py` | AppSetting ORM model |
@@ -199,6 +200,7 @@ POST /admin/settings/reset    → body: {key?: str} → reset one or all to defa
 | `docs/phase12-settings-plan.md` | This document |
 
 ### Modified files
+
 | File | Change |
 |------|--------|
 | `services/shared/src/shared/db/models/__init__.py` | Export AppSetting |
@@ -233,6 +235,6 @@ POST /admin/settings/reset    → body: {key?: str} → reset one or all to defa
 
 - Change `search.default_limit` to 5 via admin UI → `memory.search` returns at most 5 results.
 - Reset to defaults → value restored, survives app restart (DB-persisted).
-- `memory.backfill_playlist` with `track_ids=["id1","id2",...]` for private playlist 11
+- `memory.backfill_playlist` with `track_ids=["id1","id2",...]` for private playlist
   → creates ledger entry with those IDs, `tracks_source: "manual"`.
 - Private playlist `spotify.get_playlist` → improved error message includes backfill hint.
