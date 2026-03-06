@@ -8,7 +8,7 @@
     {% if total == 0 %}
     <a href="/auth/login?next=/admin/users" class="btn btn-success btn-sm">Connect Spotify Account</a>
     {% else %}
-    <a href="/auth/login?next=/admin/users" class="btn btn-outline-secondary btn-sm">Re-authorize / Add Account</a>
+    <a href="/auth/login?next=/admin/users&show_dialog=true" class="btn btn-outline-secondary btn-sm">Re-authorize / Add Account</a>
     {% endif %}
   </div>
 </div>

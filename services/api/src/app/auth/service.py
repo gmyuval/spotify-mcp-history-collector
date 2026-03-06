@@ -53,6 +53,7 @@ class OAuthService:
         client_id: str | None = None,
         user_id: int | None = None,
         next_url: str | None = None,
+        show_dialog: bool = False,
     ) -> str:
         """Build the full Spotify authorization redirect URL.
 
@@ -63,6 +64,9 @@ class OAuthService:
                 can resolve per-user credentials for token exchange.
             next_url: If provided, the callback will redirect here after
                 successful authentication.
+            show_dialog: If True, forces Spotify to always display the
+                authorization dialog even when the user has already granted
+                access. Useful for re-authorization flows.
         """
         from urllib.parse import urlencode
 
@@ -77,6 +81,8 @@ class OAuthService:
             "scope": SPOTIFY_SCOPES,
             "state": state,
         }
+        if show_dialog:
+            params["show_dialog"] = "true"
         return f"{SPOTIFY_AUTHORIZE_URL}?{urlencode(params)}"
 
     async def handle_callback(

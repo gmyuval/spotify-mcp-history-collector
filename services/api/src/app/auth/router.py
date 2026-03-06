@@ -69,6 +69,9 @@ class AuthRouter:
         session: Annotated[AsyncSession, Depends(db_manager.dependency)],
         user_id: int | None = Query(default=None, description="User ID for re-auth with custom credentials"),
         next: str | None = Query(default=None, alias="next", description="URL to redirect to after auth"),
+        show_dialog: bool = Query(
+            default=False, description="Force Spotify to show auth dialog even if already authorized"
+        ),
     ) -> RedirectResponse:
         """Redirect user to Spotify authorization page.
 
@@ -78,6 +81,9 @@ class AuthRouter:
 
         When ``next`` is provided, the callback will redirect to that URL
         after successful authentication (validated against allowed origins).
+
+        When ``show_dialog`` is true, Spotify always shows the consent screen
+        regardless of whether the user has already authorized the app.
         """
         # Validate next URL against allowed origins
         validated_next = self._validate_next_url(next, settings) if next else None
@@ -86,7 +92,12 @@ class AuthRouter:
         if user_id is not None:
             client_id = await self._resolve_custom_client_id(user_id, settings, session)
 
-        url = service.get_authorization_url(client_id=client_id, user_id=user_id, next_url=validated_next)
+        url = service.get_authorization_url(
+            client_id=client_id,
+            user_id=user_id,
+            next_url=validated_next,
+            show_dialog=show_dialog,
+        )
         return RedirectResponse(url=url)
 
     async def callback(
