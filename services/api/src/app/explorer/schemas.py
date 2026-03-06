@@ -53,11 +53,16 @@ class PlaylistSummary(BaseModel):
     external_url: str | None
 
 
+class PlaylistTrackArtist(BaseModel):
+    id: str | None = None
+    name: str
+
+
 class PlaylistTrackItem(BaseModel):
     position: int
     spotify_track_id: str | None
     track_name: str
-    artists_json: list[dict[str, Any]]
+    artists_json: list[PlaylistTrackArtist]
     added_at: str | None
 
 

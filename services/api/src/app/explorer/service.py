@@ -32,6 +32,7 @@ from app.explorer.schemas import (
 )
 from app.history.queries import HistoryQueries
 from app.settings import get_settings
+from shared.db.enums import PlaylistSnapshotSource
 from shared.db.models.cache import CachedPlaylist
 from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnapshot, PreferenceEvent, TasteProfile
 from shared.db.models.user import SpotifyToken, User
@@ -325,13 +326,25 @@ class ExplorerService:
     async def get_memory_playlists(
         self, user_id: int, session: AsyncSession, limit: int = 20, offset: int = 0
     ) -> PaginatedMemoryPlaylists:
-        """Return paginated memory playlists for the user, ordered by updated_at desc."""
-        count_stmt = select(func.count()).select_from(MemoryPlaylist).where(MemoryPlaylist.user_id == user_id)
+        """Return paginated AI-created memory playlists (excludes backfilled ones)."""
+        # Find playlist IDs that were backfilled (not AI-created)
+        backfill_ids_stmt = (
+            select(PlaylistSnapshot.playlist_id)
+            .where(PlaylistSnapshot.source == PlaylistSnapshotSource.BACKFILL)
+            .distinct()
+        )
+
+        base_filter = (
+            MemoryPlaylist.user_id == user_id,
+            MemoryPlaylist.playlist_id.notin_(backfill_ids_stmt),
+        )
+
+        count_stmt = select(func.count()).select_from(MemoryPlaylist).where(*base_filter)
         total = (await session.execute(count_stmt)).scalar_one()
 
         stmt = (
             select(MemoryPlaylist)
-            .where(MemoryPlaylist.user_id == user_id)
+            .where(*base_filter)
             .order_by(desc(MemoryPlaylist.updated_at), desc(MemoryPlaylist.playlist_id))
             .limit(limit)
             .offset(offset)

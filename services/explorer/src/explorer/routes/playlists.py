@@ -1,5 +1,7 @@
 """Playlists page — cached playlist grid and detail view."""
 
+from urllib.parse import quote, urlencode
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -66,6 +68,8 @@ class PlaylistsRouter:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
             error = e.detail
 
+        fetch_error = request.query_params.get("fetch_error")
+
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "playlist_detail.html",
             {
@@ -73,6 +77,7 @@ class PlaylistsRouter:
                 "active_page": "playlists",
                 "playlist": playlist,
                 "error": error,
+                "fetch_error": fetch_error,
             },
         )
 
@@ -88,7 +93,9 @@ class PlaylistsRouter:
         except ApiError as e:
             if e.status_code == 401:
                 return RedirectResponse(url="/login", status_code=303)
-        return RedirectResponse(url=f"/playlists/{spotify_playlist_id}", status_code=303)
+            qs = urlencode({"fetch_error": e.detail})
+            return RedirectResponse(url=f"/playlists/{quote(spotify_playlist_id)}?{qs}", status_code=303)
+        return RedirectResponse(url=f"/playlists/{quote(spotify_playlist_id)}", status_code=303)
 
 
 _instance = PlaylistsRouter()
