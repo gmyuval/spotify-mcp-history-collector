@@ -1,11 +1,15 @@
 """Explorer service — orchestrates queries for user-facing endpoints."""
 
+import json
+import logging
 import uuid
 
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.auth.tokens import TokenManager
+from app.cache.service import SpotifyCacheService
 from app.explorer.schemas import (
     ArtistSummary,
     DashboardData,
@@ -27,17 +31,23 @@ from app.explorer.schemas import (
     UserProfile,
 )
 from app.history.queries import HistoryQueries
+from app.settings import get_settings
 from shared.db.models.cache import CachedPlaylist
 from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnapshot, PreferenceEvent, TasteProfile
 from shared.db.models.user import SpotifyToken, User
+from shared.spotify.client import SpotifyClient
+
+logger = logging.getLogger(__name__)
 
 
 class ExplorerService:
     """Stateless service providing data for the explorer frontend."""
 
     async def get_dashboard(self, user_id: int, session: AsyncSession) -> DashboardData:
-        """Return 30-day dashboard stats: play counts, top artists, and top tracks."""
-        stats = await HistoryQueries.play_stats(user_id, session, days=30)
+        """Return all-time summary stats + 30-day top artists and top tracks."""
+        # All-time stats for summary cards
+        stats = await HistoryQueries.play_stats(user_id, session, days=99999)
+        # 30-day top lists
         top_artists_raw = await HistoryQueries.top_artists(user_id, session, days=30, limit=5)
         top_tracks_raw = await HistoryQueries.top_tracks(user_id, session, days=30, limit=5)
 
@@ -140,12 +150,73 @@ class ExplorerService:
                     position=t.position,
                     spotify_track_id=t.spotify_track_id,
                     track_name=t.track_name,
-                    artists_json=t.artists_json,
+                    artists_json=json.loads(t.artists_json) if t.artists_json else [],
                     added_at=t.added_at,
                 )
                 for t in sorted(playlist.tracks, key=lambda t: t.position)
             ],
         )
+
+    async def fetch_playlist_tracks(
+        self, user_id: int, spotify_playlist_id: str, session: AsyncSession
+    ) -> PlaylistDetail | None:
+        """Fetch tracks from Spotify API and cache them, then return the updated detail."""
+        # Verify playlist exists in cache
+        result = await session.execute(
+            select(CachedPlaylist).where(
+                CachedPlaylist.user_id == user_id,
+                CachedPlaylist.spotify_playlist_id == spotify_playlist_id,
+            )
+        )
+        playlist = result.scalar_one_or_none()
+        if playlist is None:
+            return None
+
+        settings = get_settings()
+        token_mgr = TokenManager(settings)
+        access_token = await token_mgr.get_valid_token(user_id, session)
+
+        async def _on_token_expired() -> str:
+            return await token_mgr.refresh_access_token(user_id, session)
+
+        client = SpotifyClient(access_token, on_token_expired=_on_token_expired)
+
+        # Fetch full playlist with tracks
+        pl = await client.get_playlist(spotify_playlist_id)
+        all_track_items = await client.get_playlist_all_tracks(spotify_playlist_id)
+
+        tracks: list[dict[str, object]] = []
+        for item in all_track_items:
+            if item.track:
+                tracks.append(
+                    {
+                        "id": item.track.id,
+                        "name": item.track.name,
+                        "artists": [{"id": a.id, "name": a.name} for a in item.track.artists],
+                        "added_at": item.added_at,
+                    }
+                )
+            else:
+                tracks.append({"id": None, "name": None, "artists": [], "added_at": item.added_at, "unavailable": True})
+
+        # Build playlist data dict for cache
+        playlist_data = {
+            "id": pl.id,
+            "name": pl.name,
+            "description": pl.description,
+            "public": pl.public,
+            "owner": pl.owner.display_name if pl.owner else None,
+            "tracks_total": pl.tracks.total if pl.tracks else 0,
+            "snapshot_id": pl.snapshot_id,
+            "external_urls": pl.external_urls,
+        }
+
+        cache = SpotifyCacheService(cache_ttl_hours=settings.SPOTIFY_CACHE_TTL_HOURS)
+        await cache.put_playlist(user_id, playlist_data, tracks, session)
+        await session.commit()
+
+        logger.info("Fetched %d tracks for playlist %s", len(tracks), spotify_playlist_id)
+        return await self.get_playlist_detail(user_id, spotify_playlist_id, session)
 
     # ── Taste profile ──────────────────────────────────────────────
 

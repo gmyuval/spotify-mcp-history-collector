@@ -39,7 +39,16 @@
         </tr>
         {% endfor %}
         {% if not playlist.tracks %}
-        <tr><td colspan="3" class="text-muted text-center py-4">No tracks in this playlist</td></tr>
+        <tr><td colspan="3" class="text-center py-4">
+          {% if playlist.total_tracks and playlist.total_tracks > 0 %}
+            <p class="text-muted mb-2">Track data not yet loaded ({{ playlist.total_tracks }} tracks reported).</p>
+            <form method="post" action="/playlists/{{ playlist.spotify_playlist_id }}/fetch-tracks">
+              <button type="submit" class="btn btn-outline-spotify btn-sm">Fetch Tracks from Spotify</button>
+            </form>
+          {% else %}
+            <span class="text-muted">No tracks in this playlist</span>
+          {% endif %}
+        </td></tr>
         {% endif %}
       </tbody>
     </table>

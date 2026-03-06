@@ -147,6 +147,13 @@ class ExplorerApiClient:
         result: dict[str, Any] = await self._request("GET", f"/api/me/playlists/{spotify_playlist_id}", access_token)
         return result
 
+    async def fetch_playlist_tracks(self, access_token: str, spotify_playlist_id: str) -> dict[str, Any]:
+        """POST /api/me/playlists/{spotify_playlist_id}/fetch-tracks"""
+        result: dict[str, Any] = await self._request(
+            "POST", f"/api/me/playlists/{spotify_playlist_id}/fetch-tracks", access_token
+        )
+        return result
+
     async def get_taste_profile(self, access_token: str) -> dict[str, Any]:
         """GET /api/me/taste-profile"""
         result: dict[str, Any] = await self._request("GET", "/api/me/taste-profile", access_token)

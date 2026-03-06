@@ -57,7 +57,7 @@ class PlaylistTrackItem(BaseModel):
     position: int
     spotify_track_id: str | None
     track_name: str
-    artists_json: str | None
+    artists_json: list[dict[str, Any]]
     added_at: str | None
 
 

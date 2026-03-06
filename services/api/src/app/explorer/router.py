@@ -48,6 +48,7 @@ class ExplorerRouter:
         r.add_api_route("/profile", self.profile, methods=["GET"])
         r.add_api_route("/playlists", self.playlists, methods=["GET"])
         r.add_api_route("/playlists/{spotify_playlist_id}", self.playlist_detail, methods=["GET"])
+        r.add_api_route("/playlists/{spotify_playlist_id}/fetch-tracks", self.fetch_playlist_tracks, methods=["POST"])
         r.add_api_route("/taste-profile", self.taste_profile, methods=["GET"])
         r.add_api_route("/taste-profile", self.update_taste_profile, methods=["PATCH"])
         r.add_api_route("/taste-profile", self.clear_taste_profile, methods=["DELETE"])
@@ -109,6 +110,18 @@ class ExplorerRouter:
         session: DBSession,
     ) -> PlaylistDetail:
         result = await self._service.get_playlist_detail(user_id, spotify_playlist_id, session)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Playlist not found")
+        return result
+
+    async def fetch_playlist_tracks(
+        self,
+        spotify_playlist_id: str,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+    ) -> PlaylistDetail:
+        """Fetch tracks from Spotify and cache them."""
+        result = await self._service.fetch_playlist_tracks(user_id, spotify_playlist_id, session)
         if result is None:
             raise HTTPException(status_code=404, detail="Playlist not found")
         return result
