@@ -46,6 +46,17 @@ class TestValidateNextUrl:
         result = AuthRouter._validate_next_url("", settings)
         assert result is None
 
+    def test_relative_path_accepted(self) -> None:
+        """Relative paths are safe (no external redirect possible) and always allowed."""
+        settings = _test_settings()
+        result = AuthRouter._validate_next_url("/admin/users", settings)
+        assert result == "/admin/users"
+
+    def test_relative_path_with_query_accepted(self) -> None:
+        settings = _test_settings()
+        result = AuthRouter._validate_next_url("/admin/users?page=2", settings)
+        assert result == "/admin/users?page=2"
+
 
 class TestStatePayloadRoundtrip:
     """Test that next_url survives the OAuth state encode/decode cycle."""

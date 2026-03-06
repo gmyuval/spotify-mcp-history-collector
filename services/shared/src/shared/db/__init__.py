@@ -6,6 +6,7 @@ Importing this module registers all models with Base.metadata.
 from shared.db.base import Base
 from shared.db.enums import ImportStatus, JobStatus, JobType, LogLevel, SyncStatus, TrackSource
 from shared.db.models import (
+    AppSetting,
     Artist,
     AudioFeatures,
     CachedPlaylist,
@@ -40,6 +41,7 @@ __all__ = [
     "SyncStatus",
     "TrackSource",
     # Models
+    "AppSetting",
     "Artist",
     "AudioFeatures",
     "CachedPlaylist",

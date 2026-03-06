@@ -68,6 +68,7 @@ class FrontendApp:
             jobs_router,
             logs_router,
             roles_router,
+            settings_router,
             users_router,
         )
 
@@ -80,6 +81,7 @@ class FrontendApp:
         self.app.include_router(jobs_router, prefix=f"{bp}/jobs", tags=["jobs"])
         self.app.include_router(imports_router, prefix=f"{bp}/imports", tags=["imports"])
         self.app.include_router(logs_router, prefix=f"{bp}/logs", tags=["logs"])
+        self.app.include_router(settings_router, prefix=f"{bp}/settings", tags=["settings"])
 
         @self.app.get("/healthz")
         async def health_check() -> dict[str, str]:

@@ -86,6 +86,8 @@ class TokenManager:
 
         if token_data.refresh_token:
             token_record.encrypted_refresh_token = self._encryptor.encrypt(token_data.refresh_token)
+        if token_data.scope:
+            token_record.scope = token_data.scope
 
         return token_data.access_token
 

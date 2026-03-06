@@ -139,6 +139,28 @@ async def seeded_user_no_write_scopes(async_engine: AsyncEngine) -> int:
     return uid
 
 
+@pytest.fixture
+async def seeded_user_without_private_scope(async_engine: AsyncEngine) -> int:
+    """User with a SpotifyToken that explicitly lacks playlist-read-private."""
+    encryptor = Fernet(TEST_FERNET_KEY.encode())
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        user = User(spotify_user_id="plnoprivate", display_name="No Private Scope")
+        session.add(user)
+        await session.flush()
+        token = SpotifyToken(
+            user_id=user.id,
+            encrypted_refresh_token=encryptor.encrypt(b"fake-refresh").decode(),
+            access_token="fake-access",
+            scope="user-read-recently-played",
+        )
+        session.add(token)
+        await session.flush()
+        uid = user.id
+        await session.commit()
+    return uid
+
+
 # ---------------------------------------------------------------------------
 # spotify.get_track
 # ---------------------------------------------------------------------------
@@ -531,12 +553,12 @@ def test_get_playlist_403_fallback(client: TestClient, seeded_user: int) -> None
         mock_client.get_playlist_all_tracks.assert_called_once_with("pl_403")
 
 
-def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user: int) -> None:
+def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user_with_scopes: int) -> None:
     """get_playlist returns metadata with restriction notice when both endpoints 403.
 
     In Spotify dev mode, both GET /playlists/{id} and GET /playlists/{id}/tracks
     may return 403 (Extended Quota Mode required). The handler should return
-    cached metadata with a clear restriction message.
+    cached metadata with a clear restriction message, including a backfill hint.
     """
     from app.mcp.tools.playlist_tools import _instance as playlist_instance
     from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
@@ -569,10 +591,10 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user: int) -
         )
         client.post(
             "/mcp/call",
-            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
+            json={"tool": "spotify.list_playlists", "user_id": seeded_user_with_scopes, "limit": 50},
         )
 
-        # get_playlist should return metadata + restriction notice
+        # get_playlist should return metadata + restriction notice with backfill hint
         # Mock embed fallback to also fail
         with patch.object(
             playlist_instance._embed_client,
@@ -582,14 +604,80 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user: int) -
         ):
             resp = client.post(
                 "/mcp/call",
-                json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_full403"},
+                json={"tool": "spotify.get_playlist", "user_id": seeded_user_with_scopes, "playlist_id": "pl_full403"},
             )
         data = resp.json()
         assert data["success"] is True
         assert data["result"]["name"] == "Fully Restricted"
         assert data["result"]["tracks"] == []
         assert data["result"]["tracks_restricted"] is True
-        assert "embed fallback failed" in data["result"]["tracks_restricted_reason"]
+        assert data["result"]["tracks_source"] == "restricted"
+        assert "memory.backfill_playlist" in data["result"]["tracks_restricted_reason"]
+
+
+def test_get_playlist_403_missing_read_private_scope(
+    client: TestClient, seeded_user_without_private_scope: int
+) -> None:
+    """When the token exists but lacks playlist-read-private, the reason says to re-authorize.
+
+    Uses seeded_user_without_private_scope which has a SpotifyToken with scope
+    "user-read-recently-played" (no playlist-read-private), exercising the DB
+    scope-check code path in the handler.
+    """
+    from app.mcp.tools.playlist_tools import _instance as playlist_instance
+    from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
+
+    user_id = seeded_user_without_private_scope
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+        new_callable=AsyncMock,
+    ) as mock_get_client:
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_user_playlists = AsyncMock(
+            return_value=UserPlaylistsResponse(
+                items=[
+                    SpotifyPlaylistSimplified(
+                        id="pl_missing_scope",
+                        name="Private Playlist",
+                        public=False,
+                        owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+                        snapshot_id="snap_missing_scope",
+                        tracks={"total": 5},
+                    )
+                ],
+                total=1,
+            )
+        )
+        mock_get_client.return_value = mock_client
+
+        # Seed cache
+        client.post(
+            "/mcp/call",
+            json={"tool": "spotify.list_playlists", "user_id": user_id, "limit": 50},
+        )
+
+        with patch.object(
+            playlist_instance._embed_client,
+            "fetch_playlist_tracks",
+            new_callable=AsyncMock,
+            side_effect=SpotifyEmbedError("Embed failed"),
+        ):
+            resp = client.post(
+                "/mcp/call",
+                json={
+                    "tool": "spotify.get_playlist",
+                    "user_id": user_id,
+                    "playlist_id": "pl_missing_scope",
+                },
+            )
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["tracks_restricted"] is True
+        assert data["result"]["tracks_source"] == "restricted"
+        assert "re-authorize" in data["result"]["tracks_restricted_reason"]
+        assert "playlist-read-private" in data["result"]["tracks_restricted_reason"]
 
 
 def test_get_playlist_403_no_cache(client: TestClient, seeded_user: int) -> None:

@@ -9,6 +9,7 @@ from sqlalchemy import String, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.expression import cast
 
+from app.admin.settings_service import _settings_service
 from app.mcp.registry import registry
 from app.mcp.schemas import MCPToolParam
 from shared.db.models.memory import (
@@ -22,6 +23,25 @@ from shared.db.search import text_match
 
 logger = logging.getLogger(__name__)
 
+
+def _as_int(value: Any, default: int, *, minimum: int = 1) -> int:
+    """Coerce *value* to a positive int, falling back to *default*."""
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return max(value, minimum)
+    return default
+
+
+def _as_float(value: Any, default: float, *, minimum: float = 0.0) -> float:
+    """Coerce *value* to a non-negative float, falling back to *default*."""
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return max(float(value), minimum)
+    return default
+
+
 _USER_PARAM = MCPToolParam(name="user_id", type="int", description="User ID")
 
 
@@ -33,7 +53,7 @@ def _validate_user_id(args: dict[str, Any]) -> int:
     return user_id
 
 
-def _snippet(text: str, max_len: int = 100) -> str:
+def _snippet(text: str, max_len: int) -> str:
     """Truncate text to max_len, adding ellipsis if needed."""
     if len(text) <= max_len:
         return text
@@ -97,32 +117,46 @@ class MemoryDataToolHandlers:
         """
         user_id = _validate_user_id(args)
 
+        max_query_length = _as_int(await _settings_service.get("search.max_query_length", 500, session), 500)
+        default_limit = _as_int(await _settings_service.get("search.default_limit", 25, session), 25)
+        max_limit = _as_int(await _settings_service.get("search.max_limit", 200, session), 200)
+
         query = args.get("query")
         if not isinstance(query, str) or not query.strip():
             raise ValueError("query must be a non-empty string")
         query = query.strip()
-        if len(query) > 500:
-            raise ValueError("query must be 500 characters or fewer")
+        if len(query) > max_query_length:
+            raise ValueError(f"query must be {max_query_length} characters or fewer")
 
-        limit = args.get("limit", 25)
+        limit = args.get("limit", default_limit)
         if not isinstance(limit, int) or limit < 1:
-            limit = 25
-        limit = min(limit, 200)
+            limit = default_limit
+        limit = min(limit, max_limit)
 
         dialect = session.bind.dialect.name if session.bind else "postgresql"
+        snippet_max = _as_int(await _settings_service.get("search.snippet_max_length", 100, session), 100)
+        scores = {
+            "name": _as_float(await _settings_service.get("search.score_playlist_name", 1.0, session), 1.0),
+            "description": _as_float(
+                await _settings_service.get("search.score_playlist_description", 0.8, session), 0.8
+            ),
+            "tags": _as_float(await _settings_service.get("search.score_playlist_tags", 0.7, session), 0.7),
+            "event": _as_float(await _settings_service.get("search.score_preference_event", 0.5, session), 0.5),
+            "profile": _as_float(await _settings_service.get("search.score_profile", 0.3, session), 0.3),
+        }
         results: list[dict[str, Any]] = []
 
         # Search playlists — deduplicate by playlist_id, keep highest score
         playlist_matches: dict[str, dict[str, Any]] = {}
-        await self._search_playlists(session, user_id, query, dialect, playlist_matches)
+        await self._search_playlists(session, user_id, query, dialect, playlist_matches, scores, snippet_max)
 
         results.extend(playlist_matches.values())
 
         # Search preference events
-        await self._search_preference_events(session, user_id, query, dialect, results)
+        await self._search_preference_events(session, user_id, query, dialect, results, scores["event"], snippet_max)
 
         # Search taste profile
-        await self._search_profile(session, user_id, query, dialect, results)
+        await self._search_profile(session, user_id, query, dialect, results, scores["profile"], snippet_max)
 
         # Sort by score descending, then limit
         results.sort(key=lambda r: r["score"], reverse=True)
@@ -137,19 +171,25 @@ class MemoryDataToolHandlers:
         query: str,
         dialect: str,
         matches: dict[str, dict[str, Any]],
+        scores: dict[str, float],
+        snippet_max: int,
     ) -> None:
         """Search playlists by name, description, and intent tags."""
-        # Search by name (score 1.0)
+        score_name = scores["name"]
+        score_desc = scores["description"]
+        score_tags = scores["tags"]
+
+        # Search by name
         stmt = select(MemoryPlaylist).where(
             MemoryPlaylist.user_id == user_id,
             text_match(MemoryPlaylist.name, query, dialect),
         )
         result = await session.execute(stmt)
         for pl in result.scalars().all():
-            if pl.playlist_id not in matches or matches[pl.playlist_id]["score"] < 1.0:
-                matches[pl.playlist_id] = self._playlist_result(pl, 1.0)
+            if pl.playlist_id not in matches or matches[pl.playlist_id]["score"] < score_name:
+                matches[pl.playlist_id] = self._playlist_result(pl, score_name, snippet_max)
 
-        # Search by description (score 0.8)
+        # Search by description
         stmt = select(MemoryPlaylist).where(
             MemoryPlaylist.user_id == user_id,
             MemoryPlaylist.description.isnot(None),
@@ -157,22 +197,22 @@ class MemoryDataToolHandlers:
         )
         result = await session.execute(stmt)
         for pl in result.scalars().all():
-            if pl.playlist_id not in matches or matches[pl.playlist_id]["score"] < 0.8:
-                matches[pl.playlist_id] = self._playlist_result(pl, 0.8)
+            if pl.playlist_id not in matches or matches[pl.playlist_id]["score"] < score_desc:
+                matches[pl.playlist_id] = self._playlist_result(pl, score_desc, snippet_max)
 
-        # Search by intent tags (score 0.7)
+        # Search by intent tags
         stmt = select(MemoryPlaylist).where(
             MemoryPlaylist.user_id == user_id,
             text_match(cast(MemoryPlaylist.intent_tags, String), query, dialect),
         )
         result = await session.execute(stmt)
         for pl in result.scalars().all():
-            if pl.playlist_id not in matches or matches[pl.playlist_id]["score"] < 0.7:
-                matches[pl.playlist_id] = self._playlist_result(pl, 0.7)
+            if pl.playlist_id not in matches or matches[pl.playlist_id]["score"] < score_tags:
+                matches[pl.playlist_id] = self._playlist_result(pl, score_tags, snippet_max)
 
-    def _playlist_result(self, pl: MemoryPlaylist, score: float) -> dict[str, Any]:
+    def _playlist_result(self, pl: MemoryPlaylist, score: float, snippet_max: int) -> dict[str, Any]:
         """Build a search result dict for a playlist."""
-        desc_part = f" — {_snippet(pl.description)}" if pl.description else ""
+        desc_part = f" — {_snippet(pl.description, snippet_max)}" if pl.description else ""
         return {
             "kind": "playlist",
             "id": pl.playlist_id,
@@ -192,6 +232,8 @@ class MemoryDataToolHandlers:
         query: str,
         dialect: str,
         results: list[dict[str, Any]],
+        score: float,
+        snippet_max: int,
     ) -> None:
         """Search preference events by payload content."""
         stmt = select(PreferenceEvent).where(
@@ -202,13 +244,13 @@ class MemoryDataToolHandlers:
         for event in result.scalars().all():
             payload = event.payload_json
             raw_text = str(payload.get("raw_text", "")) if isinstance(payload, dict) else ""
-            snippet_text = raw_text if raw_text else _snippet(json.dumps(payload))
+            snippet_text = _snippet(raw_text if raw_text else json.dumps(payload), snippet_max)
             results.append(
                 {
                     "kind": "preference_event",
                     "id": str(event.event_id),
-                    "score": 0.5,
-                    "snippet": f"{event.type}: {_snippet(snippet_text)}",
+                    "score": score,
+                    "snippet": f"{event.type}: {snippet_text}",
                     "metadata": {
                         "type": event.type,
                         "source": event.source,
@@ -224,6 +266,8 @@ class MemoryDataToolHandlers:
         query: str,
         dialect: str,
         results: list[dict[str, Any]],
+        score: float,
+        snippet_max: int,
     ) -> None:
         """Search taste profile by JSON content."""
         stmt = select(TasteProfile).where(
@@ -237,8 +281,8 @@ class MemoryDataToolHandlers:
                 {
                     "kind": "profile",
                     "id": str(profile.user_id),
-                    "score": 0.3,
-                    "snippet": f"Taste profile: {_snippet(json.dumps(profile.profile_json))}",
+                    "score": score,
+                    "snippet": f"Taste profile: {_snippet(json.dumps(profile.profile_json), snippet_max)}",
                     "metadata": {
                         "version": profile.version,
                         "updated_at": profile.updated_at.isoformat(),

@@ -6,9 +6,11 @@ from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnaps
 from shared.db.models.music import Artist, AudioFeatures, Play, Track, TrackArtist
 from shared.db.models.operations import ImportJob, JobRun, SyncCheckpoint
 from shared.db.models.rbac import Permission, Role, RolePermission, UserRole
+from shared.db.models.settings import AppSetting
 from shared.db.models.user import SpotifyToken, User
 
 __all__ = [
+    "AppSetting",
     "Artist",
     "AudioFeatures",
     "CachedPlaylist",

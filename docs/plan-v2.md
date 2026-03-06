@@ -31,7 +31,7 @@ Additionally, there are **bugs to fix first**:
 | 10 | MCP Memory: Search, Export/Delete & ChatGPT Integration | **DONE** |
 | 11 | Explorer UI: Playlist Ledger Pages + ChatGPT OpenAPI Fix | **DONE** |
 | 11.6 | Playlist Track Fidelity Fix (PR #39) | **DONE** |
-| 12 | Admin-Configurable Settings | Pending |
+| 12 | Admin-Configurable Settings | **DONE** |
 
 ---
 
@@ -696,11 +696,11 @@ Explorer UI for browsing assistant-tracked playlists from the memory ledger, plu
 
 ---
 
-## Phase 12 — PR: Admin-Configurable Settings
+## Phase 12 — DONE: Admin-Configurable Settings + Private Playlist Fix
 
 **Goal:** Replace hardcoded constants (magic numbers) across the codebase with a DB-backed settings system, manageable through the admin UI. This includes search parameters, limits, scoring weights, and other operational tunables that are currently embedded as constants.
 
-### New DB table (Alembic migration `008_app_settings`)
+### New DB table (Alembic migration `009_app_settings`)
 
 **`app_settings`** — Key-value settings store:
 - `key` (String 100, **PK**) — setting identifier, e.g. `search.max_query_length`
@@ -764,7 +764,7 @@ Migration seeds default values for all existing constants.
 - `services/api/src/app/admin/settings_router.py` — Admin API endpoints
 - `services/frontend/src/frontend/routes/settings.py` — Admin UI route
 - `services/frontend/src/frontend/templates/settings.html` — Template
-- `services/api/alembic/versions/008_app_settings.py` — Migration
+- `services/api/alembic/versions/009_app_settings.py` — Migration
 - `services/api/tests/test_admin/test_settings.py` — Tests
 
 **Modified files:**
@@ -802,10 +802,10 @@ Phase 8  (explorer taste UI)                ✅ DONE
 Phase 9  (playlist ledger)                  ✅ DONE
 Phase 10 (search, export/delete, ChatGPT)   ✅ DONE
 Phase 11 (explorer UI: playlist ledger)     ✅ DONE
-Phase 12 (admin-configurable settings)      ← NEXT (depends on Phase 5)
+Phase 12 (admin-configurable settings)      ✅ DONE
 ```
 
-Remaining order: **12**
+All planned phases complete.
 
 ---
 

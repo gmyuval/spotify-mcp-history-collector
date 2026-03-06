@@ -26,6 +26,11 @@
         reverse_proxy api:8000
     }
 
+    # Redirect bare /admin to /admin/ so the wildcard handler matches
+    handle /admin {
+        redir * /admin/ 301
+    }
+
     # Admin frontend — requires Google OAuth via forward_auth
     handle /admin/* {
         forward_auth oauth2-proxy:4180 {

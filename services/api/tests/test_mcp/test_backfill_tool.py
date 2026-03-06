@@ -302,6 +302,102 @@ class TestBackfillCrossUserIsolation:
         assert data_b["success"] is False
 
 
+class TestBackfillWithTrackIds:
+    """Tests for the manual track_ids override path (private playlist workaround)."""
+
+    def test_track_ids_skips_spotify_fetch(self, client: TestClient, seeded_user: int) -> None:
+        """When track_ids is provided, Spotify fetch is skipped entirely and source is 'manual'."""
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+        ) as mock_get_playlist:
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_manual",
+                track_ids=["spotify:track:aaa", "spotify:track:bbb"],
+                name="Private Playlist",
+            )
+            mock_get_playlist.assert_not_awaited()
+
+        assert data["success"] is True
+        result = data["result"]
+        assert result["tracks_source"] == "manual"
+        assert result["stored_track_count"] == 2
+        assert result["playlist_id"] == "pl_manual"
+        assert result["name"] == "Private Playlist"
+        assert result["already_existed"] is False
+
+    def test_track_ids_uses_provided_name_directly(self, client: TestClient, seeded_user: int) -> None:
+        """When track_ids and name are both provided, name is used directly with no Spotify call."""
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+        ) as mock_get_playlist:
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_manual_meta",
+                track_ids=["manual_t1", "manual_t2", "manual_t3"],
+                name="My Private Playlist",
+            )
+            mock_get_playlist.assert_not_awaited()
+
+        assert data["success"] is True
+        result = data["result"]
+        assert result["name"] == "My Private Playlist"
+        assert result["tracks_source"] == "manual"
+        assert result["stored_track_count"] == 3
+
+    def test_track_ids_requires_name(self, client: TestClient, seeded_user: int) -> None:
+        """When track_ids is provided without name, fails immediately without any Spotify call."""
+        with patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers.get_playlist",
+            new_callable=AsyncMock,
+        ) as mock_get_playlist:
+            data = _call(
+                client,
+                "memory.backfill_playlist",
+                user_id=seeded_user,
+                playlist_id="pl_manual_no_name",
+                track_ids=["t1"],
+                # No name — should fail immediately
+            )
+            mock_get_playlist.assert_not_awaited()
+
+        assert data["success"] is False
+        assert "name" in data.get("error", "").lower() or "name" in str(data).lower()
+
+    def test_track_ids_invalid_type_returns_error(self, client: TestClient, seeded_user: int) -> None:
+        """Passing track_ids as a non-array raises a validation error."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_bad_ids",
+            track_ids="not-a-list",
+            name="Whatever",
+        )
+        assert data["success"] is False
+
+    def test_track_ids_empty_list_stores_zero_tracks(self, client: TestClient, seeded_user: int) -> None:
+        """Passing an empty track_ids list with a name stores 0 tracks via the manual path."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_empty_ids",
+            track_ids=[],
+            name="Empty Playlist",
+        )
+        assert data["success"] is True
+        result = data["result"]
+        assert result["tracks_source"] == "manual"
+        assert result["stored_track_count"] == 0
+
+
 class TestBackfillToolRegistered:
     def test_registered(self, client: TestClient) -> None:
         """memory.backfill_playlist appears in the tool catalog."""

@@ -78,6 +78,10 @@ PLAYLIST MEMORY (always log playlists you create or edit):
 - When user asks "what playlists did you make?", use memory.get_playlists.
 - When Spotify read-back fails (403), use memory.reconstruct_playlist as a
   fallback to recover the track list from the memory ledger.
+- When spotify.get_playlist returns tracks_restricted=true (private playlist
+  that Spotify blocks even with valid auth), ask the user to supply the track
+  IDs manually, then call memory.backfill_playlist with track_ids and name.
+  tracks_source will be set to "manual" automatically.
 - Memory is the canonical record of playlist contents — do not rely solely
   on spotify.get_playlist.
 - When user references a past playlist by vibe or name (e.g., "that metal
@@ -309,3 +313,19 @@ Format Notes section to reflect both formats are accepted.
 - When Spotify API returns 403, tracks are fetched from Spotify's embed page (no auth required)
 - `memory.backfill_playlist` imports an existing Spotify playlist into the memory ledger in a single call — fetches tracks automatically
 - Backfill is idempotent: calling it twice for the same playlist returns the existing record
+
+### Phase 12 — Admin-Configurable Settings + Private Playlist Fix (current)
+
+**OpenAPI schema:** Replace with `docs/chatgpt-openapi.json`:
+- Added 2 new parameters to `memory.backfill_playlist`:
+  - `track_ids`: `oneOf: [{type: array, items: {type: string}}, {type: string}]` — explicit track IDs to bypass Spotify fetch
+  - `name`: `{type: string}` — playlist name override when metadata is unavailable
+
+**Instructions:** Add to PLAYLIST MEMORY section (after the embed fallback note):
+- For **private playlists** where `spotify.get_playlist` returns `tracks_restricted: true` (Spotify API 403 + embed requires auth), use `memory.backfill_playlist` with explicit `track_ids` and `name` to log the playlist. The user must supply the track IDs manually (e.g., from their Spotify app or URLs). `tracks_source` is automatically set to `"manual"` for these entries.
+
+**Knowledge file:** Re-upload `docs/chatgpt-tool-catalog.md` — update `memory.backfill_playlist` entry to document `track_ids` and `name` parameters.
+
+**Backend changes (no GPT action update needed):**
+- Admin settings page at `/admin/settings` — change limits and scoring weights without code deployment
+- Search limits (`search.default_limit`, `search.max_limit`), score weights, and playlist thresholds are now DB-configurable

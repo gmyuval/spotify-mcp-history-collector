@@ -9,6 +9,7 @@ from typing import Any, NamedTuple
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin.settings_service import _settings_service
 from app.mcp.registry import registry
 from app.mcp.schemas import MCPToolParam
 from shared.db.enums import PlaylistEventType, PlaylistSnapshotSource
@@ -17,9 +18,6 @@ from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnaps
 logger = logging.getLogger(__name__)
 
 _USER_PARAM = MCPToolParam(name="user_id", type="int", description="User ID")
-
-# Snapshot compaction: auto-snapshot every N mutations
-_COMPACTION_THRESHOLD = 10
 
 
 class ReconstructionResult(NamedTuple):
@@ -182,12 +180,29 @@ class PlaylistLedgerToolHandlers:
             name="memory.backfill_playlist",
             description=(
                 "Import an existing Spotify playlist into the memory ledger. "
-                "Fetches tracks via API or embed fallback and creates a ledger entry in one call."
+                "Fetches tracks via API or embed fallback and creates a ledger entry in one call. "
+                "For private playlists where Spotify returns 403 and embed fails, provide "
+                "track_ids directly to bypass the fetch entirely."
             ),
             category="memory",
             parameters=[
                 _USER_PARAM,
                 MCPToolParam(name="playlist_id", type="string", description="Spotify playlist ID to backfill"),
+                MCPToolParam(
+                    name="track_ids",
+                    type="array",
+                    description=(
+                        "Ordered list of Spotify track IDs to store directly (skips Spotify fetch). "
+                        "Use when get_playlist returns tracks_restricted:true for private playlists."
+                    ),
+                    required=False,
+                ),
+                MCPToolParam(
+                    name="name",
+                    type="string",
+                    description="Playlist name override — required when track_ids is provided and metadata is unavailable",
+                    required=False,
+                ),
                 MCPToolParam(
                     name="intent_tags",
                     type="array",
@@ -430,7 +445,8 @@ class PlaylistLedgerToolHandlers:
         result = await session.execute(stmt)
         count = result.scalar_one()
 
-        if count < _COMPACTION_THRESHOLD:
+        compaction_threshold = await _settings_service.get("playlist.snapshot_compaction_threshold", 10, session)
+        if count < compaction_threshold:
             return None
 
         # Reconstruct current track list and create new snapshot
@@ -521,10 +537,12 @@ class PlaylistLedgerToolHandlers:
         the track count derived from the latest snapshot.
         """
         user_id = _validate_user_id(args)
-        limit = args.get("limit", 50)
+        default_page_size = await _settings_service.get("playlist.default_page_size", 50, session)
+        max_page_size = await _settings_service.get("playlist.max_page_size", 200, session)
+        limit = args.get("limit", default_page_size)
         if not isinstance(limit, int) or limit < 1:
-            limit = 50
-        limit = min(limit, 200)
+            limit = default_page_size
+        limit = min(limit, max_page_size)
 
         cursor = args.get("cursor")
 
@@ -587,9 +605,10 @@ class PlaylistLedgerToolHandlers:
         user_id = _validate_user_id(args)
         playlist_id = _validate_playlist_id(args)
 
-        include_events_limit = args.get("include_events_limit", 50)
+        recent_events_limit = await _settings_service.get("playlist.recent_events_limit", 50, session)
+        include_events_limit = args.get("include_events_limit", recent_events_limit)
         if not isinstance(include_events_limit, int) or include_events_limit < 0:
-            include_events_limit = 50
+            include_events_limit = recent_events_limit
         include_events_limit = min(include_events_limit, 500)
 
         playlist = await session.get(MemoryPlaylist, playlist_id)
@@ -715,10 +734,13 @@ class PlaylistLedgerToolHandlers:
     async def backfill_playlist(self, args: dict[str, Any], session: AsyncSession) -> dict[str, Any]:
         """Import an existing Spotify playlist into the memory ledger.
 
-        Fetches the playlist's tracks via the ``spotify.get_playlist`` tool
-        handler (API with embed fallback) and creates a MemoryPlaylist +
-        initial snapshot in a single call. Idempotent — returns existing
-        record if the playlist is already in the ledger.
+        Normally fetches tracks via the ``spotify.get_playlist`` tool handler
+        (API with embed fallback). When Spotify returns 403 for private
+        playlists and the embed also fails, callers can supply ``track_ids``
+        directly to bypass the Spotify fetch entirely.
+
+        Idempotent — returns the existing record if the playlist is already in
+        the ledger.
         """
         # Late import to avoid circular dependency with playlist_tools
         from app.mcp.tools.playlist_tools import _instance as playlist_handlers
@@ -735,6 +757,23 @@ class PlaylistLedgerToolHandlers:
             raise ValueError("seed_context must be an object")
 
         idempotency_key = args.get("idempotency_key")
+
+        # Optional manual track_ids override (bypasses Spotify fetch for private playlists)
+        manual_track_ids_raw = _parse_json_param(args.get("track_ids"), "track_ids")
+        manual_track_ids: list[str] | None = None
+        if manual_track_ids_raw is not None:
+            if not isinstance(manual_track_ids_raw, list):
+                raise ValueError("track_ids must be an array")
+            if not all(isinstance(t, str) and t.strip() for t in manual_track_ids_raw):
+                raise ValueError("track_ids must contain non-empty strings")
+            manual_track_ids = [str(t).strip() for t in manual_track_ids_raw]
+
+        raw_name = args.get("name")
+        name_override: str | None = None
+        if raw_name is not None:
+            if not isinstance(raw_name, str) or not raw_name.strip():
+                raise ValueError("'name' must be a non-empty string when provided")
+            name_override = raw_name.strip()
 
         # Idempotency check via key (scoped to user)
         if idempotency_key:
@@ -781,19 +820,33 @@ class PlaylistLedgerToolHandlers:
                 "already_existed": True,
             }
 
-        # Fetch playlist data via spotify.get_playlist handler (API + embed fallback)
-        playlist_data = await playlist_handlers.get_playlist({"user_id": user_id, "playlist_id": playlist_id}, session)
-
-        name = playlist_data.get("name", "")
-        description = playlist_data.get("description")
-        all_tracks = playlist_data.get("tracks", [])
-        track_ids = [t["id"] for t in all_tracks if t.get("id")]
-        unavailable_count = sum(1 for t in all_tracks if t.get("unavailable"))
-        tracks_source = playlist_data.get("tracks_source", "api")
-
-        if not track_ids and not playlist_data.get("tracks_restricted"):
-            # Empty playlist — still create the ledger entry with empty snapshot
-            pass
+        # Determine track list and playlist metadata
+        if manual_track_ids is not None:
+            # Manual override path — skip all Spotify calls, use caller-supplied data
+            if name_override is None:
+                raise ValueError(
+                    "When 'track_ids' is provided, 'name' is required (Spotify cannot be queried for private playlists)."
+                )
+            track_ids = manual_track_ids
+            tracks_source = "manual"
+            unavailable_count = 0
+            tracks_total = len(track_ids)
+            name = name_override
+            description: str | None = None
+            tracks_restricted = False
+        else:
+            # Normal path — fetch via spotify.get_playlist (API + embed fallback)
+            playlist_data = await playlist_handlers.get_playlist(
+                {"user_id": user_id, "playlist_id": playlist_id}, session
+            )
+            name = playlist_data.get("name", "")
+            description = playlist_data.get("description")
+            all_tracks = playlist_data.get("tracks", [])
+            track_ids = [t["id"] for t in all_tracks if t.get("id")]
+            unavailable_count = sum(1 for t in all_tracks if t.get("unavailable"))
+            tracks_source = playlist_data.get("tracks_source", "api")
+            tracks_total = playlist_data.get("tracks_total", 0)
+            tracks_restricted = bool(playlist_data.get("tracks_restricted"))
 
         # Create memory playlist record
         playlist = MemoryPlaylist(
@@ -829,14 +882,14 @@ class PlaylistLedgerToolHandlers:
             "snapshot_id": str(snapshot_id),
             "stored_track_count": len(track_ids),
             "tracks_source": tracks_source,
-            "tracks_total": playlist_data.get("tracks_total", 0),
+            "tracks_total": tracks_total,
             "already_existed": False,
         }
 
         if unavailable_count:
             result_data["unavailable_count"] = unavailable_count
 
-        if playlist_data.get("tracks_restricted"):
+        if tracks_restricted:
             result_data["tracks_restricted"] = True
 
         return result_data

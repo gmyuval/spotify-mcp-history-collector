@@ -37,6 +37,7 @@ from app.admin.schemas import (
     UserSummary,
 )
 from app.admin.service import AdminService
+from app.admin.settings_router import router as settings_router
 from app.auth.crypto import TokenEncryptor
 from app.cache.service import SpotifyCacheService
 from app.dependencies import db_manager
@@ -140,6 +141,9 @@ class AdminRouter:
             methods=["POST"],
             response_model=ActionResponse,
         )
+
+        # Settings
+        r.include_router(settings_router)
 
     # --- User Management ---
 

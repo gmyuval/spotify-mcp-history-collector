@@ -5,6 +5,7 @@ from frontend.routes.imports import router as imports_router
 from frontend.routes.jobs import router as jobs_router
 from frontend.routes.logs import router as logs_router
 from frontend.routes.roles import router as roles_router
+from frontend.routes.settings import router as settings_router
 from frontend.routes.users import router as users_router
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "jobs_router",
     "logs_router",
     "roles_router",
+    "settings_router",
     "users_router",
 ]
