@@ -287,13 +287,14 @@ class PlaylistToolHandlers:
             else:
                 raise
 
-        # Determine if restricted playlist is private — embed only works for public playlists
+        # Determine if restricted playlist is private — embed only works for public playlists.
+        # pl.public is bool | None; treat None as non-public (private or collaborative).
         _is_private = False
         if tracks_restricted:
             if pl is not None:
-                _is_private = pl.public is False
+                _is_private = not pl.public
             elif cached_metadata is not None:
-                _is_private = cached_metadata.get("public") is False
+                _is_private = not cached_metadata.get("public")
 
         # Track fidelity metrics
         tracks_returned = len(tracks)
@@ -343,15 +344,30 @@ class PlaylistToolHandlers:
 
         if tracks_restricted:
             result["tracks_restricted"] = True
-            if _is_private:
+            # Check whether the user's stored token includes playlist-read-private.
+            # If it doesn't, a re-authorization will fix this — no need to use backfill.
+            _scope_result = await session.execute(select(SpotifyToken.scope).where(SpotifyToken.user_id == user_id))
+            _scope_str = _scope_result.scalar_one_or_none() or ""
+            _has_read_private = "playlist-read-private" in _scope_str.split()
+
+            if not _has_read_private:
                 result["tracks_restricted_reason"] = (
-                    "Private playlist: Spotify API returned 403 and the embed fallback requires "
-                    "authentication for private playlists. If you know the track IDs, use "
-                    "memory.backfill_playlist with an explicit track_ids parameter to log this playlist."
+                    "Your Spotify authorization is missing the 'playlist-read-private' scope. "
+                    "Please re-authorize via /auth/login to enable private playlist access."
+                )
+            elif _is_private:
+                result["tracks_restricted_reason"] = (
+                    "Private playlist: Spotify returned 403 for this playlist's tracks even "
+                    "though your token has playlist-read-private. This can happen in Spotify's "
+                    "development mode for playlists not accessible to the app. "
+                    "If you have the track IDs, use memory.backfill_playlist with track_ids and "
+                    "name parameters to log this playlist manually."
                 )
             else:
                 result["tracks_restricted_reason"] = (
-                    "Spotify API returned 403 and embed fallback failed. Tracks cannot be retrieved for this playlist."
+                    "Spotify returned 403 for this playlist's tracks. The playlist may be private "
+                    "or restricted. If you have the track IDs, use memory.backfill_playlist with "
+                    "track_ids and name parameters to log this playlist manually."
                 )
 
         # Cache the full playlist with tracks
