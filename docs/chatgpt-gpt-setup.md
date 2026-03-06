@@ -78,6 +78,10 @@ PLAYLIST MEMORY (always log playlists you create or edit):
 - When user asks "what playlists did you make?", use memory.get_playlists.
 - When Spotify read-back fails (403), use memory.reconstruct_playlist as a
   fallback to recover the track list from the memory ledger.
+- When spotify.get_playlist returns tracks_restricted=true (private playlist
+  that Spotify blocks even with valid auth), ask the user to supply the track
+  IDs manually, then call memory.backfill_playlist with track_ids and name.
+  tracks_source will be set to "manual" automatically.
 - Memory is the canonical record of playlist contents — do not rely solely
   on spotify.get_playlist.
 - When user references a past playlist by vibe or name (e.g., "that metal

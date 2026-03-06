@@ -49,7 +49,7 @@ All tools require `user_id` (integer) unless noted otherwise.
 | `memory.get_playlists` | List assistant-tracked playlists | optional `limit`, `cursor` |
 | `memory.get_playlist` | Full playlist details with snapshot and events | `playlist_id`, optional `include_events_limit` |
 | `memory.reconstruct_playlist` | Reconstruct playlist track list from memory | `playlist_id`, optional `at_time` (ISO datetime) |
-| `memory.backfill_playlist` | Import an existing Spotify playlist into memory ledger | `playlist_id`, optional `intent_tags` (JSON string), `seed_context` (JSON string), `idempotency_key` |
+| `memory.backfill_playlist` | Import an existing Spotify playlist into memory ledger. Pass `track_ids` + `name` to bypass Spotify fetch entirely (for private/restricted playlists). | `playlist_id`, optional `intent_tags` (JSON string), `seed_context` (JSON string), `idempotency_key`, `track_ids` (list of Spotify track URIs/IDs — skips Spotify fetch, requires `name`), `name` (playlist name — required when `track_ids` is supplied) |
 
 ## Memory — Search & Data Management
 
