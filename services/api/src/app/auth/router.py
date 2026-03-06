@@ -270,12 +270,19 @@ class AuthRouter:
     def _validate_next_url(url: str | None, settings: AppSettings) -> str | None:
         """Validate a redirect URL against the allowed origins whitelist.
 
+        Relative paths (no scheme/host) are always allowed — they cannot
+        redirect to an external site.  Absolute URLs are validated against
+        AUTH_ALLOWED_REDIRECT_ORIGINS.
+
         Returns the URL if valid, None otherwise.
         """
         if not url:
             return None
-        allowed = [o.strip() for o in settings.AUTH_ALLOWED_REDIRECT_ORIGINS.split(",") if o.strip()]
         parsed = urlparse(url)
+        # Relative path — safe by construction
+        if not parsed.scheme and not parsed.netloc:
+            return url
+        allowed = [o.strip() for o in settings.AUTH_ALLOWED_REDIRECT_ORIGINS.split(",") if o.strip()]
         origin = f"{parsed.scheme}://{parsed.netloc}"
         if origin in allowed:
             return url
