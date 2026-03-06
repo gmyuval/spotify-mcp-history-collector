@@ -1,8 +1,26 @@
 """Shared fixtures for MCP tool tests."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from app.middleware import RateLimitMiddleware
+
+
+@pytest.fixture(autouse=True)
+def _mock_force_refresh_token() -> None:
+    """Prevent _force_refresh_token from calling TokenManager with lru-cached prod settings.
+
+    Tests mock _get_client at the method level so real token I/O never happens.
+    _force_refresh_token must also be a no-op so it doesn't fail with the
+    invalid Fernet key that lru_cache returns in the test environment.
+    """
+    with patch(
+        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._force_refresh_token",
+        new_callable=AsyncMock,
+        return_value="mocked_fresh_token",
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
