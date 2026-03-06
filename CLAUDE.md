@@ -308,7 +308,6 @@ Custom GPT Actions (OpenAPI over HTTPS) with Bearer token auth.
 ## Development Notes
 
 - **Python-only project** — no package.json, no TypeScript
-- **Follow spec.md closely** — comprehensive specification with detailed requirements
 - All services use FastAPI, even the frontend (server-rendered with Jinja2 + HTMX recommended)
 - Root `pyproject.toml` has unified tool config (ruff, mypy, pytest); per-package pyproject.toml has package metadata + deps
 - `environment.yml` uses editable installs (`-e services/shared`, etc.) — pip resolves deps from pyproject.toml automatically

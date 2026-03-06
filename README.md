@@ -1,26 +1,27 @@
 # Spotify MCP History Collector
 
-A containerized system that enables ChatGPT-style assistants to analyze Spotify listening patterns by collecting playback history over time and exposing it via MCP-compatible tool endpoints.
+A containerized system that enables ChatGPT-style assistants to analyze Spotify listening patterns, manage AI-created playlists, and maintain a persistent music taste profile — all backed by a continuously-collected playback history.
 
-**The core problem:** Spotify's API only provides a limited window of recent playback history (roughly the last 50 tracks). This system solves that by continuously polling to accumulate plays over time, supporting bulk import of Spotify's "Download your data" ZIP exports, and running a best-effort initial sync via API paging -- then exposing all of that data through 11 MCP tool endpoints that any AI assistant can call.
+**The core problem:** Spotify's API only provides a limited window of recent playback history (roughly the last 50 tracks). This system solves that by continuously polling to accumulate plays over time, supporting bulk import of Spotify's "Download your data" ZIP exports, and running a best-effort initial sync via API paging — then exposing all of that data through 34 MCP tool endpoints that any AI assistant can call.
 
 ---
 
 ## Architecture
 
-Four containerized services work together:
+Five containerized services work together:
 
 | Service | Tech | Port | Role |
 |---|---|---|---|
-| **spotify-mcp-api** | FastAPI | 8000 | Spotify OAuth, 11 MCP tool endpoints, 13 admin API endpoints |
+| **spotify-mcp-api** | FastAPI | 8000 | Spotify OAuth, 34 MCP tool endpoints, admin API, cache |
 | **spotify-history-collector** | Python worker | -- | Polls Spotify API, processes ZIP imports, runs initial sync |
-| **admin-frontend** | FastAPI + Jinja2/HTMX | 8001 | Dashboard, Users, Jobs, Imports, Logs management pages |
-| **postgres** | PostgreSQL 16 | 5434 (host) | All data storage (11 tables, 6 enums) |
+| **admin-frontend** | FastAPI + Jinja2/HTMX | 8001 | Admin dashboard: users, jobs, imports, logs, settings |
+| **explorer** | FastAPI + Jinja2/HTMX | 8002 | User-facing music history browser with JWT auth |
+| **postgres** | PostgreSQL 16 | 5434 (host) | All data storage (24 tables) |
 
 ```
                                  +------------------+
                                  |    PostgreSQL     |
-                                 |   (11 tables)     |
+                                 |   (24 tables)     |
                                  +--------+---------+
                                           |
                           +---------------+---------------+
@@ -37,11 +38,19 @@ Four containerized services work together:
     | OAuth flow|  | Tool invoke |  | Management |      |
     +-------+---+  +------+------+  +---+--------+      |
             ^             ^              ^               |
-            |             |              |               |
-         User         ChatGPT      +----+----+          |
-       (browser)     (or any AI)   | frontend |    Spotify API
-                                   | :8001    |    (polling, sync,
-                                   +----------+     token refresh)
+            |             |              |         Spotify API
+         User         ChatGPT      +----+----+    (polling, sync,
+       (browser)     (or any AI)   | frontend |    token refresh)
+                                   | :8001    |
+                                   +----------+
+                                   +----------+
+                                   | explorer |
+                                   | :8002    |
+                                   +----------+
+                                        ^
+                                     User
+                                   (browser,
+                                   JWT auth)
 ```
 
 **Data flow:**
@@ -49,8 +58,9 @@ Four containerized services work together:
 1. User authorizes Spotify via OAuth (`/auth/login` -> `/auth/callback`)
 2. API stores encrypted refresh token and user profile in Postgres
 3. Collector runs in priority order: pending ZIP imports -> initial sync -> incremental polling
-4. MCP tool endpoints serve history analysis to ChatGPT or other AI clients
+4. MCP tool endpoints serve history analysis and memory operations to ChatGPT or other AI clients
 5. Admin frontend manages users, monitors sync/import status, and browses logs
+6. Explorer lets users browse their own listening history, taste profile, and AI-created playlists
 
 ---
 
@@ -82,9 +92,12 @@ TOKEN_ENCRYPTION_KEY=your_encryption_key_here
 
 # Required -- any secret string for admin API/frontend auth
 ADMIN_TOKEN=your_admin_token_here
+
+# Required -- generate with: python -c "import secrets; print(secrets.token_hex(32))"
+JWT_SECRET_KEY=your_jwt_secret_here
 ```
 
-Make sure your Spotify app's redirect URI is set to `http://localhost:8000/auth/callback` in the Spotify Developer Dashboard.
+Make sure your Spotify app's redirect URI includes `http://localhost:8000/auth/callback`.
 
 ### 2. Start services
 
@@ -92,7 +105,7 @@ Make sure your Spotify app's redirect URI is set to `http://localhost:8000/auth/
 docker-compose up --build -d
 ```
 
-Services start in dependency order: postgres (health check) -> api (health check) -> collector, frontend.
+Services start in dependency order: postgres (health check) -> api (health check) -> collector, frontend, explorer.
 
 ### 3. Run database migrations
 
@@ -106,17 +119,21 @@ Open [http://localhost:8000/auth/login](http://localhost:8000/auth/login) in you
 
 ### 5. Open the admin dashboard
 
-Open [http://localhost:8001](http://localhost:8001) to see the admin dashboard. From here you can monitor sync status, manage users, upload ZIP imports, and browse logs.
+Open [http://localhost:8001](http://localhost:8001) to monitor sync status, manage users, upload ZIP imports, browse logs, and configure settings.
 
-### 6. Query via MCP tools
+### 6. Open the user explorer
 
-Once the collector has gathered some history (it polls every 10 minutes by default), you can invoke MCP tools:
+Open [http://localhost:8002](http://localhost:8002) to browse your listening history, taste profile, and AI-created playlists.
+
+### 7. Query via MCP tools
+
+Once the collector has gathered some history (polls every 10 minutes by default):
 
 ```bash
 curl -X POST http://localhost:8000/mcp/call \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d '{"tool": "history.taste_summary", "args": {"days": 90, "user_id": 1}}'
+  -d '{"tool": "history.taste_summary", "days": 90, "user_id": 1}'
 ```
 
 ---
@@ -144,6 +161,9 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | Variable | Default | Description |
 |---|---|---|
 | `TOKEN_ENCRYPTION_KEY` | *(required)* | Fernet key for encrypting refresh tokens at rest |
+| `JWT_SECRET_KEY` | *(required)* | HMAC secret for signing JWT access tokens (explorer auth) |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Explorer JWT access token TTL |
+| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | `7` | Explorer JWT refresh token TTL |
 | `ADMIN_AUTH_MODE` | `token` | Admin auth method: `token` or `basic` |
 | `ADMIN_TOKEN` | *(required if token mode)* | Bearer token for admin API access |
 | `ADMIN_USERNAME` | -- | Username for basic auth mode |
@@ -170,23 +190,25 @@ All configuration is via environment variables. Copy `.env.example` to `.env` an
 | `IMPORT_MAX_ZIP_SIZE_MB` | `500` | Maximum ZIP file size for imports |
 | `IMPORT_MAX_RECORDS` | `5000000` | Maximum records per ZIP import |
 
-### Frontend Settings
+### Frontend / Explorer Settings
 
 | Variable | Default | Description |
 |---|---|---|
-| `API_BASE_URL` | `http://api:8000` | Internal URL for API (used by frontend container) |
+| `API_BASE_URL` | `http://api:8000` | Internal Docker URL for API (used by frontend/explorer containers) |
+| `API_PUBLIC_URL` | `http://localhost:8000` | Browser-facing API URL (used by explorer for OAuth redirects) |
 | `FRONTEND_AUTH_MODE` | `token` | Must match `ADMIN_AUTH_MODE` |
 
 ---
 
 ## MCP Tools
 
-11 tools across 3 categories, all invoked via `POST /mcp/call`:
+34 tools across 5 categories, all invoked via `POST /mcp/call` with flat parameters:
 
 ```json
 {
   "tool": "history.taste_summary",
-  "args": { "days": 90, "user_id": 1 }
+  "days": 90,
+  "user_id": 1
 }
 ```
 
@@ -209,11 +231,39 @@ The tool catalog is available at `GET /mcp/tools`.
 |---|---|
 | `spotify.get_top` | Spotify's native "top items" API (short/medium/long term) |
 | `spotify.search` | Search Spotify for tracks, artists, or albums |
+| `spotify.get_track` | Detailed track info (artists, album, duration, popularity) |
+| `spotify.get_artist` | Detailed artist info (genres, popularity, followers) |
+| `spotify.get_album` | Album details with full track listing |
+| `spotify.list_playlists` | List user's Spotify playlists |
+| `spotify.get_playlist` | Playlist details with full track listing (all pages) |
+| `spotify.create_playlist` | Create a new Spotify playlist |
+| `spotify.add_tracks` | Add tracks to a playlist (max 100, accepts IDs or URIs) |
+| `spotify.remove_tracks` | Remove tracks from a playlist (max 100) |
+| `spotify.update_playlist` | Update playlist name, description, or visibility |
+
+### Memory Tools (persistent AI memory)
+
+| Tool | Description |
+|---|---|
+| `memory.log_preference` | Record a like/dislike/rule/feedback/note preference event |
+| `memory.get_taste_profile` | Retrieve the user's taste profile (genres, artists, moods, rules) |
+| `memory.update_taste_profile` | Merge-patch the taste profile (shallow merge) |
+| `memory.clear_profile` | Reset taste profile to empty; optionally clear preference events |
+| `memory.log_playlist_create` | Create an AI-managed playlist in the ledger |
+| `memory.log_playlist_mutation` | Record a track add/remove/reorder mutation |
+| `memory.get_playlists` | List AI-managed playlists with pagination |
+| `memory.get_playlist` | Get playlist state with full event history |
+| `memory.reconstruct_playlist` | Replay mutations from a snapshot to a target version |
+| `memory.backfill_playlist` | Sync an existing Spotify playlist into the ledger |
+| `memory.search` | Full-text search across playlists, preference events, and taste profile |
+| `memory.export_user_data` | Export all user memory data as structured JSON |
+| `memory.delete_user_data` | Delete all user memory data (irreversible) |
 
 ### Ops Tools (operational status)
 
 | Tool | Description |
 |---|---|
+| `ops.list_users` | List all registered users |
 | `ops.sync_status` | Current sync checkpoint state for a user |
 | `ops.latest_job_runs` | Recent job execution history |
 | `ops.latest_import_jobs` | Recent ZIP import job status |
@@ -222,22 +272,28 @@ The tool catalog is available at `GET /mcp/tools`.
 
 The recommended integration path is **Custom GPT Actions** (OpenAPI over HTTPS):
 
-1. FastAPI auto-generates an OpenAPI spec at `/openapi.json`
-2. Configure a Custom GPT Action pointing at your deployed `spotify-mcp-api` instance
+1. Deploy the API to a public HTTPS endpoint
+2. Configure a Custom GPT Action using `docs/chatgpt-openapi.json` as the schema
 3. Use token auth (`Authorization: Bearer <token>`) stored as a GPT secret
-4. The primary endpoint is `POST /mcp/call` with the JSON body shown above
+4. Follow the setup guide in `docs/chatgpt-gpt-setup.md`
+5. Upload `docs/chatgpt-tool-catalog.md` as a GPT knowledge document
+
+The API accepts flat parameters (all at the top level alongside `tool`) for ChatGPT compatibility.
 
 ---
 
 ## Admin API
 
-13 endpoints under `/admin/`, protected by token or basic auth:
+Endpoints under `/admin/`, protected by token or basic auth:
 
 - **Users**: list, detail, create, update, delete, pause/resume sync, trigger sync
 - **Jobs**: list job runs (filtered by type, user, status)
 - **Imports**: list import jobs, upload ZIP file
 - **Logs**: list logs (filtered by level, source), purge old entries
 - **Status**: sync status overview across all users
+- **Settings**: list/get/update/reset admin-configurable tunables (search weights, page sizes, etc.)
+
+Admin-configurable settings cover search relevance weights, result limits, and playlist pagination — all adjustable at runtime without restarting services.
 
 ---
 
@@ -257,40 +313,21 @@ conda activate spotify-mcp
 pre-commit install
 ```
 
-`environment.yml` installs all four packages (`shared`, `api`, `collector`, `frontend`) as editable installs with dev dependencies. pip reads each package's `pyproject.toml` and resolves the full dependency tree automatically.
+`environment.yml` installs all packages (`shared`, `api`, `collector`, `frontend`, `explorer`) as editable installs with dev dependencies.
 
 ### Without Conda (venv)
 
 ```bash
 python -m venv .venv
-
-# Linux/macOS
-source .venv/bin/activate
-
-# Windows
-.venv\Scripts\activate
+source .venv/bin/activate   # Linux/macOS
+# .venv\Scripts\activate    # Windows
 
 make setup
 ```
 
-`make setup` installs pip-tools, pre-commit, all four packages in editable mode with dev extras, and activates the pre-commit hooks.
-
-### Verify the environment
-
-```bash
-# All 11 models should register
-python -c "from shared.db import Base; print(len(Base.metadata.tables), 'tables')"
-
-# Lint should pass
-make lint
-
-# Type checking
-make typecheck
-```
+`make setup` installs pip-tools, pre-commit, all packages in editable mode with dev extras, and activates the pre-commit hooks.
 
 ### Running services locally
-
-Start Postgres via Docker, then run individual services with an IDE or debugger:
 
 ```bash
 # Start only Postgres
@@ -302,8 +339,11 @@ cd services/api && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 # Run collector locally
 cd services/collector && python -m collector.main
 
-# Run frontend locally
+# Run admin frontend locally
 cd services/frontend && uvicorn frontend.main:app --host 0.0.0.0 --port 8001 --reload
+
+# Run explorer locally
+cd services/explorer && uvicorn explorer.main:app --host 0.0.0.0 --port 8002 --reload
 ```
 
 ### Code quality commands
@@ -334,6 +374,8 @@ make compile-deps   # regenerate pinned requirements from pyproject.toml
 make upgrade-deps   # upgrade all pins to latest allowed versions
 ```
 
+**Important:** After adding dependencies to `pyproject.toml`, always run `make compile-deps` before committing — Docker builds use the pinned `requirements.txt`, not `pyproject.toml` directly.
+
 ### Database migrations
 
 ```bash
@@ -357,75 +399,79 @@ services/
 │   └── src/shared/
 │       ├── config/                # DatabaseSettings, constants
 │       ├── crypto.py              # TokenEncryptor (Fernet encryption)
-│       ├── db/                    # Base, enums, DatabaseManager, models/, operations
+│       ├── db/                    # Base, enums, DatabaseManager, models/, search.py
 │       ├── spotify/               # SpotifyClient, Pydantic models, exceptions
 │       ├── zip_import/            # Parser, normalizers, models for ZIP formats
 │       └── logging/               # Shared logging utilities
 ├── api/                           # spotify-mcp-api (FastAPI, port 8000)
 │   ├── Dockerfile
-│   ├── alembic/                   # Database migrations
+│   ├── alembic/                   # Database migrations (9 revisions)
 │   └── src/app/
 │       ├── main.py                # FastAPI app with lifespan
 │       ├── settings.py            # AppSettings (all env vars)
 │       ├── dependencies.py        # DatabaseManager instance
 │       ├── middleware.py          # CORS, rate limiting, request logging
-│       ├── auth/                  # Spotify OAuth flow (login, callback, tokens, crypto)
+│       ├── auth/                  # Spotify OAuth, JWT service, token management
 │       ├── mcp/                   # MCP tool registry, dispatcher, router
-│       │   └── tools/             # 11 tool handlers (history, spotify, ops)
-│       ├── admin/                 # Admin API (13 endpoints, auth middleware)
-│       ├── history/               # History queries, service, schemas, router
+│       │   └── tools/             # 34 tool handlers across 5 modules
+│       ├── admin/                 # Admin API (auth, users, jobs, settings)
+│       ├── explorer/              # Explorer API endpoints (/api/me/*)
+│       ├── history/               # History queries, service, schemas
 │       ├── spotify/               # Re-exports SpotifyClient from shared
 │       └── logging/               # DatabaseLogHandler, request logging middleware
 ├── collector/                     # spotify-history-collector (Python worker)
 │   ├── Dockerfile
 │   └── src/collector/
 │       ├── main.py                # Priority-based run loop
-│       ├── settings.py            # CollectorSettings (all env vars)
+│       ├── settings.py            # CollectorSettings
 │       ├── polling.py             # Incremental polling service
 │       ├── initial_sync.py        # Backward-paging initial sync
 │       ├── zip_import.py          # ZIP import job processing
 │       ├── job_tracking.py        # Job run lifecycle management
 │       └── tokens.py              # Token refresh for collector
-└── frontend/                      # admin-frontend (FastAPI + Jinja2/HTMX, port 8001)
+├── frontend/                      # admin-frontend (FastAPI + Jinja2/HTMX, port 8001)
+│   ├── Dockerfile
+│   └── src/frontend/
+│       ├── main.py                # FrontendApp with Jinja2, static files
+│       ├── settings.py            # FrontendSettings
+│       ├── api_client.py          # AdminApiClient (httpx wrapper)
+│       ├── routes/                # dashboard, users, jobs, imports, logs, settings
+│       └── templates/             # Page templates + HTMX partials
+└── explorer/                      # explorer (FastAPI + Jinja2/HTMX, port 8002)
     ├── Dockerfile
-    └── src/frontend/
-        ├── main.py                # FrontendApp with Jinja2, static files
-        ├── settings.py            # FrontendSettings
-        ├── api_client.py          # AdminApiClient (httpx wrapper)
-        ├── routes/                # dashboard, users, jobs, imports, logs
-        ├── templates/             # 7 page templates + 8 HTMX partials
-        └── static/                # CSS (Bootstrap 5 sidebar layout)
+    └── src/explorer/
+        ├── main.py                # ExplorerApp with JWT auth middleware
+        ├── settings.py            # ExplorerSettings
+        ├── api_client.py          # ExplorerApiClient (httpx wrapper)
+        └── routes/                # dashboard, history, taste, playlists, memory playlists
 ```
 
 ---
 
 ## Testing
 
-239 tests across three test suites:
+671 tests across four test suites:
 
 | Suite | Tests | Command |
 |---|---|---|
-| API | 171 | `pytest services/api/tests/` |
-| Collector | 28 | `cd services/collector && pytest tests/` |
-| Frontend | 40 | `pytest services/frontend/tests/` |
-| **All** | **239** | `make test` |
+| API | 526 (519 unit + 7 integration) | `pytest services/api/tests/` |
+| Collector | 31 | `cd services/collector && pytest tests/` |
+| Admin Frontend | 66 | `pytest services/frontend/tests/` |
+| Explorer | 48 | `pytest services/explorer/tests/` |
+| **All** | **671** | `make test` |
 
 **Important:** API and collector tests must be run separately (or via `make test`) due to conftest `BigInteger`-SQLite compilation conflicts when run together from the repository root. The `make test` target handles this correctly.
 
-Test coverage reports are available via:
-
-```bash
-make test-cov    # generates HTML coverage report
-```
+Integration tests (marked `@pytest.mark.integration`) require a live PostgreSQL instance and are skipped by default.
 
 ---
 
 ## Database Schema
 
-11 tables organized into three groups:
+24 tables across six groups:
 
-**Core data:**
-- `users` -- Spotify user profiles
+**Core music data:**
+- `users` -- Spotify user profiles and credentials
 - `spotify_tokens` -- Encrypted refresh tokens + cached access tokens
 - `tracks` -- Track metadata (Spotify IDs + local IDs from ZIP imports)
 - `artists` -- Artist metadata
@@ -433,12 +479,31 @@ make test-cov    # generates HTML coverage report
 - `plays` -- Individual play events (unique on `user_id, played_at, track_id`)
 - `audio_features` -- Optional enrichment (danceability, energy, etc.)
 
+**Spotify cache:**
+- `cached_playlists` -- Cached playlist metadata and tracks
+- `cached_playlist_tracks` -- Per-track rows for playlist cache
+- `spotify_entity_cache` -- General-purpose entity cache (tracks, artists, albums)
+
+**AI memory:**
+- `taste_profiles` -- Per-user taste profile (JSONB, versioned)
+- `preference_events` -- Append-only preference log (like/dislike/rule/feedback/note)
+- `memory_playlists` -- AI-managed playlist registry
+- `playlist_snapshots` -- Point-in-time snapshots of playlist state
+- `playlist_events` -- Ordered mutation log (add/remove/reorder)
+
+**Access control:**
+- `permissions` -- Named permission strings
+- `roles` -- User roles (admin, user, etc.)
+- `role_permissions` -- Role-to-permission assignments
+- `user_roles` -- User-to-role assignments
+
 **Operational:**
 - `sync_checkpoints` -- Per-user sync state
 - `job_runs` -- Job execution history (import_zip, initial_sync, poll, enrich)
 - `import_jobs` -- ZIP upload/ingestion tracking
 
-**Observability:**
+**Configuration & observability:**
+- `app_settings` -- Admin-configurable runtime tunables
 - `logs` -- Structured log events for UI browsing (with configurable retention)
 
 ---
@@ -451,7 +516,7 @@ The collector runs a continuous loop with a configurable interval (default: 10 m
 2. **Initial sync** -- Backward-page through Spotify's recently-played API for users that haven't completed initial sync
 3. **Incremental polling** -- Fetch new plays for all active users
 
-**ZIP import support:** Upload Spotify's "Download your data" exports (Extended Streaming History) through the admin frontend or API. The system handles both `endsong_*.json` and `StreamingHistory*.json` formats with streaming JSON parsing, batch transactions, and safety caps on file size and record count.
+**ZIP import support:** Upload Spotify's "Download your data" exports (Extended Streaming History) through the admin frontend or API. Handles both `endsong_*.json` and `StreamingHistory*.json` formats with streaming JSON parsing, batch transactions, and safety caps on file size and record count.
 
 **Initial sync strategy:** Pages backward through `/me/player/recently-played` using the `before` parameter, stopping when it hits an empty batch, no progress, the configured day limit, or the request cap.
 
@@ -463,10 +528,11 @@ The collector runs a continuous loop with a configurable interval (default: 10 m
 
 ```bash
 curl http://localhost:8000/healthz   # API
-curl http://localhost:8001/healthz   # Frontend
+curl http://localhost:8001/healthz   # Admin frontend
+curl http://localhost:8002/healthz   # Explorer
 ```
 
-Both return `200 OK` with a JSON body when healthy. Docker Compose uses these for dependency ordering and restart policies.
+All return `200 OK` with a JSON body when healthy. Docker Compose uses these for dependency ordering and restart policies.
 
 ---
 
@@ -475,9 +541,10 @@ Both return `200 OK` with a JSON body when healthy. Docker Compose uses these fo
 - **Python 3.14** -- PEP 649 lazy annotation evaluation is the default; no `from __future__ import annotations` needed
 - **Async everywhere** -- `asyncpg` + SQLAlchemy 2.0 async sessions, `httpx.AsyncClient` for all HTTP
 - **Pydantic v2** for all request/response models and settings
-- **Tokens encrypted at rest** using Fernet symmetric encryption
+- **Tokens encrypted at rest** using Fernet symmetric encryption; JWT auth via HS256
 - **Deterministic local track IDs** for ZIP imports without Spotify URIs: `local:<sha1(artist|track|album)>`
-- **Database-first design** -- all sync state, job history, and logs stored in Postgres (no external queues or caches)
+- **Database-first design** -- all sync state, job history, memory, and logs stored in Postgres (no external queues or caches)
+- **In-process TTL cache** for admin settings (5-minute TTL per key, per worker); settings are runtime-configurable without restart
 - **Strict type checking** -- mypy strict mode, complete type hints, `StrEnum` for all enumerations
 
 ---
