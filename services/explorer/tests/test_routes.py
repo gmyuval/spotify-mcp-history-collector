@@ -342,7 +342,7 @@ def test_memory_playlist_detail_page(client: TestClient, mock_api: AsyncMock) ->
     response = client.get("/playlists/memory/sp_abc123")
     assert response.status_code == 200
     assert "My AI Playlist" in response.text
-    assert "track1" in response.text
+    assert "Track One" in response.text
     mock_api.get_memory_playlist.assert_called_once_with("test-jwt", "sp_abc123")
     client.cookies.clear()
 

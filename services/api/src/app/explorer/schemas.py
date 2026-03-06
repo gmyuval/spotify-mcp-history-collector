@@ -154,6 +154,12 @@ class MemoryPlaylistEventItem(BaseModel):
     payload: dict[str, Any]
 
 
+class MemoryPlaylistTrack(BaseModel):
+    spotify_track_id: str
+    track_name: str | None = None
+    artists: list[PlaylistTrackArtist] = []
+
+
 class MemoryPlaylistDetail(BaseModel):
     playlist_id: str
     name: str
@@ -162,7 +168,7 @@ class MemoryPlaylistDetail(BaseModel):
     updated_at: str
     intent_tags: list[str]
     seed_context: dict[str, Any]
-    track_ids: list[str]
+    tracks: list[MemoryPlaylistTrack]
     recent_events: list[MemoryPlaylistEventItem]
     total_events: int
 

@@ -132,7 +132,11 @@ def _default_mock_api() -> AsyncMock:
         "updated_at": "2026-03-01T12:00:00",
         "intent_tags": ["upbeat", "metal"],
         "seed_context": {"days": 30},
-        "track_ids": ["track1", "track2", "track3"],
+        "tracks": [
+            {"spotify_track_id": "track1", "track_name": "Track One", "artists": []},
+            {"spotify_track_id": "track2", "track_name": "Track Two", "artists": []},
+            {"spotify_track_id": "track3", "track_name": "Track Three", "artists": []},
+        ],
         "recent_events": [
             {
                 "event_id": "evt-123",
