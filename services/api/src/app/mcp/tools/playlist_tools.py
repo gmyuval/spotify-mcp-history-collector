@@ -322,6 +322,7 @@ class PlaylistToolHandlers:
                     embed_exc,
                 )
                 tracks_restricted = True
+                tracks_source = "restricted"
 
         # Determine if restricted playlist is private — embed only works for public playlists.
         # pl.public is bool | None; treat None as non-public (private or collaborative).

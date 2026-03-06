@@ -133,7 +133,11 @@ class SettingsService:
                 .values(key=key, value_json=value, description=description, category=category)
                 .on_conflict_do_update(
                     index_elements=["key"],
-                    set_={"value_json": value},
+                    set_={
+                        "value_json": value,
+                        "description": description,
+                        "category": category,
+                    },
                 )
                 .returning(AppSetting)
             )

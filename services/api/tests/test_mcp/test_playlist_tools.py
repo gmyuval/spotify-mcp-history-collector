@@ -139,6 +139,28 @@ async def seeded_user_no_write_scopes(async_engine: AsyncEngine) -> int:
     return uid
 
 
+@pytest.fixture
+async def seeded_user_without_private_scope(async_engine: AsyncEngine) -> int:
+    """User with a SpotifyToken that explicitly lacks playlist-read-private."""
+    encryptor = Fernet(TEST_FERNET_KEY.encode())
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        user = User(spotify_user_id="plnoprivate", display_name="No Private Scope")
+        session.add(user)
+        await session.flush()
+        token = SpotifyToken(
+            user_id=user.id,
+            encrypted_refresh_token=encryptor.encrypt(b"fake-refresh").decode(),
+            access_token="fake-access",
+            scope="user-read-recently-played",
+        )
+        session.add(token)
+        await session.flush()
+        uid = user.id
+        await session.commit()
+    return uid
+
+
 # ---------------------------------------------------------------------------
 # spotify.get_track
 # ---------------------------------------------------------------------------
@@ -589,17 +611,23 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user_with_sc
         assert data["result"]["name"] == "Fully Restricted"
         assert data["result"]["tracks"] == []
         assert data["result"]["tracks_restricted"] is True
+        assert data["result"]["tracks_source"] == "restricted"
         assert "memory.backfill_playlist" in data["result"]["tracks_restricted_reason"]
 
 
-def test_get_playlist_403_missing_read_private_scope(client: TestClient, seeded_user: int) -> None:
-    """When the token lacks playlist-read-private, the reason says to re-authorize.
+def test_get_playlist_403_missing_read_private_scope(
+    client: TestClient, seeded_user_without_private_scope: int
+) -> None:
+    """When the token exists but lacks playlist-read-private, the reason says to re-authorize.
 
-    seeded_user has no SpotifyToken at all, so the scope check returns empty → re-auth hint.
+    Uses seeded_user_without_private_scope which has a SpotifyToken with scope
+    "user-read-recently-played" (no playlist-read-private), exercising the DB
+    scope-check code path in the handler.
     """
     from app.mcp.tools.playlist_tools import _instance as playlist_instance
     from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
 
+    user_id = seeded_user_without_private_scope
     with patch(
         "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
         new_callable=AsyncMock,
@@ -627,7 +655,7 @@ def test_get_playlist_403_missing_read_private_scope(client: TestClient, seeded_
         # Seed cache
         client.post(
             "/mcp/call",
-            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
+            json={"tool": "spotify.list_playlists", "user_id": user_id, "limit": 50},
         )
 
         with patch.object(
@@ -640,13 +668,14 @@ def test_get_playlist_403_missing_read_private_scope(client: TestClient, seeded_
                 "/mcp/call",
                 json={
                     "tool": "spotify.get_playlist",
-                    "user_id": seeded_user,
+                    "user_id": user_id,
                     "playlist_id": "pl_missing_scope",
                 },
             )
         data = resp.json()
         assert data["success"] is True
         assert data["result"]["tracks_restricted"] is True
+        assert data["result"]["tracks_source"] == "restricted"
         assert "re-authorize" in data["result"]["tracks_restricted_reason"]
         assert "playlist-read-private" in data["result"]["tracks_restricted_reason"]
 

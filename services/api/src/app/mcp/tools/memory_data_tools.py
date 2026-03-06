@@ -244,13 +244,13 @@ class MemoryDataToolHandlers:
         for event in result.scalars().all():
             payload = event.payload_json
             raw_text = str(payload.get("raw_text", "")) if isinstance(payload, dict) else ""
-            snippet_text = raw_text if raw_text else _snippet(json.dumps(payload), snippet_max)
+            snippet_text = _snippet(raw_text if raw_text else json.dumps(payload), snippet_max)
             results.append(
                 {
                     "kind": "preference_event",
                     "id": str(event.event_id),
                     "score": score,
-                    "snippet": f"{event.type}: {_snippet(snippet_text, snippet_max)}",
+                    "snippet": f"{event.type}: {snippet_text}",
                     "metadata": {
                         "type": event.type,
                         "source": event.source,

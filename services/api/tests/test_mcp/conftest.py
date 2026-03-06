@@ -1,5 +1,6 @@
 """Shared fixtures for MCP tool tests."""
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -8,7 +9,7 @@ from app.middleware import RateLimitMiddleware
 
 
 @pytest.fixture(autouse=True)
-def _mock_force_refresh_token() -> None:
+def _mock_force_refresh_token() -> Generator[None]:
     """Prevent _force_refresh_token from calling TokenManager with lru-cached prod settings.
 
     Tests mock _get_client at the method level so real token I/O never happens.
