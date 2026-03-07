@@ -287,26 +287,23 @@ class PlaylistToolHandlers:
                     raise
                 logger.warning(
                     "Spotify returned 403 after token refresh for GET /playlists/%s/tracks "
-                    "(detail: %s) — trying metadata-endpoint pagination fallback",
+                    "(detail: %s) — using tracks from metadata response",
                     playlist_id,
                     retry_exc.detail,
                 )
-                # Fallback: paginate via GET /playlists/{id}?offset=X&limit=Y
-                # which is not blocked in Spotify's development mode.
-                try:
-                    tracks = _parse_track_items(await _retry_client.get_playlist_all_tracks_via_metadata(playlist_id))
+                # Fallback: use tracks already embedded in the GET /playlists/{id}
+                # response (up to 100). The separate /tracks endpoint is blocked in
+                # Spotify's development mode, but the main playlist endpoint works.
+                if pl is not None and pl.tracks and pl.tracks.items:
+                    tracks = _parse_track_items(pl.tracks.items)
                     tracks_source = "api_metadata"
                     logger.info(
-                        "Metadata-endpoint pagination succeeded for playlist %s (%d tracks)",
-                        playlist_id,
+                        "Using %d tracks from metadata response for playlist %s (total reported: %s)",
                         len(tracks),
-                    )
-                except Exception:
-                    logger.warning(
-                        "Metadata-endpoint pagination also failed for playlist %s — trying embed fallback",
                         playlist_id,
-                        exc_info=True,
+                        pl.tracks.total,
                     )
+                else:
                     _need_embed = True
 
         if _need_embed:
