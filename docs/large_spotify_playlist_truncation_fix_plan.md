@@ -10,61 +10,58 @@ Playlists with >100 tracks are truncated to exactly 100 tracks when fetched via 
 
 Small/medium playlists (<100 tracks) work correctly.
 
-## Root Cause
+## Root Cause (confirmed via production logs)
 
-Spotify reduced the max `limit` for `GET /playlists/{id}/tracks` from 100 to 50. The latest Spotify API reference states:
+**`GET /playlists/{id}/tracks` returns 403 Forbidden** in Spotify's development mode for non-owned playlists. The existing embed fallback only extracts ~100 tracks with no pagination.
 
-> `limit: Default: 20. Minimum: 1. Maximum: 50. Range: 0 - 50`
+The flow was:
+1. `GET /playlists/{id}` → 200 OK (metadata + first 100 embedded tracks)
+2. `GET /playlists/{id}/tracks?limit=50&offset=0` → **403 Forbidden**
+3. Token refresh + retry → still 403
+4. Embed fallback → 100 tracks from HTML (no pagination)
 
-Our `get_playlist_all_tracks()` in `services/shared/src/shared/spotify/client.py` requests `limit=100`. When Spotify receives a limit above its max, it returns up to 100 items (legacy tolerance) but does NOT set the `next` URL — causing the pagination loop to exit after one iteration.
+### Investigation timeline
 
-## Code Paths Investigated
+1. **Initial hypothesis (wrong):** Spotify reduced max `limit` from 100 to 50, breaking pagination. Fix: reduced page_size to 50 and added offset fallback. Deployed — bug persisted.
 
-1. **`spotify.get_playlist` MCP handler** (`services/api/src/app/mcp/tools/playlist_tools.py:264`) — calls `client.get_playlist_all_tracks(playlist_id)` correctly
-2. **`get_playlist_all_tracks()`** (`services/shared/src/shared/spotify/client.py:302-333`) — pagination loop follows `page.next`, but `page.next` is `None` after the first page due to oversized limit
-3. **Cache layer** (`services/api/src/app/cache/service.py`) — correctly detects stale entries (`len(cached_tracks) >= cached_total` guard at line 209)
-4. **`memory.backfill_playlist`** (`services/api/src/app/mcp/tools/playlist_ledger_tools.py:839`) — delegates to `get_playlist()`, inherits the same truncation
+2. **Production logs revealed:** The `/tracks` endpoint returns 403 entirely. The page_size was irrelevant.
 
-## Changes
+3. **Attempted fix (broken):** Added `get_playlist_all_tracks_via_metadata()` to paginate via `GET /playlists/{id}?offset=X&limit=Y`. Deployed — caused duplication bug (200 tracks for 180-track playlist).
 
-### 1. Reduce `page_size` to 50 (`client.py`)
+4. **Final discovery:** `GET /playlists/{id}?offset=X` does NOT paginate embedded tracks. Spotify ignores offset/limit params and always returns the first 100 tracks, causing duplicates.
 
-- Change default `page_size` from `100` to `50`
-- Change clamp: `min(page_size, 50)` instead of `min(page_size, 100)`
-- Matches Spotify's current documented maximum
+## Final Fix
 
-### 2. Add offset-based pagination fallback (`client.py`)
+When `GET /playlists/{id}/tracks` returns 403:
+1. Token refresh + retry `/tracks` (existing)
+2. **Use `pl.tracks.items`** from the already-fetched metadata response — no separate API call needed
+3. Embed fallback (last resort if metadata is also 403)
 
-If `page.next` is `None` but `len(all_items) < page.total`, manually compute the next offset and continue. Guards against Spotify API quirks where `next` is unexpectedly absent.
+This correctly returns the first 100 tracks from the metadata response with `tracks_source: "api_metadata"` and a mismatch warning when `tracks_total > 100`.
 
-### 3. Add debug logging to pagination loop (`client.py`)
+### Limitation
 
-Log each page: offset, items received, `next` URL presence, running total. Aids future debugging.
+In Spotify's development mode, only the first ~100 tracks of non-owned playlists are accessible. Full track lists require either:
+- **Extended Quota Mode** approval from Spotify
+- **Manual backfill** via `memory.backfill_playlist` with `track_ids` parameter
 
-### 4. Update pagination tests
+## Changes Made
 
-Add/update tests for:
-- Playlist with >100 tracks (multi-page pagination)
-- `next` URL absent but items remaining (fallback path)
-- Normal single-page playlist (no regression)
+### `services/shared/src/shared/spotify/client.py`
+- Reduced `page_size` default from 100 to 50 (matching current Spotify API limits)
+- Added offset-based fallback pagination when `next` URL is absent
+- Added debug logging to pagination loop
 
-### 5. Docker integration test
+### `services/api/src/app/mcp/tools/playlist_tools.py`
+- When `/tracks` returns 403 after token refresh, use `pl.tracks.items` from the metadata response
+- Set `tracks_source = "api_metadata"` for these responses
 
-- `docker-compose up --build`
-- Call `spotify.get_playlist` for the two affected playlists via MCP
-- Verify `tracks_returned == tracks_total` and no `tracks_mismatch_warning`
-- `docker-compose down`
+### Tests
+- Added pagination tests (offset fallback, 180-track large playlist)
+- Added metadata tracks fallback handler test
+- Updated existing 403/embed tests for new fallback chain
 
 ## Not in Scope
-
 - No ChatGPT instruction changes — tool shape unchanged
-- No new MCP tools — internal pagination is sufficient
+- No new MCP tools
 - No database migrations
-- No schema changes
-
-## Acceptance Criteria
-
-1. Metal Classics: `tracks_returned == tracks_total` (180)
-2. Classic Rock Classics: `tracks_returned == tracks_total` (300)
-3. Small playlists: no regression
-4. All existing tests pass

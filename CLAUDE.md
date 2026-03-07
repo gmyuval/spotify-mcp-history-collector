@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Always use Context7 MCP when library/API documentation, code generation, setup or configuration steps are needed — without the user having to explicitly ask.
 
+## GitHub MCP
+
+Always use GitHub MCP tools (e.g. `mcp__github__*`) for GitHub operations — creating PRs, listing issues, reading PR comments, etc. — whenever they have relevant functions available, instead of falling back to `gh` CLI.
+
 ## Project Overview
 
 This is a containerized system that enables ChatGPT-style assistants to analyze Spotify listening patterns by collecting playback history over time and exposing it via an MCP-compatible tool interface.
