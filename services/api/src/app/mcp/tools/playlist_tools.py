@@ -1,6 +1,7 @@
 """MCP tool handlers for Spotify playlist operations — class-based."""
 
 import logging
+from collections import Counter
 from typing import Any
 
 from sqlalchemy import select
@@ -223,8 +224,6 @@ class PlaylistToolHandlers:
                         and len(_cached_ids) != _unique_count
                         and len(_cached_ids) % _unique_count == 0
                     ):
-                        from collections import Counter
-
                         _counts = Counter(_cached_ids)
                         _max_count = _counts.most_common(1)[0][1]
                         _uniform = sum(1 for c in _counts.values() if c == _max_count)
