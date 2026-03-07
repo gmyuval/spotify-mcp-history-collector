@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Context7 MCP
+
+Always use Context7 MCP when library/API documentation, code generation, setup or configuration steps are needed — without the user having to explicitly ask.
+
 ## Project Overview
 
 This is a containerized system that enables ChatGPT-style assistants to analyze Spotify listening patterns by collecting playback history over time and exposing it via an MCP-compatible tool interface.

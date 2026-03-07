@@ -619,6 +619,69 @@ async def test_get_playlist_all_tracks_respects_max_tracks() -> None:
     assert not page2_route.called
 
 
+@respx.mock
+async def test_get_playlist_all_tracks_fallback_offset_pagination() -> None:
+    """When Spotify omits `next` URL but more items remain, fall back to manual offset."""
+    # Simulate Spotify returning items but with next=None (observed with limit>50).
+    responses = iter(
+        [
+            httpx.Response(
+                200,
+                json=_playlist_tracks_page(["t1", "t2", "t3"], total=5),
+            ),
+            httpx.Response(
+                200,
+                json=_playlist_tracks_page(["t4", "t5"], total=5),
+            ),
+        ]
+    )
+    respx.get("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+        side_effect=lambda _request: next(responses),
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    items = await client.get_playlist_all_tracks("pl1", page_size=3)
+    assert len(items) == 5
+    assert [it.track.id for it in items if it.track] == ["t1", "t2", "t3", "t4", "t5"]
+
+
+@respx.mock
+async def test_get_playlist_all_tracks_large_playlist() -> None:
+    """Playlist with >100 tracks is fully fetched across multiple pages."""
+    total = 180
+    page_size = 50
+    track_ids = [f"t{i}" for i in range(total)]
+
+    pages = []
+    for offset in range(0, total, page_size):
+        chunk = track_ids[offset : offset + page_size]
+        next_offset = offset + page_size
+        next_url = (
+            f"https://api.spotify.com/v1/playlists/pl1/tracks?offset={next_offset}&limit={page_size}"
+            if next_offset < total
+            else None
+        )
+        pages.append(
+            httpx.Response(
+                200,
+                json=_playlist_tracks_page(chunk, total=total, next_url=next_url),
+            )
+        )
+
+    responses = iter(pages)
+    respx.get("https://api.spotify.com/v1/playlists/pl1/tracks").mock(
+        side_effect=lambda _request: next(responses),
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    items = await client.get_playlist_all_tracks("pl1", page_size=page_size)
+    assert len(items) == 180
+    assert items[0].track is not None
+    assert items[0].track.id == "t0"
+    assert items[179].track is not None
+    assert items[179].track.id == "t179"
+
+
 # ---------------------------------------------------------------------------
 # Playlist write methods
 # ---------------------------------------------------------------------------
