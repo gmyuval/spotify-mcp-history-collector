@@ -363,6 +363,57 @@ class SpotifyClient:
 
         return all_items[:max_tracks]
 
+    async def get_playlist_all_tracks_via_metadata(
+        self,
+        playlist_id: str,
+        *,
+        page_size: int = 50,
+        max_tracks: int = 10_000,
+    ) -> list[SpotifyPlaylistTrackItem]:
+        """Fetch all tracks by paginating through ``GET /playlists/{id}``.
+
+        This is a fallback for when ``GET /playlists/{id}/tracks`` returns 403
+        (common in Spotify's development mode for non-owned playlists).
+        The main playlist endpoint supports ``limit`` and ``offset`` params
+        for the embedded tracks paging object and is not blocked.
+        """
+        all_items: list[SpotifyPlaylistTrackItem] = []
+        base_url = f"{PLAYLIST_URL}/{playlist_id}"
+        clamped_limit = min(page_size, 100)  # /playlists/{id} supports limit up to 100
+        offset = 0
+        page_total: int | None = None
+
+        while len(all_items) < max_tracks:
+            response = await self._request(
+                "GET",
+                base_url,
+                params={"limit": clamped_limit, "offset": offset},
+            )
+            pl = SpotifyPlaylist.model_validate(response.json())
+            if pl.tracks is None or not pl.tracks.items:
+                break
+
+            all_items.extend(pl.tracks.items)
+            if pl.tracks.total is not None:
+                page_total = pl.tracks.total
+
+            logger.debug(
+                "Playlist %s metadata-pagination: offset=%d, received=%d, running_total=%d, reported_total=%s",
+                playlist_id,
+                offset,
+                len(pl.tracks.items),
+                len(all_items),
+                page_total,
+            )
+
+            # Stop if we've fetched everything
+            if page_total is not None and len(all_items) >= page_total:
+                break
+
+            offset += len(pl.tracks.items)
+
+        return all_items[:max_tracks]
+
     # -------------------------------------------------------------------
     # Playlist write methods
     # -------------------------------------------------------------------

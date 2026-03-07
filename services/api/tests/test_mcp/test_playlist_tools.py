@@ -1,6 +1,7 @@
 """Tests for spotify info + playlist tools invoked through the MCP dispatcher."""
 
 from collections.abc import AsyncGenerator, Generator
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -554,11 +555,15 @@ def test_get_playlist_403_fallback(client: TestClient, seeded_user: int) -> None
 
 
 def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user_with_scopes: int) -> None:
-    """get_playlist returns metadata with restriction notice when both endpoints 403.
+    """get_playlist returns metadata with restriction notice when all fallbacks fail.
 
     In Spotify dev mode, both GET /playlists/{id} and GET /playlists/{id}/tracks
-    may return 403 (Extended Quota Mode required). The handler should return
-    cached metadata with a clear restriction message, including a backfill hint.
+    may return 403 (Extended Quota Mode required). The handler tries:
+    1. GET /playlists/{id}/tracks (403)
+    2. Token refresh + retry (403)
+    3. Metadata-endpoint pagination via GET /playlists/{id}?offset&limit (fails)
+    4. Embed fallback (fails)
+    Then returns cached metadata with a clear restriction message.
     """
     from app.mcp.tools.playlist_tools import _instance as playlist_instance
     from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
@@ -571,6 +576,7 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user_with_sc
         # Both endpoints return 403
         mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks_via_metadata = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_get_client.return_value = mock_client
 
         # Seed cache with metadata via list_playlists first
@@ -615,6 +621,67 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user_with_sc
         assert "memory.backfill_playlist" in data["result"]["tracks_restricted_reason"]
 
 
+def test_get_playlist_403_metadata_pagination_fallback(client: TestClient, seeded_user: int) -> None:
+    """get_playlist uses metadata-endpoint pagination when /tracks returns 403.
+
+    When GET /playlists/{id}/tracks is blocked (Spotify dev mode), the handler
+    should paginate via GET /playlists/{id}?offset=X&limit=Y which is not blocked.
+    """
+    from shared.spotify.exceptions import SpotifyRequestError
+
+    mock_metadata_tracks = [
+        SpotifyPlaylistTrackItem(
+            track=SpotifyTrack(
+                id=f"t{i}",
+                name=f"Track {i}",
+                artists=[SpotifyArtistSimplified(id="a1", name="Artist")],
+            ),
+            added_at="2025-01-01T00:00:00Z",
+        )
+        for i in range(180)
+    ]
+
+    with (
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+            new_callable=AsyncMock,
+        ) as mock_get_client,
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._force_refresh_token",
+            new_callable=AsyncMock,
+        ),
+    ):
+        mock_client = AsyncMock()
+        # GET /playlists/{id} works (returns metadata)
+        mock_client.get_playlist = AsyncMock(
+            return_value=SpotifyPlaylist(
+                id="pl_large",
+                name="Large Playlist",
+                public=True,
+                owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+                snapshot_id="snap_large",
+                tracks=SpotifyPlaylistTracks(items=[], total=180),
+            )
+        )
+        # GET /playlists/{id}/tracks returns 403
+        mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        # Metadata pagination fallback succeeds
+        mock_client.get_playlist_all_tracks_via_metadata = AsyncMock(return_value=mock_metadata_tracks)
+        mock_get_client.return_value = mock_client
+
+        resp = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_large"},
+        )
+        data = resp.json()
+        assert data["success"] is True
+        assert data["result"]["tracks_returned"] == 180
+        assert data["result"]["tracks_total"] == 180
+        assert data["result"]["tracks_source"] == "api_metadata"
+        assert "tracks_mismatch_warning" not in data["result"]
+        mock_client.get_playlist_all_tracks_via_metadata.assert_called_once_with("pl_large")
+
+
 def test_get_playlist_403_missing_read_private_scope(
     client: TestClient, seeded_user_without_private_scope: int
 ) -> None:
@@ -635,6 +702,7 @@ def test_get_playlist_403_missing_read_private_scope(
         mock_client = AsyncMock()
         mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks_via_metadata = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_client.get_user_playlists = AsyncMock(
             return_value=UserPlaylistsResponse(
                 items=[
@@ -995,7 +1063,7 @@ def test_create_playlist_no_token(client: TestClient, seeded_user: int) -> None:
 
 
 def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user: int) -> None:
-    """get_playlist falls back to embed endpoint when API returns 403, and returns tracks."""
+    """get_playlist falls back to embed endpoint when all API paths return 403."""
     from app.mcp.tools.playlist_tools import _instance as playlist_instance
     from shared.spotify.exceptions import SpotifyRequestError
     from shared.spotify.models import EmbedTrackItem
@@ -1007,6 +1075,7 @@ def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user
         mock_client = AsyncMock()
         mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks_via_metadata = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_get_client.return_value = mock_client
 
         # Seed cache via list_playlists
@@ -1223,6 +1292,7 @@ def test_get_playlist_embed_unavailable_placeholder(client: TestClient, seeded_u
         mock_client = AsyncMock()
         mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks_via_metadata = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_get_client.return_value = mock_client
 
         # Seed cache via list_playlists
@@ -1302,7 +1372,7 @@ def test_get_playlist_cache_hit_fidelity_fields(client: TestClient, seeded_user:
         ),
     ]
 
-    def _assert_fidelity(result: dict) -> None:
+    def _assert_fidelity(result: dict[str, Any]) -> None:
         assert result["tracks_returned"] == 3
         assert result["tracks_unavailable"] == 1
         assert "tracks_mismatch_warning" not in result  # returned == total (3 == 3)
