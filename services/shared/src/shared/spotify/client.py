@@ -318,6 +318,8 @@ class SpotifyClient:
         Returns:
             Complete list of playlist track items across all pages.
         """
+        if page_size < 1:
+            raise ValueError("page_size must be at least 1")
         all_items: list[SpotifyPlaylistTrackItem] = []
         # Use /items (not /tracks) — Spotify's dev mode blocks /tracks
         # with 403, but the newer /items endpoint works and paginates correctly.
@@ -370,6 +372,14 @@ class SpotifyClient:
                 url = page.next
                 params = None
             elif page_total and len(all_items) < page_total:
+                if not page.items:
+                    logger.warning(
+                        "Playlist %s: pagination stalled — %d/%d items fetched, empty page with no next URL. Stopping.",
+                        playlist_id,
+                        len(all_items),
+                        page_total,
+                    )
+                    break
                 # Fallback: `next` is absent but more items remain.
                 # Manually compute the next offset and continue.
                 logger.info(

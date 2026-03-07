@@ -650,7 +650,7 @@ def test_get_playlist_403_metadata_tracks_fallback(client: TestClient, seeded_us
         patch(
             "app.mcp.tools.playlist_tools.PlaylistToolHandlers._force_refresh_token",
             new_callable=AsyncMock,
-        ),
+        ) as mock_force_refresh_token,
     ):
         mock_client = AsyncMock()
         # GET /playlists/{id} works — returns metadata with embedded tracks
@@ -674,6 +674,9 @@ def test_get_playlist_403_metadata_tracks_fallback(client: TestClient, seeded_us
         )
         data = resp.json()
         assert data["success"] is True
+        # Verify the refresh+retry path was exercised before falling back to metadata
+        mock_force_refresh_token.assert_awaited_once()
+        assert mock_client.get_playlist_all_tracks.await_count == 2
         # We get 100 tracks from metadata (Spotify caps embedded tracks at 100)
         assert data["result"]["tracks_returned"] == 100
         assert data["result"]["tracks_total"] == 180

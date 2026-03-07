@@ -310,7 +310,7 @@ class PlaylistToolHandlers:
                 # Fallback: use tracks already embedded in the GET /playlists/{id}
                 # response (up to 100). The separate /tracks endpoint is blocked in
                 # Spotify's development mode, but the main playlist endpoint works.
-                if pl is not None and pl.tracks and pl.tracks.items:
+                if pl is not None and pl.tracks and (pl.tracks.items or pl.tracks.total == 0):
                     tracks = _parse_track_items(pl.tracks.items)
                     tracks_source = "api_metadata"
                     logger.info(

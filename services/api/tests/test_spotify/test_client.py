@@ -635,8 +635,16 @@ async def test_get_playlist_all_tracks_fallback_offset_pagination() -> None:
             ),
         ]
     )
+    expected_params = iter([("0", "3"), ("3", "3")])
+
+    def _mock(request: httpx.Request) -> httpx.Response:
+        exp_offset, exp_limit = next(expected_params)
+        assert request.url.params["offset"] == exp_offset
+        assert request.url.params["limit"] == exp_limit
+        return next(responses)
+
     respx.get("https://api.spotify.com/v1/playlists/pl1/items").mock(
-        side_effect=lambda _request: next(responses),
+        side_effect=_mock,
     )
 
     client = SpotifyClient("test-token", max_retries=0)
@@ -669,8 +677,17 @@ async def test_get_playlist_all_tracks_large_playlist() -> None:
         )
 
     responses = iter(pages)
+    # Expected offsets: 0, 50, 100, 150 (pages 2-4 use next URL with baked-in params)
+    expected_offsets = iter(["0", "50", "100", "150"])
+
+    def _mock(request: httpx.Request) -> httpx.Response:
+        exp_offset = next(expected_offsets)
+        assert request.url.params["offset"] == exp_offset
+        assert request.url.params["limit"] == str(page_size)
+        return next(responses)
+
     respx.get("https://api.spotify.com/v1/playlists/pl1/items").mock(
-        side_effect=lambda _request: next(responses),
+        side_effect=_mock,
     )
 
     client = SpotifyClient("test-token", max_retries=0)
