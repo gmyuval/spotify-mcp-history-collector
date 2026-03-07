@@ -320,7 +320,9 @@ class SpotifyClient:
         """
         all_items: list[SpotifyPlaylistTrackItem] = []
         seen_keys: set[tuple[str | None, str | None]] = set()
-        base_url = f"{PLAYLIST_URL}/{playlist_id}/tracks"
+        # Use /items (not /tracks) — Spotify's dev mode blocks /tracks
+        # with 403, but the newer /items endpoint works and paginates correctly.
+        base_url = f"{PLAYLIST_URL}/{playlist_id}/items"
         clamped_limit = min(page_size, 50)
         url: str | None = base_url
         params: dict[str, str | int] | None = {"limit": clamped_limit, "offset": 0}
