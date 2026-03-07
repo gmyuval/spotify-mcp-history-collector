@@ -394,10 +394,17 @@ class PlaylistToolHandlers:
             result["tracks_unavailable"] = tracks_unavailable
         tracks_total = result.get("tracks_total", 0)
         if tracks_returned != tracks_total and not tracks_restricted:
-            result["tracks_mismatch_warning"] = (
+            mismatch_msg = (
                 f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
                 f"{tracks_unavailable} unavailable placeholder(s) included."
             )
+            if tracks_source in ("api_metadata", "embed"):
+                mismatch_msg += (
+                    " The Spotify Web API in development mode limits track retrieval to ~100 "
+                    "for this playlist. You can use memory.backfill_playlist with the track_ids "
+                    "parameter to log the complete track list if you have it."
+                )
+            result["tracks_mismatch_warning"] = mismatch_msg
 
         if tracks_restricted:
             result["tracks_restricted"] = True
