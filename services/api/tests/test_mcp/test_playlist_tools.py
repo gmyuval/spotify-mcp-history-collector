@@ -494,7 +494,7 @@ def test_get_playlist_403_fallback(client: TestClient, seeded_user: int) -> None
     """get_playlist falls back to cached metadata when Spotify returns 403.
 
     Spotify may return 403 for GET /playlists/{id} in dev mode while
-    GET /playlists/{id}/tracks still works. The handler should use cached
+    GET /playlists/{id}/items still works. The handler should use cached
     metadata from list_playlists and fetch tracks via pagination.
     """
     from shared.spotify.exceptions import SpotifyRequestError
@@ -557,11 +557,11 @@ def test_get_playlist_403_fallback(client: TestClient, seeded_user: int) -> None
 def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user_with_scopes: int) -> None:
     """get_playlist returns metadata with restriction notice when all fallbacks fail.
 
-    In Spotify dev mode, both GET /playlists/{id} and GET /playlists/{id}/tracks
+    In Spotify dev mode, both GET /playlists/{id} and GET /playlists/{id}/items
     may return 403 (Extended Quota Mode required). The handler tries:
-    1. GET /playlists/{id}/tracks (403)
+    1. GET /playlists/{id}/items (403)
     2. Token refresh + retry (403)
-    3. Metadata-endpoint pagination via GET /playlists/{id}?offset&limit (fails)
+    3. Metadata tracks from GET /playlists/{id} response (if available)
     4. Embed fallback (fails)
     Then returns cached metadata with a clear restriction message.
     """
@@ -622,9 +622,9 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user_with_sc
 
 
 def test_get_playlist_403_metadata_tracks_fallback(client: TestClient, seeded_user: int) -> None:
-    """get_playlist uses embedded tracks from metadata when /tracks returns 403.
+    """get_playlist uses embedded tracks from metadata when /items returns 403.
 
-    When GET /playlists/{id}/tracks is blocked (Spotify dev mode), the handler
+    When GET /playlists/{id}/items is blocked (Spotify dev mode), the handler
     should use the tracks already embedded in the GET /playlists/{id} response.
     """
     from shared.spotify.exceptions import SpotifyRequestError
@@ -664,7 +664,7 @@ def test_get_playlist_403_metadata_tracks_fallback(client: TestClient, seeded_us
                 tracks=SpotifyPlaylistTracks(items=embedded_tracks, total=180),
             )
         )
-        # GET /playlists/{id}/tracks returns 403
+        # GET /playlists/{id}/items returns 403
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_get_client.return_value = mock_client
 

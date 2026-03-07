@@ -453,7 +453,7 @@ async def test_get_user_playlists() -> None:
                         "name": "Playlist 2",
                         "public": False,
                         "owner": {"id": "user1", "display_name": "Test User"},
-                        "tracks": {"href": "https://api.spotify.com/v1/playlists/pl2/tracks", "total": 10},
+                        "tracks": {"href": "https://api.spotify.com/v1/playlists/pl2/items", "total": 10},
                     },
                 ],
                 "total": 2,

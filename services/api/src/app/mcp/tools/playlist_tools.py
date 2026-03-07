@@ -243,7 +243,7 @@ class PlaylistToolHandlers:
                     "Call spotify.list_playlists first to populate the cache, then retry."
                 )
 
-        # Fetch all tracks via pagination (uses GET /playlists/{id}/tracks).
+        # Fetch all tracks via pagination (uses GET /playlists/{id}/items).
         # On 403: force-refresh the token once (picks up new scopes from re-auth) and
         # retry. If still 403, fall back to the embed endpoint. If embed also fails,
         # mark as restricted.
@@ -282,13 +282,13 @@ class PlaylistToolHandlers:
             if exc.status_code != 403:
                 raise
             logger.warning(
-                "Spotify returned 403 for GET /playlists/%s/tracks (detail: %s) — "
+                "Spotify returned 403 for GET /playlists/%s/items (detail: %s) — "
                 "force-refreshing token and retrying once",
                 playlist_id,
                 exc.detail,
             )
             # Force-refresh the access token to pick up any new scopes from re-authorization,
-            # then retry the tracks endpoint once before falling back to embed.
+            # then retry the items endpoint once before falling back to embed.
             try:
                 await self._force_refresh_token(user_id, session)
                 _retry_client = await self._get_client(user_id, session)
@@ -302,7 +302,7 @@ class PlaylistToolHandlers:
                 if retry_exc.status_code != 403:
                     raise
                 logger.warning(
-                    "Spotify returned 403 after token refresh for GET /playlists/%s/tracks "
+                    "Spotify returned 403 after token refresh for GET /playlists/%s/items "
                     "(detail: %s) — using tracks from metadata response",
                     playlist_id,
                     retry_exc.detail,
