@@ -568,10 +568,16 @@ def test_get_playlist_403_both_endpoints(client: TestClient, seeded_user_with_sc
     from app.mcp.tools.playlist_tools import _instance as playlist_instance
     from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
 
-    with patch(
-        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
-        new_callable=AsyncMock,
-    ) as mock_get_client:
+    with (
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+            new_callable=AsyncMock,
+        ) as mock_get_client,
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._force_refresh_token",
+            new_callable=AsyncMock,
+        ),
+    ):
         mock_client = AsyncMock()
         # Both endpoints return 403
         mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
@@ -698,10 +704,16 @@ def test_get_playlist_403_missing_read_private_scope(
     from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
 
     user_id = seeded_user_without_private_scope
-    with patch(
-        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
-        new_callable=AsyncMock,
-    ) as mock_get_client:
+    with (
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+            new_callable=AsyncMock,
+        ) as mock_get_client,
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._force_refresh_token",
+            new_callable=AsyncMock,
+        ),
+    ):
         mock_client = AsyncMock()
         mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
@@ -1071,10 +1083,16 @@ def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user
     from shared.spotify.exceptions import SpotifyRequestError
     from shared.spotify.models import EmbedTrackItem
 
-    with patch(
-        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
-        new_callable=AsyncMock,
-    ) as mock_get_client:
+    with (
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+            new_callable=AsyncMock,
+        ) as mock_get_client,
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._force_refresh_token",
+            new_callable=AsyncMock,
+        ),
+    ):
         mock_client = AsyncMock()
         mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
@@ -1288,10 +1306,16 @@ def test_get_playlist_embed_unavailable_placeholder(client: TestClient, seeded_u
     from shared.spotify.exceptions import SpotifyRequestError
     from shared.spotify.models import EmbedTrackItem
 
-    with patch(
-        "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
-        new_callable=AsyncMock,
-    ) as mock_get_client:
+    with (
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+            new_callable=AsyncMock,
+        ) as mock_get_client,
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._force_refresh_token",
+            new_callable=AsyncMock,
+        ),
+    ):
         mock_client = AsyncMock()
         mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))

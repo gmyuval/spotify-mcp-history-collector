@@ -209,19 +209,35 @@ class PlaylistToolHandlers:
                 # (e.g. 300 cached tracks that are really 100 × 3 duplicates).
                 _cache_ok = cached_total == 0 or len(cached_tracks) == cached_total
                 if _cache_ok and cached_tracks:
+                    # Detect the specific repeated-page pagination bug:
+                    # e.g. 180 tracks cached as 100 × 2 (same page repeated).
+                    # Only reject when the total is an exact multiple of the
+                    # unique count AND most tracks share the same repetition
+                    # count — this avoids rejecting playlists that legitimately
+                    # contain many repeated tracks.
                     _cached_ids = [t.get("id") for t in cached_tracks if t.get("id")]
                     _unique_count = len(set(_cached_ids))
-                    _dup_ratio = 1 - (_unique_count / len(_cached_ids)) if _cached_ids else 0
-                    if _dup_ratio > 0.3:
-                        _cache_ok = False
-                        logger.warning(
-                            "Cache for %s has %.0f%% duplicate tracks (%d unique / %d total)"
-                            " — likely stale, re-fetching",
-                            playlist_id,
-                            _dup_ratio * 100,
-                            _unique_count,
-                            len(_cached_ids),
-                        )
+                    if (
+                        _cached_ids
+                        and _unique_count > 0
+                        and len(_cached_ids) != _unique_count
+                        and len(_cached_ids) % _unique_count == 0
+                    ):
+                        from collections import Counter
+
+                        _counts = Counter(_cached_ids)
+                        _max_count = _counts.most_common(1)[0][1]
+                        _uniform = sum(1 for c in _counts.values() if c == _max_count)
+                        if _max_count > 1 and _uniform / len(_counts) >= 0.75:
+                            _cache_ok = False
+                            logger.warning(
+                                "Cache for %s looks like repeated pages (%d unique, %d total, "
+                                "max occurrence %d) — re-fetching",
+                                playlist_id,
+                                _unique_count,
+                                len(_cached_ids),
+                                _max_count,
+                            )
                 if _cache_ok:
                     logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
                     return self._with_fidelity_metrics(cached_data)
@@ -471,10 +487,18 @@ class PlaylistToolHandlers:
             result.pop("tracks_unavailable", None)
         tracks_total: int = result.get("tracks_total") or 0
         if tracks_returned != tracks_total and not result.get("tracks_restricted"):
-            result["tracks_mismatch_warning"] = (
+            mismatch_msg = (
                 f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
                 f"{tracks_unavailable} unavailable placeholder(s) included."
             )
+            tracks_source = result.get("tracks_source", "")
+            if tracks_source in ("api_metadata", "embed"):
+                mismatch_msg += (
+                    " The Spotify Web API in development mode limits track retrieval to ~100 "
+                    "for this playlist. You can use memory.backfill_playlist with the track_ids "
+                    "parameter to log the complete track list if you have it."
+                )
+            result["tracks_mismatch_warning"] = mismatch_msg
         else:
             result.pop("tracks_mismatch_warning", None)
         return result

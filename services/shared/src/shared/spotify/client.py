@@ -328,7 +328,7 @@ class SpotifyClient:
         url: str | None = base_url
         params: dict[str, str | int] | None = {"limit": clamped_limit, "offset": 0}
         page_total: int | None = None
-        prev_ids: list[str | None] | None = None
+        prev_page_key: tuple[int | None, list[str | None]] | None = None
 
         while url and len(all_items) < max_tracks:
             response = await self._request("GET", url, params=params)
@@ -339,11 +339,12 @@ class SpotifyClient:
 
             # Guard against Spotify ignoring offset and returning the same
             # page repeatedly (observed with the old /tracks endpoint in dev
-            # mode).  Compare the full page of track IDs — if identical to
-            # the previous page, stop.  This preserves legitimate duplicate
-            # tracks that appear at different positions in the playlist.
+            # mode).  Compare offset + track IDs — only stop when both are
+            # identical, so playlists with legitimately repeated track blocks
+            # at different offsets are not truncated.
             current_ids = [item.track.id if item.track else None for item in page.items]
-            if current_ids and current_ids == prev_ids:
+            current_key = (page.offset, current_ids)
+            if current_ids and current_key == prev_page_key:
                 logger.info(
                     "Playlist %s: page at offset=%s returned same tracks as previous "
                     "page — stopping pagination (%d items, %d reported total)",
@@ -353,7 +354,7 @@ class SpotifyClient:
                     page_total,
                 )
                 break
-            prev_ids = current_ids
+            prev_page_key = current_key
 
             all_items.extend(page.items)
 
