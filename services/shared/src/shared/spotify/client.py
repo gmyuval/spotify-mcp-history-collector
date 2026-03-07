@@ -319,29 +319,59 @@ class SpotifyClient:
             Complete list of playlist track items across all pages.
         """
         all_items: list[SpotifyPlaylistTrackItem] = []
+        seen_keys: set[tuple[str | None, str | None]] = set()
         base_url = f"{PLAYLIST_URL}/{playlist_id}/tracks"
         clamped_limit = min(page_size, 50)
         url: str | None = base_url
         params: dict[str, str | int] | None = {"limit": clamped_limit, "offset": 0}
         page_total: int | None = None
+        prev_count = 0
 
         while url and len(all_items) < max_tracks:
             response = await self._request("GET", url, params=params)
             page = SpotifyPlaylistTracks.model_validate(response.json())
-            all_items.extend(page.items)
 
             if page.total is not None:
                 page_total = page.total
 
+            # Deduplicate: skip items we've already collected.
+            # Spotify in dev mode can return the same items regardless of offset.
+            new_items: list[SpotifyPlaylistTrackItem] = []
+            for item in page.items:
+                key = (
+                    item.track.id if item.track else None,
+                    item.added_at,
+                )
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    new_items.append(item)
+            all_items.extend(new_items)
+
             logger.debug(
-                "Playlist %s pagination: offset=%s, received=%d, running_total=%d, reported_total=%s, has_next=%s",
+                "Playlist %s pagination: offset=%s, received=%d, new=%d, "
+                "running_total=%d, reported_total=%s, has_next=%s",
                 playlist_id,
                 page.offset,
                 len(page.items),
+                len(new_items),
                 len(all_items),
                 page_total,
                 page.next is not None,
             )
+
+            # Stop if no new items were added (all duplicates — Spotify is
+            # ignoring our offset, as it does in dev mode).
+            if len(all_items) == prev_count:
+                logger.info(
+                    "Playlist %s: no new items from page (offset=%s) — stopping "
+                    "pagination (%d unique items, %d reported total)",
+                    playlist_id,
+                    page.offset,
+                    len(all_items),
+                    page_total,
+                )
+                break
+            prev_count = len(all_items)
 
             if page.next:
                 # Spotify's `next` is a full absolute URL with limit/offset baked in.

@@ -10,6 +10,10 @@ Always use Context7 MCP when library/API documentation, code generation, setup o
 
 Always use GitHub MCP tools (e.g. `mcp__github__*`) for GitHub operations — creating PRs, listing issues, reading PR comments, etc. — whenever they have relevant functions available, instead of falling back to `gh` CLI.
 
+## DigitalOcean MCP
+
+Always use DigitalOcean MCP tools (e.g. `mcp__digitalocean__*`) for DigitalOcean operations — managing droplets, databases, apps, etc. — whenever they have relevant functions available.
+
 ## Project Overview
 
 This is a containerized system that enables ChatGPT-style assistants to analyze Spotify listening patterns by collecting playback history over time and exposing it via an MCP-compatible tool interface.

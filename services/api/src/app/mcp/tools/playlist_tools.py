@@ -203,10 +203,26 @@ class PlaylistToolHandlers:
             if cached_data is not None and not cached_data.get("tracks_restricted"):
                 cached_tracks = cached_data.get("tracks", [])
                 cached_total = cached_data.get("tracks_total") or 0
-                # Serve from cache only if tracks are complete (or playlist is empty).
-                # Skip cache when fewer tracks are cached than reported — stale cache
-                # from before pagination was added.
-                if cached_total == 0 or len(cached_tracks) >= cached_total:
+                # Serve from cache only if tracks look complete and healthy.
+                # Skip cache when count mismatches total, or when excessive
+                # duplicates indicate a stale cache from earlier pagination bugs
+                # (e.g. 300 cached tracks that are really 100 × 3 duplicates).
+                _cache_ok = cached_total == 0 or len(cached_tracks) == cached_total
+                if _cache_ok and cached_tracks:
+                    _cached_ids = [t.get("id") for t in cached_tracks if t.get("id")]
+                    _unique_count = len(set(_cached_ids))
+                    _dup_ratio = 1 - (_unique_count / len(_cached_ids)) if _cached_ids else 0
+                    if _dup_ratio > 0.3:
+                        _cache_ok = False
+                        logger.warning(
+                            "Cache for %s has %.0f%% duplicate tracks (%d unique / %d total)"
+                            " — likely stale, re-fetching",
+                            playlist_id,
+                            _dup_ratio * 100,
+                            _unique_count,
+                            len(_cached_ids),
+                        )
+                if _cache_ok:
                     logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
                     return self._with_fidelity_metrics(cached_data)
                 logger.info(
