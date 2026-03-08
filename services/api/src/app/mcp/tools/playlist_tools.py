@@ -388,10 +388,6 @@ class PlaylistToolHandlers:
             elif cached_metadata is not None:
                 _is_private = not cached_metadata.get("public")
 
-        # Track fidelity metrics
-        tracks_returned = len(tracks)
-        tracks_unavailable = sum(1 for t in tracks if t.get("unavailable"))
-
         # Build result from live API metadata or cached metadata fallback
         if pl is not None:
             result: dict[str, Any] = {
@@ -422,27 +418,9 @@ class PlaylistToolHandlers:
                 "external_urls": cached_metadata.get("external_urls", {}),
             }
 
-        # Add fidelity metrics (same logic as _with_fidelity_metrics, but we already
-        # have tracks_returned/tracks_unavailable computed above so apply directly)
-        result["tracks_returned"] = tracks_returned
-        if tracks_unavailable:
-            result["tracks_unavailable"] = tracks_unavailable
-        tracks_total = result.get("tracks_total", 0)
-        if tracks_returned != tracks_total and not tracks_restricted:
-            mismatch_msg = (
-                f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
-                f"{tracks_unavailable} unavailable placeholder(s) included."
-            )
-            if tracks_source in ("api_metadata", "embed"):
-                mismatch_msg += (
-                    " The Spotify Web API in development mode limits track retrieval to ~100 "
-                    "for this playlist. You can use memory.backfill_playlist with the track_ids "
-                    "parameter to log the complete track list if you have it."
-                )
-            result["tracks_mismatch_warning"] = mismatch_msg
-
         if tracks_restricted:
             result["tracks_restricted"] = True
+
             # Check whether the user's stored token includes playlist-read-private.
             # If it doesn't, a re-authorization will fix this — no need to use backfill.
             _scope_result = await session.execute(select(SpotifyToken.scope).where(SpotifyToken.user_id == user_id))
@@ -468,6 +446,9 @@ class PlaylistToolHandlers:
                     "or restricted. If you have the track IDs, use memory.backfill_playlist with "
                     "track_ids and name parameters to log this playlist manually."
                 )
+
+        # Reuse the shared fidelity helper (same logic used for cache-hit responses)
+        self._with_fidelity_metrics(result)
 
         # Cache the full playlist with tracks
         await self._cache.put_playlist(user_id, result, tracks, session)
