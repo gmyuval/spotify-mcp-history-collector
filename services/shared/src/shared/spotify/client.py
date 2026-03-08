@@ -303,32 +303,96 @@ class SpotifyClient:
         self,
         playlist_id: str,
         *,
-        page_size: int = 100,
+        page_size: int = 50,
         max_tracks: int = 10_000,
     ) -> list[SpotifyPlaylistTrackItem]:
         """Fetch all tracks for a playlist, following pagination.
 
         Args:
             playlist_id: Spotify playlist ID.
-            page_size: Number of tracks per API request (max 100).
+            page_size: Number of tracks per API request (max 50 per
+                current Spotify API limits).
             max_tracks: Safety cap to prevent runaway loops (Spotify's
                 own limit is 10,000 tracks per playlist).
 
         Returns:
             Complete list of playlist track items across all pages.
         """
+        if page_size < 1:
+            raise ValueError("page_size must be at least 1")
         all_items: list[SpotifyPlaylistTrackItem] = []
-        url: str | None = f"{PLAYLIST_URL}/{playlist_id}/tracks"
-        params: dict[str, str | int] | None = {"limit": min(page_size, 100), "offset": 0}
+        # Use /items (not /tracks) — Spotify's dev mode blocks /tracks
+        # with 403, but the newer /items endpoint works and paginates correctly.
+        base_url = f"{PLAYLIST_URL}/{playlist_id}/items"
+        clamped_limit = min(page_size, 50)
+        url: str | None = base_url
+        params: dict[str, str | int] | None = {"limit": clamped_limit, "offset": 0}
+        page_total: int | None = None
+        prev_page_key: tuple[int | None, list[str | None]] | None = None
 
         while url and len(all_items) < max_tracks:
             response = await self._request("GET", url, params=params)
             page = SpotifyPlaylistTracks.model_validate(response.json())
+
+            if page.total is not None:
+                page_total = page.total
+
+            # Guard against Spotify ignoring offset and returning the same
+            # page repeatedly (observed with the old /tracks endpoint in dev
+            # mode).  Compare offset + track IDs — only stop when both are
+            # identical, so playlists with legitimately repeated track blocks
+            # at different offsets are not truncated.
+            current_ids = [item.track.id if item.track else None for item in page.items]
+            current_key = (page.offset, current_ids)
+            if current_ids and current_key == prev_page_key:
+                logger.info(
+                    "Playlist %s: page at offset=%s returned same tracks as previous "
+                    "page — stopping pagination (%d items, %d reported total)",
+                    playlist_id,
+                    page.offset,
+                    len(all_items),
+                    page_total,
+                )
+                break
+            prev_page_key = current_key
+
             all_items.extend(page.items)
 
-            # Spotify's `next` is a full absolute URL with limit/offset baked in.
-            url = page.next
-            params = None  # subsequent requests use the full `next` URL as-is
+            logger.debug(
+                "Playlist %s pagination: offset=%s, received=%d, running_total=%d, reported_total=%s, has_next=%s",
+                playlist_id,
+                page.offset,
+                len(page.items),
+                len(all_items),
+                page_total,
+                page.next is not None,
+            )
+
+            if page.next:
+                # Spotify's `next` is a full absolute URL with limit/offset baked in.
+                url = page.next
+                params = None
+            elif page_total and len(all_items) < page_total:
+                if not page.items:
+                    logger.warning(
+                        "Playlist %s: pagination stalled — %d/%d items fetched, empty page with no next URL. Stopping.",
+                        playlist_id,
+                        len(all_items),
+                        page_total,
+                    )
+                    break
+                # Fallback: `next` is absent but more items remain.
+                # Manually compute the next offset and continue.
+                logger.info(
+                    "Playlist %s: next URL absent but %d/%d items fetched — falling back to manual offset pagination",
+                    playlist_id,
+                    len(all_items),
+                    page_total,
+                )
+                url = base_url
+                params = {"limit": clamped_limit, "offset": len(all_items)}
+            else:
+                break
 
         return all_items[:max_tracks]
 

@@ -53,7 +53,8 @@ SPOTIFY_ME_URL = "https://api.spotify.com/v1/me"
 
 SPOTIFY_SCOPES = (
     "user-read-recently-played user-top-read user-read-email user-read-private "
-    "playlist-read-private playlist-modify-public playlist-modify-private"
+    "playlist-read-private playlist-read-collaborative "
+    "playlist-modify-public playlist-modify-private"
 )
 
 # Default configuration values

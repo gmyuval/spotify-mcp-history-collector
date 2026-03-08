@@ -1,6 +1,7 @@
 """MCP tool handlers for Spotify playlist operations — class-based."""
 
 import logging
+from collections import Counter
 from typing import Any
 
 from sqlalchemy import select
@@ -203,10 +204,44 @@ class PlaylistToolHandlers:
             if cached_data is not None and not cached_data.get("tracks_restricted"):
                 cached_tracks = cached_data.get("tracks", [])
                 cached_total = cached_data.get("tracks_total") or 0
-                # Serve from cache only if tracks are complete (or playlist is empty).
-                # Skip cache when fewer tracks are cached than reported — stale cache
-                # from before pagination was added.
-                if cached_total == 0 or len(cached_tracks) >= cached_total:
+                # Serve from cache only if tracks look complete and healthy.
+                # Accept if: empty playlist, full fetch, or a known partial
+                # source (api_metadata/embed — best available, don't re-fetch).
+                cached_source = cached_data.get("tracks_source")
+                _cache_ok = (
+                    cached_total == 0
+                    or len(cached_tracks) == cached_total
+                    or cached_source in ("api_metadata", "embed")
+                )
+                if _cache_ok and cached_tracks and cached_source == "api":
+                    # Detect the specific repeated-page pagination bug:
+                    # e.g. 180 tracks cached as 100 × 2 (same page repeated).
+                    # Only reject when the total is an exact multiple of the
+                    # unique count AND most tracks share the same repetition
+                    # count — this avoids rejecting playlists that legitimately
+                    # contain many repeated tracks.
+                    _cached_ids = [t.get("id") for t in cached_tracks if t.get("id")]
+                    _unique_count = len(set(_cached_ids))
+                    if (
+                        _cached_ids
+                        and _unique_count > 0
+                        and len(_cached_ids) != _unique_count
+                        and len(_cached_ids) % _unique_count == 0
+                    ):
+                        _counts = Counter(_cached_ids)
+                        _max_count = _counts.most_common(1)[0][1]
+                        _uniform = sum(1 for c in _counts.values() if c == _max_count)
+                        if _max_count > 1 and _uniform / len(_counts) >= 0.75:
+                            _cache_ok = False
+                            logger.warning(
+                                "Cache for %s looks like repeated pages (%d unique, %d total, "
+                                "max occurrence %d) — re-fetching",
+                                playlist_id,
+                                _unique_count,
+                                len(_cached_ids),
+                                _max_count,
+                            )
+                if _cache_ok:
                     logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
                     return self._with_fidelity_metrics(cached_data)
                 logger.info(
@@ -227,7 +262,7 @@ class PlaylistToolHandlers:
                     "Call spotify.list_playlists first to populate the cache, then retry."
                 )
 
-        # Fetch all tracks via pagination (uses GET /playlists/{id}/tracks).
+        # Fetch all tracks via pagination (uses GET /playlists/{id}/items).
         # On 403: force-refresh the token once (picks up new scopes from re-auth) and
         # retry. If still 403, fall back to the embed endpoint. If embed also fails,
         # mark as restricted.
@@ -266,17 +301,25 @@ class PlaylistToolHandlers:
             if exc.status_code != 403:
                 raise
             logger.warning(
-                "Spotify returned 403 for GET /playlists/%s/tracks (detail: %s) — "
+                "Spotify returned 403 for GET /playlists/%s/items (detail: %s) — "
                 "force-refreshing token and retrying once",
                 playlist_id,
                 exc.detail,
             )
             # Force-refresh the access token to pick up any new scopes from re-authorization,
-            # then retry the tracks endpoint once before falling back to embed.
+            # then retry the items endpoint once before falling back to embed.
             try:
                 await self._force_refresh_token(user_id, session)
                 _retry_client = await self._get_client(user_id, session)
                 tracks = _parse_track_items(await _retry_client.get_playlist_all_tracks(playlist_id))
+                # If metadata was also 403'd, re-fetch with the refreshed token
+                # so we don't serve stale cached metadata.
+                if pl is None:
+                    try:
+                        pl = await _retry_client.get_playlist(playlist_id)
+                    except SpotifyRequestError as metadata_retry_exc:
+                        if metadata_retry_exc.status_code != 403:
+                            raise
                 logger.info(
                     "Token-refresh retry succeeded for playlist %s (%d tracks)",
                     playlist_id,
@@ -286,12 +329,25 @@ class PlaylistToolHandlers:
                 if retry_exc.status_code != 403:
                     raise
                 logger.warning(
-                    "Spotify returned 403 after token refresh for GET /playlists/%s/tracks "
-                    "(detail: %s) — trying embed fallback",
+                    "Spotify returned 403 after token refresh for GET /playlists/%s/items "
+                    "(detail: %s) — using tracks from metadata response",
                     playlist_id,
                     retry_exc.detail,
                 )
-                _need_embed = True
+                # Fallback: use tracks already embedded in the GET /playlists/{id}
+                # response (up to 100). The separate /tracks endpoint is blocked in
+                # Spotify's development mode, but the main playlist endpoint works.
+                if pl is not None and pl.tracks and (pl.tracks.items or pl.tracks.total == 0):
+                    tracks = _parse_track_items(pl.tracks.items)
+                    tracks_source = "api_metadata"
+                    logger.info(
+                        "Using %d tracks from metadata response for playlist %s (total reported: %s)",
+                        len(tracks),
+                        playlist_id,
+                        pl.tracks.total,
+                    )
+                else:
+                    _need_embed = True
 
         if _need_embed:
             try:
@@ -340,10 +396,6 @@ class PlaylistToolHandlers:
             elif cached_metadata is not None:
                 _is_private = not cached_metadata.get("public")
 
-        # Track fidelity metrics
-        tracks_returned = len(tracks)
-        tracks_unavailable = sum(1 for t in tracks if t.get("unavailable"))
-
         # Build result from live API metadata or cached metadata fallback
         if pl is not None:
             result: dict[str, Any] = {
@@ -374,20 +426,9 @@ class PlaylistToolHandlers:
                 "external_urls": cached_metadata.get("external_urls", {}),
             }
 
-        # Add fidelity metrics (same logic as _with_fidelity_metrics, but we already
-        # have tracks_returned/tracks_unavailable computed above so apply directly)
-        result["tracks_returned"] = tracks_returned
-        if tracks_unavailable:
-            result["tracks_unavailable"] = tracks_unavailable
-        tracks_total = result.get("tracks_total", 0)
-        if tracks_returned != tracks_total and not tracks_restricted:
-            result["tracks_mismatch_warning"] = (
-                f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
-                f"{tracks_unavailable} unavailable placeholder(s) included."
-            )
-
         if tracks_restricted:
             result["tracks_restricted"] = True
+
             # Check whether the user's stored token includes playlist-read-private.
             # If it doesn't, a re-authorization will fix this — no need to use backfill.
             _scope_result = await session.execute(select(SpotifyToken.scope).where(SpotifyToken.user_id == user_id))
@@ -414,6 +455,9 @@ class PlaylistToolHandlers:
                     "track_ids and name parameters to log this playlist manually."
                 )
 
+        # Reuse the shared fidelity helper (same logic used for cache-hit responses)
+        self._with_fidelity_metrics(result)
+
         # Cache the full playlist with tracks
         await self._cache.put_playlist(user_id, result, tracks, session)
         return result
@@ -435,10 +479,18 @@ class PlaylistToolHandlers:
             result.pop("tracks_unavailable", None)
         tracks_total: int = result.get("tracks_total") or 0
         if tracks_returned != tracks_total and not result.get("tracks_restricted"):
-            result["tracks_mismatch_warning"] = (
+            mismatch_msg = (
                 f"Spotify reports {tracks_total} tracks but {tracks_returned} were returned. "
                 f"{tracks_unavailable} unavailable placeholder(s) included."
             )
+            tracks_source = result.get("tracks_source", "")
+            if tracks_source in ("api_metadata", "embed"):
+                mismatch_msg += (
+                    " The Spotify Web API in development mode limits track retrieval to ~100 "
+                    "for this playlist. You can use memory.backfill_playlist with the track_ids "
+                    "parameter to log the complete track list if you have it."
+                )
+            result["tracks_mismatch_warning"] = mismatch_msg
         else:
             result.pop("tracks_mismatch_warning", None)
         return result
