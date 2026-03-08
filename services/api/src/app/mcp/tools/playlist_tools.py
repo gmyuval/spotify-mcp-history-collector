@@ -312,6 +312,14 @@ class PlaylistToolHandlers:
                 await self._force_refresh_token(user_id, session)
                 _retry_client = await self._get_client(user_id, session)
                 tracks = _parse_track_items(await _retry_client.get_playlist_all_tracks(playlist_id))
+                # If metadata was also 403'd, re-fetch with the refreshed token
+                # so we don't serve stale cached metadata.
+                if pl is None:
+                    try:
+                        pl = await _retry_client.get_playlist(playlist_id)
+                    except SpotifyRequestError as metadata_retry_exc:
+                        if metadata_retry_exc.status_code != 403:
+                            raise
                 logger.info(
                     "Token-refresh retry succeeded for playlist %s (%d tracks)",
                     playlist_id,
