@@ -205,11 +205,15 @@ class PlaylistToolHandlers:
                 cached_tracks = cached_data.get("tracks", [])
                 cached_total = cached_data.get("tracks_total") or 0
                 # Serve from cache only if tracks look complete and healthy.
-                # Skip cache when count mismatches total, or when excessive
-                # duplicates indicate a stale cache from earlier pagination bugs
-                # (e.g. 300 cached tracks that are really 100 × 3 duplicates).
-                _cache_ok = cached_total == 0 or len(cached_tracks) == cached_total
-                if _cache_ok and cached_tracks:
+                # Accept if: empty playlist, full fetch, or a known partial
+                # source (api_metadata/embed — best available, don't re-fetch).
+                cached_source = cached_data.get("tracks_source")
+                _cache_ok = (
+                    cached_total == 0
+                    or len(cached_tracks) == cached_total
+                    or cached_source in ("api_metadata", "embed")
+                )
+                if _cache_ok and cached_tracks and cached_source == "api":
                     # Detect the specific repeated-page pagination bug:
                     # e.g. 180 tracks cached as 100 × 2 (same page repeated).
                     # Only reject when the total is an exact multiple of the

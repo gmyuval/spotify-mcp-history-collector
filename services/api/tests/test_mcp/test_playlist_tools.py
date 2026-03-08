@@ -687,8 +687,9 @@ def test_get_playlist_403_metadata_tracks_fallback(client: TestClient, seeded_us
         assert data["result"]["tracks_returned"] == 100
         assert data["result"]["tracks_total"] == 180
         assert data["result"]["tracks_source"] == "api_metadata"
-        # Mismatch warning present because 100 < 180
+        # Mismatch warning present because 100 < 180, includes backfill hint
         assert "tracks_mismatch_warning" in data["result"]
+        assert "memory.backfill_playlist" in data["result"]["tracks_mismatch_warning"]
 
 
 def test_get_playlist_403_missing_read_private_scope(
