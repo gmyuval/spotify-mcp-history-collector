@@ -1076,3 +1076,30 @@ class TestCreatedByValidation:
         assert detail["success"]
         track_ids = detail["result"]["latest_snapshot"]["track_ids"]
         assert track_ids == ["abc123", "def456", "ghi789"]
+
+    def test_conflicting_nested_and_flat_created_by_rejected(self, client: TestClient, seeded_user: int) -> None:
+        """Conflicting nested and flat created_by should be rejected."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_conflict",
+            name="Conflicting",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": "assistant"}, "created_by": "user"},
+        )
+        assert not data["success"]
+        assert "must match" in data["error"]
+
+    def test_matching_nested_and_flat_created_by_ok(self, client: TestClient, seeded_user: int) -> None:
+        """Matching nested and flat created_by should be accepted."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_match",
+            name="Matching",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": "assistant"}, "created_by": "assistant"},
+        )
+        assert data["success"]

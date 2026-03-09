@@ -96,6 +96,13 @@ class PlaylistLedgerToolHandlers:
                     f"{', '.join(sorted(VALID_CREATED_BY_VALUES))}; got {created_by_top!r}"
                 )
 
+        # Reject conflicting nested vs flat created_by
+        if isinstance(origin, dict) and "created_by" in origin and "created_by" in seed_context:
+            if origin["created_by"] != seed_context["created_by"]:
+                raise ValueError(
+                    "seed_context.origin.created_by and seed_context.created_by must match when both are provided"
+                )
+
     def __init__(self) -> None:
         self._register()
 
