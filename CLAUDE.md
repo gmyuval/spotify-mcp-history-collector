@@ -333,6 +333,7 @@ All core features are complete and deployed to production. 34 MCP tools, 513+ AP
 CI/CD via GitHub Actions: tests gate all deploys, manual dispatch supports branch deploys for testing.
 
 ### Recently Completed
+
 - **JWT User Authentication (Phase 4)**: Full JWT auth flow — OAuth callback issues JWTs, cookie + Bearer support, refresh endpoint, RBAC role assignment. `JWTService` in `app/auth/jwt.py`, `JWTAuthMiddleware` in `app/auth/middleware.py`. Session `__aexit__` passes `sys.exc_info()` for proper rollback on errors.
 - **Playlist Track Pagination & 403 Fallback Chain** (PR #42): `SpotifyClient.get_playlist_all_tracks()` uses `/playlists/{id}/items` endpoint with pagination (not deprecated `/tracks`). On 403 (Spotify dev mode): token refresh → retry → use `pl.tracks.items` from metadata (up to ~100 tracks, `tracks_source: "api_metadata"`) → embed fallback → mark restricted. `_with_fidelity_metrics()` adds consistent `tracks_returned`/`tracks_mismatch_warning` on both live and cached paths. Cache validation detects repeated-page pagination bugs via `Counter`-based dedup (only on `api`-sourced caches). Stale metadata re-fetched after successful token refresh.
 - **pip-tools workflow**: When adding new dependencies to `pyproject.toml`, always run `make compile-deps` to regenerate `requirements.txt` files — Docker builds use these, not pyproject.toml directly. Forgetting this caused a deployment failure (missing pyjwt).

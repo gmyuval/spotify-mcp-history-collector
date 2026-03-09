@@ -1009,3 +1009,70 @@ class TestCreatedByValidation:
             seed_context={"origin": {"created_by": "spotify"}},
         )
         assert data["success"]
+
+    def test_non_string_created_by_nested_rejected(self, client: TestClient, seeded_user: int) -> None:
+        """Non-string created_by (e.g. integer) should be rejected when key is present."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_int",
+            name="Int Origin",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": 1}},
+        )
+        assert not data["success"]
+        assert "origin.created_by must be one of" in data["error"]
+
+    def test_null_created_by_nested_rejected(self, client: TestClient, seeded_user: int) -> None:
+        """Null created_by should be rejected when key is present."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_null",
+            name="Null Origin",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": None}},
+        )
+        assert not data["success"]
+        assert "origin.created_by must be one of" in data["error"]
+
+    def test_non_string_created_by_flat_rejected(self, client: TestClient, seeded_user: int) -> None:
+        """Non-string flat created_by should be rejected."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_flat_int",
+            name="Flat Int",
+            track_ids=["t1"],
+            seed_context={"created_by": 42},
+        )
+        assert not data["success"]
+        assert "seed_context.created_by must be one of" in data["error"]
+
+    def test_backfill_normalizes_spotify_uris(self, client: TestClient, seeded_user: int) -> None:
+        """backfill_playlist should strip spotify:track: prefix from track IDs."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_bf_uri",
+            track_ids=["spotify:track:abc123", "def456", "spotify:track:ghi789"],
+            name="URI Normalize",
+        )
+        assert data["success"]
+        # Verify stored track count
+        assert data["result"]["stored_track_count"] == 3
+
+        # Fetch the playlist and verify IDs are normalized
+        detail = _call(
+            client,
+            "memory.get_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_bf_uri",
+        )
+        assert detail["success"]
+        track_ids = detail["result"]["latest_snapshot"]["track_ids"]
+        assert track_ids == ["abc123", "def456", "ghi789"]

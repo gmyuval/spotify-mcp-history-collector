@@ -65,6 +65,11 @@ class PlaylistLedgerToolHandlers:
         return playlist_id.strip()
 
     @staticmethod
+    def _normalize_track_id(track_id: str) -> str:
+        """Strip ``spotify:track:`` URI prefix to produce a bare Spotify ID."""
+        return track_id.strip().removeprefix("spotify:track:")
+
+    @staticmethod
     def _validate_seed_context(seed_context: dict[str, Any]) -> None:
         """Validate created_by in seed_context if present.
 
@@ -74,21 +79,22 @@ class PlaylistLedgerToolHandlers:
         """
         # Check nested origin.created_by
         origin = seed_context.get("origin")
-        if isinstance(origin, dict):
-            created_by = origin.get("created_by")
-            if isinstance(created_by, str) and created_by not in VALID_CREATED_BY_VALUES:
+        if isinstance(origin, dict) and "created_by" in origin:
+            created_by = origin["created_by"]
+            if not isinstance(created_by, str) or created_by not in VALID_CREATED_BY_VALUES:
                 raise ValueError(
                     f"seed_context.origin.created_by must be one of: "
-                    f"{', '.join(sorted(VALID_CREATED_BY_VALUES))}; got '{created_by}'"
+                    f"{', '.join(sorted(VALID_CREATED_BY_VALUES))}; got {created_by!r}"
                 )
 
         # Check flat created_by
-        created_by_top = seed_context.get("created_by")
-        if isinstance(created_by_top, str) and created_by_top not in VALID_CREATED_BY_VALUES:
-            raise ValueError(
-                f"seed_context.created_by must be one of: "
-                f"{', '.join(sorted(VALID_CREATED_BY_VALUES))}; got '{created_by_top}'"
-            )
+        if "created_by" in seed_context:
+            created_by_top = seed_context["created_by"]
+            if not isinstance(created_by_top, str) or created_by_top not in VALID_CREATED_BY_VALUES:
+                raise ValueError(
+                    f"seed_context.created_by must be one of: "
+                    f"{', '.join(sorted(VALID_CREATED_BY_VALUES))}; got {created_by_top!r}"
+                )
 
     def __init__(self) -> None:
         self._register()
@@ -802,7 +808,7 @@ class PlaylistLedgerToolHandlers:
                 raise ValueError("track_ids must be an array")
             if not all(isinstance(t, str) and t.strip() for t in manual_track_ids_raw):
                 raise ValueError("track_ids must contain non-empty strings")
-            manual_track_ids = [str(t).strip() for t in manual_track_ids_raw]
+            manual_track_ids = [self._normalize_track_id(str(t)) for t in manual_track_ids_raw]
 
         raw_name = args.get("name")
         name_override: str | None = None
