@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.admin.settings_service import _settings_service
 from app.mcp.registry import registry
 from app.mcp.schemas import MCPToolParam
-from shared.db.enums import PlaylistEventType, PlaylistSnapshotSource
+from shared.db.enums import VALID_CREATED_BY_VALUES, PlaylistEventType, PlaylistSnapshotSource
 from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnapshot
 
 logger = logging.getLogger(__name__)
@@ -31,38 +31,64 @@ class ReconstructionResult(NamedTuple):
     """Number of mutation events replayed on top of the snapshot."""
 
 
-def _parse_json_param(value: Any, name: str) -> Any:
-    """Parse a JSON string parameter into a Python object.
-
-    ChatGPT sends object/array parameters as JSON strings rather than
-    native objects, so this handles transparent deserialization.
-    """
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except json.JSONDecodeError:
-            raise ValueError(f"{name} must be valid JSON") from None
-    return value
-
-
-def _validate_user_id(args: dict[str, Any]) -> int:
-    """Extract and validate user_id from tool arguments."""
-    user_id = args.get("user_id")
-    if type(user_id) is not int or user_id < 1:
-        raise ValueError("user_id must be a positive integer")
-    return user_id
-
-
-def _validate_playlist_id(args: dict[str, Any]) -> str:
-    """Extract and validate playlist_id from tool arguments."""
-    playlist_id = args.get("playlist_id")
-    if not isinstance(playlist_id, str) or not playlist_id.strip():
-        raise ValueError("playlist_id must be a non-empty string")
-    return playlist_id.strip()
-
-
 class PlaylistLedgerToolHandlers:
     """Registers and handles memory.* MCP tools for the playlist ledger."""
+
+    @staticmethod
+    def _parse_json_param(value: Any, name: str) -> Any:
+        """Parse a JSON string parameter into a Python object.
+
+        ChatGPT sends object/array parameters as JSON strings rather than
+        native objects, so this handles transparent deserialization.
+        """
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                raise ValueError(f"{name} must be valid JSON") from None
+        return value
+
+    @staticmethod
+    def _validate_user_id(args: dict[str, Any]) -> int:
+        """Extract and validate user_id from tool arguments."""
+        user_id = args.get("user_id")
+        if type(user_id) is not int or user_id < 1:
+            raise ValueError("user_id must be a positive integer")
+        return user_id
+
+    @staticmethod
+    def _validate_playlist_id(args: dict[str, Any]) -> str:
+        """Extract and validate playlist_id from tool arguments."""
+        playlist_id = args.get("playlist_id")
+        if not isinstance(playlist_id, str) or not playlist_id.strip():
+            raise ValueError("playlist_id must be a non-empty string")
+        return playlist_id.strip()
+
+    @staticmethod
+    def _validate_seed_context(seed_context: dict[str, Any]) -> None:
+        """Validate created_by in seed_context if present.
+
+        Checks both ``seed_context.origin.created_by`` and flat
+        ``seed_context.created_by``.  Raises ``ValueError`` if the value
+        is not in :data:`VALID_CREATED_BY_VALUES`.
+        """
+        # Check nested origin.created_by
+        origin = seed_context.get("origin")
+        if isinstance(origin, dict):
+            created_by = origin.get("created_by")
+            if isinstance(created_by, str) and created_by not in VALID_CREATED_BY_VALUES:
+                raise ValueError(
+                    f"seed_context.origin.created_by must be one of: "
+                    f"{', '.join(sorted(VALID_CREATED_BY_VALUES))}; got '{created_by}'"
+                )
+
+        # Check flat created_by
+        created_by_top = seed_context.get("created_by")
+        if isinstance(created_by_top, str) and created_by_top not in VALID_CREATED_BY_VALUES:
+            raise ValueError(
+                f"seed_context.created_by must be one of: "
+                f"{', '.join(sorted(VALID_CREATED_BY_VALUES))}; got '{created_by_top}'"
+            )
 
     def __init__(self) -> None:
         self._register()
@@ -89,7 +115,12 @@ class PlaylistLedgerToolHandlers:
                 MCPToolParam(
                     name="seed_context",
                     type="object",
-                    description="Context that inspired the playlist (time window, top artists used, etc.)",
+                    description=(
+                        "Context that inspired the playlist (time window, top artists used, etc.). "
+                        "Include origin.created_by to indicate who created the playlist: "
+                        '"assistant" (AI-created), "user", "spotify", "import", or "other". '
+                        'Example: {"origin": {"created_by": "assistant"}, "time_window": "30d"}'
+                    ),
                     required=False,
                     default={},
                 ),
@@ -213,7 +244,10 @@ class PlaylistLedgerToolHandlers:
                 MCPToolParam(
                     name="seed_context",
                     type="object",
-                    description="Context that inspired the playlist",
+                    description=(
+                        "Context for the playlist. Include origin.created_by to indicate origin: "
+                        '"assistant", "user", "spotify", "import", or "other".'
+                    ),
                     required=False,
                     default={},
                 ),
@@ -235,15 +269,15 @@ class PlaylistLedgerToolHandlers:
         Supports idempotency via ``idempotency_key`` — duplicate calls return
         the existing record without error.
         """
-        user_id = _validate_user_id(args)
-        playlist_id = _validate_playlist_id(args)
+        user_id = self._validate_user_id(args)
+        playlist_id = self._validate_playlist_id(args)
 
         name = args.get("name")
         if not isinstance(name, str) or not name.strip():
             raise ValueError("name must be a non-empty string")
         name = name.strip()
 
-        track_ids = _parse_json_param(args.get("track_ids"), "track_ids")
+        track_ids = self._parse_json_param(args.get("track_ids"), "track_ids")
         if not isinstance(track_ids, list) or not track_ids:
             raise ValueError("track_ids must be a non-empty array")
         if not all(isinstance(t, str) and t.strip() for t in track_ids):
@@ -253,13 +287,14 @@ class PlaylistLedgerToolHandlers:
         if description is not None and not isinstance(description, str):
             raise ValueError("description must be a string")
 
-        intent_tags = _parse_json_param(args.get("intent_tags", []), "intent_tags")
+        intent_tags = self._parse_json_param(args.get("intent_tags", []), "intent_tags")
         if not isinstance(intent_tags, list):
             raise ValueError("intent_tags must be an array")
 
-        seed_context = _parse_json_param(args.get("seed_context", {}), "seed_context")
+        seed_context = self._parse_json_param(args.get("seed_context", {}), "seed_context")
         if not isinstance(seed_context, dict):
             raise ValueError("seed_context must be an object")
+        self._validate_seed_context(seed_context)
 
         idempotency_key = args.get("idempotency_key")
 
@@ -334,15 +369,15 @@ class PlaylistLedgerToolHandlers:
         snapshot compaction if enough events have accumulated since the last snapshot.
         Supports idempotency via ``client_event_id``.
         """
-        user_id = _validate_user_id(args)
-        playlist_id = _validate_playlist_id(args)
+        user_id = self._validate_user_id(args)
+        playlist_id = self._validate_playlist_id(args)
 
         mutation_type = args.get("type")
         valid_types = {e.value for e in PlaylistEventType}
         if mutation_type not in valid_types:
             raise ValueError(f"type must be one of: {', '.join(sorted(valid_types))}")
 
-        payload = _parse_json_param(args.get("payload"), "payload")
+        payload = self._parse_json_param(args.get("payload"), "payload")
         if not isinstance(payload, dict):
             raise ValueError("payload must be an object")
 
@@ -536,7 +571,7 @@ class PlaylistLedgerToolHandlers:
         Returns paginated results with cursor-based navigation. Each item includes
         the track count derived from the latest snapshot.
         """
-        user_id = _validate_user_id(args)
+        user_id = self._validate_user_id(args)
         default_page_size = await _settings_service.get("playlist.default_page_size", 50, session)
         max_page_size = await _settings_service.get("playlist.max_page_size", 200, session)
         limit = args.get("limit", default_page_size)
@@ -602,8 +637,8 @@ class PlaylistLedgerToolHandlers:
         Returns playlist metadata, the latest snapshot (track IDs), and recent
         mutation events (up to ``include_events_limit``, max 500).
         """
-        user_id = _validate_user_id(args)
-        playlist_id = _validate_playlist_id(args)
+        user_id = self._validate_user_id(args)
+        playlist_id = self._validate_playlist_id(args)
 
         recent_events_limit = await _settings_service.get("playlist.recent_events_limit", 50, session)
         include_events_limit = args.get("include_events_limit", recent_events_limit)
@@ -670,8 +705,8 @@ class PlaylistLedgerToolHandlers:
         or the latest overall), then replays subsequent events to produce the
         track list. Useful when Spotify read-back fails (403, missing scopes).
         """
-        user_id = _validate_user_id(args)
-        playlist_id = _validate_playlist_id(args)
+        user_id = self._validate_user_id(args)
+        playlist_id = self._validate_playlist_id(args)
 
         playlist = await session.get(MemoryPlaylist, playlist_id)
         if playlist is None or playlist.user_id != user_id:
@@ -745,21 +780,22 @@ class PlaylistLedgerToolHandlers:
         # Late import to avoid circular dependency with playlist_tools
         from app.mcp.tools.playlist_tools import _instance as playlist_handlers
 
-        user_id = _validate_user_id(args)
-        playlist_id = _validate_playlist_id(args)
+        user_id = self._validate_user_id(args)
+        playlist_id = self._validate_playlist_id(args)
 
-        intent_tags = _parse_json_param(args.get("intent_tags", []), "intent_tags")
+        intent_tags = self._parse_json_param(args.get("intent_tags", []), "intent_tags")
         if not isinstance(intent_tags, list):
             raise ValueError("intent_tags must be an array")
 
-        seed_context = _parse_json_param(args.get("seed_context", {}), "seed_context")
+        seed_context = self._parse_json_param(args.get("seed_context", {}), "seed_context")
         if not isinstance(seed_context, dict):
             raise ValueError("seed_context must be an object")
+        self._validate_seed_context(seed_context)
 
         idempotency_key = args.get("idempotency_key")
 
         # Optional manual track_ids override (bypasses Spotify fetch for private playlists)
-        manual_track_ids_raw = _parse_json_param(args.get("track_ids"), "track_ids")
+        manual_track_ids_raw = self._parse_json_param(args.get("track_ids"), "track_ids")
         manual_track_ids: list[str] | None = None
         if manual_track_ids_raw is not None:
             if not isinstance(manual_track_ids_raw, list):

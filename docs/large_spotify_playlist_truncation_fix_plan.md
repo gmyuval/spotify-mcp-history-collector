@@ -1,5 +1,7 @@
 # Fix Plan: Large Spotify Playlist Truncation at 100 Tracks
 
+> **Status: COMPLETE** — Merged in PR #42 (2026-03-08). See commit history for full implementation.
+
 ## Problem
 
 Playlists with >100 tracks are truncated to exactly 100 tracks when fetched via `spotify.get_playlist` or `memory.backfill_playlist`. The `tracks_mismatch_warning` correctly fires but the data is incomplete.

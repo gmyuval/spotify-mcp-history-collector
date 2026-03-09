@@ -88,3 +88,12 @@ class PlaylistEventType(enum.StrEnum):
     REMOVE_TRACKS = "REMOVE_TRACKS"
     REORDER = "REORDER"
     UPDATE_META = "UPDATE_META"
+
+
+# Allowed values for seed_context.origin.created_by (or top-level created_by).
+# "assistant" — playlist created by an AI assistant (ChatGPT, etc.)
+# "user"      — playlist created manually by the user
+# "spotify"   — playlist curated by Spotify (Discover Weekly, etc.)
+# "import"    — playlist imported from external source (ZIP, etc.)
+# "other"     — any other origin
+VALID_CREATED_BY_VALUES: frozenset[str] = frozenset({"assistant", "user", "spotify", "import", "other"})

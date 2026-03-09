@@ -1,5 +1,6 @@
 """Tests for memory.* MCP tools (playlist ledger)."""
 
+import json
 import uuid
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
@@ -846,3 +847,165 @@ class TestAddTracksAtPosition:
         )
         assert data["success"]
         assert data["result"]["track_ids"] == ["t1", "tA", "tB", "t2", "t3"]
+
+
+# ── created_by validation ────────────────────────────────────────────────
+
+
+class TestCreatedByValidation:
+    """Tests for seed_context.origin.created_by validation."""
+
+    def test_valid_created_by_assistant(self, client: TestClient, seeded_user: int) -> None:
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_assistant",
+            name="AI Playlist",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": "assistant"}},
+        )
+        assert data["success"]
+
+    def test_valid_created_by_user(self, client: TestClient, seeded_user: int) -> None:
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_user",
+            name="User Playlist",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": "user"}},
+        )
+        assert data["success"]
+
+    def test_valid_created_by_spotify(self, client: TestClient, seeded_user: int) -> None:
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_spotify",
+            name="Spotify Curated",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": "spotify"}},
+        )
+        assert data["success"]
+
+    def test_valid_created_by_import(self, client: TestClient, seeded_user: int) -> None:
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_import",
+            name="Imported",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": "import"}},
+        )
+        assert data["success"]
+
+    def test_valid_created_by_other(self, client: TestClient, seeded_user: int) -> None:
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_other",
+            name="Other",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": "other"}},
+        )
+        assert data["success"]
+
+    def test_invalid_created_by_nested(self, client: TestClient, seeded_user: int) -> None:
+        """Unknown created_by in origin should be rejected."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_bad",
+            name="Bad Origin",
+            track_ids=["t1"],
+            seed_context={"origin": {"created_by": "robot"}},
+        )
+        assert not data["success"]
+        assert "origin.created_by must be one of" in data["error"]
+
+    def test_invalid_created_by_flat(self, client: TestClient, seeded_user: int) -> None:
+        """Unknown created_by at top level should be rejected."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_bad_flat",
+            name="Bad Flat",
+            track_ids=["t1"],
+            seed_context={"created_by": "unknown_value"},
+        )
+        assert not data["success"]
+        assert "seed_context.created_by must be one of" in data["error"]
+
+    def test_missing_created_by_is_ok(self, client: TestClient, seeded_user: int) -> None:
+        """Omitting created_by entirely should be accepted (backwards compat)."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_none",
+            name="No Origin",
+            track_ids=["t1"],
+            seed_context={"time_window": "30d"},
+        )
+        assert data["success"]
+
+    def test_empty_seed_context_is_ok(self, client: TestClient, seeded_user: int) -> None:
+        """Empty seed_context should be accepted."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_empty",
+            name="Empty Context",
+            track_ids=["t1"],
+            seed_context={},
+        )
+        assert data["success"]
+
+    def test_created_by_as_json_string(self, client: TestClient, seeded_user: int) -> None:
+        """seed_context passed as JSON string should also be validated."""
+        data = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_cb_json",
+            name="JSON String",
+            track_ids=["t1"],
+            seed_context=json.dumps({"origin": {"created_by": "invalid_thing"}}),
+        )
+        assert not data["success"]
+        assert "origin.created_by must be one of" in data["error"]
+
+    def test_backfill_validates_created_by(self, client: TestClient, seeded_user: int) -> None:
+        """backfill_playlist should also validate created_by."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_bf_bad",
+            track_ids=["t1", "t2"],
+            name="Backfill Bad",
+            seed_context={"origin": {"created_by": "alien"}},
+        )
+        assert not data["success"]
+        assert "origin.created_by must be one of" in data["error"]
+
+    def test_backfill_valid_created_by(self, client: TestClient, seeded_user: int) -> None:
+        """backfill_playlist should accept valid created_by."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_bf_good",
+            track_ids=["t1", "t2"],
+            name="Backfill Good",
+            seed_context={"origin": {"created_by": "spotify"}},
+        )
+        assert data["success"]

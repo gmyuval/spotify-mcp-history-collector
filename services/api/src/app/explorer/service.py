@@ -385,21 +385,24 @@ class ExplorerService:
 
     @staticmethod
     def _is_ai_created(pl: MemoryPlaylist, snapshot: PlaylistSnapshot | None) -> bool:
-        """Check whether a memory playlist was AI-created (vs backfilled/imported)."""
+        """Check whether a memory playlist was AI-created (vs backfilled/imported).
+
+        A playlist is considered AI-created when ``created_by`` is absent
+        (legacy records) or equals ``"assistant"``.
+        """
         # Backfill snapshot source → not AI
         if snapshot is not None and snapshot.source == PlaylistSnapshotSource.BACKFILL:
             return False
-        # Check seed_context for origin.created_by — ChatGPT stores this for
-        # playlists logged via log_playlist_create on behalf of Spotify originals.
+        # Check seed_context for origin.created_by
         ctx = pl.seed_context if isinstance(pl.seed_context, dict) else {}
         origin = ctx.get("origin")
         if isinstance(origin, dict):
             created_by = origin.get("created_by")
-            if isinstance(created_by, str) and created_by not in ("assistant",):
+            if isinstance(created_by, str) and created_by != "assistant":
                 return False
         # Flat created_by at top level
         created_by_top = ctx.get("created_by")
-        if isinstance(created_by_top, str) and created_by_top not in ("assistant",):
+        if isinstance(created_by_top, str) and created_by_top != "assistant":
             return False
         return True
 
