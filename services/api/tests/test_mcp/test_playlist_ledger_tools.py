@@ -909,7 +909,8 @@ class TestAddTracksAtPosition:
 class TestCreatedByValidation:
     """Tests for seed_context.origin.created_by validation."""
 
-    def test_valid_created_by_assistant(self, client: TestClient, seeded_user: int) -> None:
+    def test_valid_created_by_assistant_round_trips(self, client: TestClient, seeded_user: int) -> None:
+        """Verify created_by persists correctly through create → get_playlist."""
         data = _call(
             client,
             "memory.log_playlist_create",
@@ -920,6 +921,17 @@ class TestCreatedByValidation:
             seed_context={"origin": {"created_by": "assistant"}},
         )
         assert data["success"]
+
+        # Verify the seed_context round-trips correctly
+        detail = _call(
+            client,
+            "memory.get_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_cb_assistant",
+        )
+        assert detail["success"]
+        stored_ctx = detail["result"]["playlist"]["seed_context"]
+        assert stored_ctx["origin"]["created_by"] == "assistant"
 
     def test_valid_created_by_user(self, client: TestClient, seeded_user: int) -> None:
         data = _call(
@@ -1061,6 +1073,33 @@ class TestCreatedByValidation:
             track_ids=["t1", "t2"],
             name="Backfill Good",
             seed_context={"origin": {"created_by": "spotify"}},
+        )
+        assert data["success"]
+
+    def test_backfill_validates_created_by_from_json_string(self, client: TestClient, seeded_user: int) -> None:
+        """backfill_playlist should validate created_by when seed_context is a JSON string."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_bf_json_bad",
+            track_ids=["t1"],
+            name="Backfill JSON Bad",
+            seed_context=json.dumps({"origin": {"created_by": "invalid_thing"}}),
+        )
+        assert not data["success"]
+        assert "origin.created_by must be one of" in data["error"]
+
+    def test_backfill_valid_created_by_from_json_string(self, client: TestClient, seeded_user: int) -> None:
+        """backfill_playlist should accept valid created_by from JSON string."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_bf_json_good",
+            track_ids=["t1", "t2"],
+            name="Backfill JSON Good",
+            seed_context=json.dumps({"origin": {"created_by": "spotify"}}),
         )
         assert data["success"]
 
