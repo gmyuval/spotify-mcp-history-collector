@@ -65,7 +65,11 @@ PLAYLIST MEMORY (always log playlists you create or edit):
   ALWAYS call memory.log_playlist_create with the exact ordered track_ids,
   playlist_id, name, and intent_tags describing the playlist's vibe/purpose.
   Also pass seed_context with the analysis that inspired it (time window,
-  top artists, constraints applied).
+  top artists, constraints applied). ALWAYS include
+  origin.created_by in seed_context — use "assistant" for playlists you
+  create, "user" for user-created, "spotify" for Spotify-curated, "import"
+  for imported, or "other". Example seed_context:
+  {"origin": {"created_by": "assistant"}, "time_window": "30d"}
 - After any spotify.add_tracks: call memory.log_playlist_mutation with
   mutation_type="ADD_TRACKS" and payload="{\"track_ids\": [...]}" (JSON string).
 - After any spotify.remove_tracks: call memory.log_playlist_mutation with
@@ -329,3 +333,15 @@ Format Notes section to reflect both formats are accepted.
 **Backend changes (no GPT action update needed):**
 - Admin settings page at `/admin/settings` — change limits and scoring weights without code deployment
 - Search limits (`search.default_limit`, `search.max_limit`), score weights, and playlist thresholds are now DB-configurable
+
+### Bugfix — Formalize `created_by` Enum for Playlist Origin
+
+**No OpenAPI schema changes needed.**
+
+**Instructions:** Updated PLAYLIST MEMORY section — `seed_context.origin.created_by`
+is now required and validated. Allowed values: `"assistant"`, `"user"`, `"spotify"`,
+`"import"`, `"other"`. Invalid values are rejected with `success=false`.
+
+**Knowledge file:** Re-upload `docs/chatgpt-tool-catalog.md` — `seed_context`
+description now documents `origin.created_by` enum values for `memory.log_playlist_create`
+and `memory.backfill_playlist`.

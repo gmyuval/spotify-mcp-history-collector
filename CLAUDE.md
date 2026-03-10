@@ -328,13 +328,14 @@ Custom GPT Actions (OpenAPI over HTTPS) with Bearer token auth.
 
 ## Implementation Status
 
-All core features are complete and deployed to production. 34 MCP tools, 491 API tests, 31 collector tests, 40 frontend tests.
+All core features are complete and deployed to production. 34 MCP tools with extensive API, collector, and frontend test suites.
 
 CI/CD via GitHub Actions: tests gate all deploys, manual dispatch supports branch deploys for testing.
 
 ### Recently Completed
+
 - **JWT User Authentication (Phase 4)**: Full JWT auth flow — OAuth callback issues JWTs, cookie + Bearer support, refresh endpoint, RBAC role assignment. `JWTService` in `app/auth/jwt.py`, `JWTAuthMiddleware` in `app/auth/middleware.py`. Session `__aexit__` passes `sys.exc_info()` for proper rollback on errors.
-- **Playlist Track Pagination**: `SpotifyClient.get_playlist_all_tracks()` follows Spotify's pagination `next` URLs to fetch all tracks (up to 10,000 cap). The `spotify.get_playlist` MCP tool now returns complete track listings instead of truncating at ~100.
+- **Playlist Track Pagination & 403 Fallback Chain** (PR #42): `SpotifyClient.get_playlist_all_tracks()` uses `/playlists/{id}/items` endpoint with pagination (not deprecated `/tracks`). On 403 (Spotify dev mode): token refresh → retry → use `pl.tracks.items` from metadata (up to ~100 tracks, `tracks_source: "api_metadata"`) → embed fallback → mark restricted. `_with_fidelity_metrics()` adds consistent `tracks_returned`/`tracks_mismatch_warning` on both live and cached paths. Cache validation detects repeated-page pagination bugs via `Counter`-based dedup (only on `api`-sourced caches). Stale metadata re-fetched after successful token refresh.
 - **pip-tools workflow**: When adding new dependencies to `pyproject.toml`, always run `make compile-deps` to regenerate `requirements.txt` files — Docker builds use these, not pyproject.toml directly. Forgetting this caused a deployment failure (missing pyjwt).
 
 ### Architecture Notes
