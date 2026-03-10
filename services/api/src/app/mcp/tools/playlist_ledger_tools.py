@@ -313,7 +313,10 @@ class PlaylistLedgerToolHandlers:
 
         # Idempotency check
         if idempotency_key:
-            stmt = select(MemoryPlaylist).where(MemoryPlaylist.idempotency_key == idempotency_key)
+            stmt = select(MemoryPlaylist).where(
+                MemoryPlaylist.idempotency_key == idempotency_key,
+                MemoryPlaylist.user_id == user_id,
+            )
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
             if existing is not None:
@@ -813,9 +816,11 @@ class PlaylistLedgerToolHandlers:
         if manual_track_ids_raw is not None:
             if not isinstance(manual_track_ids_raw, list):
                 raise ValueError("track_ids must be an array")
-            if not all(isinstance(t, str) and t.strip() for t in manual_track_ids_raw):
-                raise ValueError("track_ids must contain non-empty strings")
-            manual_track_ids = [self._normalize_track_id(str(t)) for t in manual_track_ids_raw]
+            if not all(isinstance(t, str) for t in manual_track_ids_raw):
+                raise ValueError("track_ids must contain strings")
+            manual_track_ids = [self._normalize_track_id(t) for t in manual_track_ids_raw]
+            if not all(manual_track_ids):
+                raise ValueError("track_ids must contain non-empty Spotify track IDs")
 
         raw_name = args.get("name")
         name_override: str | None = None

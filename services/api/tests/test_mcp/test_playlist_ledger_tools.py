@@ -150,6 +150,51 @@ class TestLogPlaylistCreate:
         assert data2["result"]["playlist_id"] == "pl_idemp"  # original
         assert data2["result"]["stored_track_count"] == 2  # from stored snapshot, not args
 
+    def test_idempotency_scoped_to_user(self, client: TestClient, seeded_user: int, second_user: int) -> None:
+        """Idempotency lookup is scoped to user_id — same key for same user
+        returns the idempotent result, but a different user's lookup does
+        not find it (no cross-user data leak).
+        """
+        key = "scoped-idemp-key"
+        data1 = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_idemp_u1",
+            name="User1 Playlist",
+            track_ids=["t1"],
+            idempotency_key=key,
+        )
+        assert data1["success"]
+        assert data1["result"]["playlist_id"] == "pl_idemp_u1"
+
+        # Same user, same key → idempotent return of original
+        data1b = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=seeded_user,
+            playlist_id="pl_idemp_u1_dup",
+            name="User1 Again",
+            track_ids=["t9"],
+            idempotency_key=key,
+        )
+        assert data1b["success"]
+        assert data1b["result"]["playlist_id"] == "pl_idemp_u1"
+
+        # Different user, different key → separate playlist
+        data2 = _call(
+            client,
+            "memory.log_playlist_create",
+            user_id=second_user,
+            playlist_id="pl_idemp_u2",
+            name="User2 Playlist",
+            track_ids=["t2", "t3"],
+            idempotency_key="different-key",
+        )
+        assert data2["success"]
+        assert data2["result"]["playlist_id"] == "pl_idemp_u2"
+        assert data2["result"]["stored_track_count"] == 2
+
     def test_duplicate_playlist_id_error(self, client: TestClient, seeded_user: int) -> None:
         """Creating same playlist_id twice without idempotency_key fails."""
         params = {
@@ -1076,6 +1121,19 @@ class TestCreatedByValidation:
         assert detail["success"]
         track_ids = detail["result"]["latest_snapshot"]["track_ids"]
         assert track_ids == ["abc123", "def456", "ghi789"]
+
+    def test_backfill_rejects_track_ids_normalizing_to_empty(self, client: TestClient, seeded_user: int) -> None:
+        """Track IDs like 'spotify:track:' that normalize to '' should be rejected."""
+        data = _call(
+            client,
+            "memory.backfill_playlist",
+            user_id=seeded_user,
+            playlist_id="pl_bf_empty_norm",
+            track_ids=["spotify:track:", "abc123"],
+            name="Empty Normalize",
+        )
+        assert not data["success"]
+        assert "non-empty" in data["error"]
 
     def test_conflicting_nested_and_flat_created_by_rejected(self, client: TestClient, seeded_user: int) -> None:
         """Conflicting nested and flat created_by should be rejected."""
