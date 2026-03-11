@@ -115,8 +115,11 @@ class ExplorerService:
         )
         playlists: list[CachedPlaylist] = list(result.scalars().all())
 
+        def _as_utc(dt: datetime) -> datetime:
+            return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
         cache_stale = not playlists or (
-            datetime.now(UTC) - max(p.fetched_at for p in playlists) > self._PLAYLIST_CACHE_TTL
+            datetime.now(UTC) - _as_utc(max(p.fetched_at for p in playlists)) > self._PLAYLIST_CACHE_TTL
         )
         if cache_stale:
             refreshed = await self._fetch_playlists_from_spotify(user_id, session)
