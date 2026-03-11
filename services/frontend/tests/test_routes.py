@@ -12,7 +12,9 @@ from frontend.api_client import ApiError
 def test_healthz(client: TestClient) -> None:
     response = client.get("/healthz")
     assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert "version" in data
 
 
 # --- Dashboard ---
