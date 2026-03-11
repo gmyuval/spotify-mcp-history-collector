@@ -3,6 +3,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import TypedDict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.admin import router as admin_router
 from app.auth import router as auth_router
 from app.auth.middleware import JWTAuthMiddleware
-from app.constants import APP_DESCRIPTION, APP_TITLE, APP_VERSION, Routes, ServiceName
+from app.constants import APP_DESCRIPTION, APP_TITLE, Routes, ServiceName
 from app.dependencies import db_manager
 from app.explorer.router import router as explorer_router
 from app.history import router as history_router
@@ -22,6 +23,14 @@ from app.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.settings import get_settings
+from shared.version import __version__ as APP_VERSION
+
+
+class HealthResponse(TypedDict):
+    """Schema for health check responses."""
+
+    status: str
+    version: str
 
 
 class SpotifyMCPApp:
@@ -91,9 +100,9 @@ class SpotifyMCPApp:
         self.app.include_router(explorer_router, prefix=Routes.EXPLORER.prefix, tags=[Routes.EXPLORER.tag])
 
         @self.app.get(Routes.HEALTH)
-        async def health_check() -> dict[str, str]:
+        async def health_check() -> HealthResponse:
             """Health check endpoint."""
-            return {"status": "healthy"}
+            return {"status": "healthy", "version": APP_VERSION}
 
         @self.app.get("/")
         async def root() -> dict[str, str]:

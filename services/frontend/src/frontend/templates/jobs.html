@@ -24,6 +24,7 @@
       <option value="running" {% if status == "running" %}selected{% endif %}>running</option>
       <option value="success" {% if status == "success" %}selected{% endif %}>success</option>
       <option value="error" {% if status == "error" %}selected{% endif %}>error</option>
+      <option value="cancelled" {% if status == "cancelled" %}selected{% endif %}>cancelled</option>
     </select>
   </div>
   <div class="col-auto">
@@ -39,7 +40,7 @@
         <tr>
           <th>ID</th><th>User</th><th>Type</th><th>Status</th>
           <th>Fetched</th><th>Inserted</th><th>Skipped</th>
-          <th>Started</th><th>Completed</th><th>Error</th>
+          <th>Started</th><th>Completed</th><th>Error</th><th>Actions</th>
         </tr>
       </thead>
       <tbody id="jobs-tbody">

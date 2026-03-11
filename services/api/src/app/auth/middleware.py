@@ -11,6 +11,7 @@ from app.auth.jwt import JWTError, JWTService
 from app.constants import Routes
 from app.dependencies import db_manager
 from app.settings import get_settings
+from shared.logging.context import LogContext
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         request.state.user_id = user_id
+        LogContext.set_user_id(user_id)
 
         # Provide a DB session for permission checks via request.state.db_session.
         # We separate session acquisition from request handling so that an

@@ -1,8 +1,10 @@
 """Main FastAPI application for Spotify MCP Admin Frontend."""
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TypedDict
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -10,6 +12,16 @@ from fastapi.templating import Jinja2Templates
 
 from frontend.api_client import AdminApiClient, build_auth_headers
 from frontend.settings import get_settings
+
+# Frontend has no access to the shared package — read version from env var set by docker-compose/CI.
+__version__ = os.environ.get("APP_VERSION", "0.2.0")
+
+
+class HealthResponse(TypedDict):
+    """Schema for health check responses."""
+
+    status: str
+    version: str
 
 
 class FrontendApp:
@@ -21,7 +33,7 @@ class FrontendApp:
         self.app = FastAPI(
             title="Spotify MCP Admin Frontend",
             description="Management UI for users, sync status, analytics, logs",
-            version="0.1.0",
+            version=__version__,
             lifespan=self._lifespan,
         )
         self._setup_static_files()
@@ -59,6 +71,7 @@ class FrontendApp:
         templates = Jinja2Templates(directory=str(templates_dir))
         settings = get_settings()
         templates.env.globals["base_path"] = settings.BASE_PATH
+        templates.env.globals["version"] = __version__
         self.app.state.templates = templates
 
     def _setup_routers(self) -> None:
@@ -84,9 +97,9 @@ class FrontendApp:
         self.app.include_router(settings_router, prefix=f"{bp}/settings", tags=["settings"])
 
         @self.app.get("/healthz")
-        async def health_check() -> dict[str, str]:
+        async def health_check() -> HealthResponse:
             """Health check endpoint."""
-            return {"status": "healthy"}
+            return {"status": "healthy", "version": __version__}
 
 
 _application = FrontendApp()

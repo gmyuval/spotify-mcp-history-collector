@@ -52,6 +52,7 @@ class ExplorerRouter:
         r.add_api_route("/top-tracks", self.top_tracks, methods=["GET"])
         r.add_api_route("/profile", self.profile, methods=["GET"])
         r.add_api_route("/playlists", self.playlists, methods=["GET"])
+        r.add_api_route("/playlists/refresh", self.refresh_playlists, methods=["POST"])
         r.add_api_route("/playlists/{spotify_playlist_id}", self.playlist_detail, methods=["GET"])
         r.add_api_route("/playlists/{spotify_playlist_id}/fetch-tracks", self.fetch_playlist_tracks, methods=["POST"])
         r.add_api_route("/taste-profile", self.taste_profile, methods=["GET"])
@@ -107,6 +108,10 @@ class ExplorerRouter:
 
     async def playlists(self, user_id: RequireOwnDataView, session: DBSession) -> list[PlaylistSummary]:
         return await self._service.get_playlists(user_id, session)
+
+    async def refresh_playlists(self, user_id: RequireOwnDataView, session: DBSession) -> list[PlaylistSummary]:
+        """Force-refresh playlist list from Spotify API."""
+        return await self._service.refresh_playlists(user_id, session)
 
     async def playlist_detail(
         self,

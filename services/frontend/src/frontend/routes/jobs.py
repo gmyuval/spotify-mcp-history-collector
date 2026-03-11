@@ -18,6 +18,9 @@ class JobsRouter:
         self.router.add_api_route(
             "/partials/jobs-table", self.jobs_table_partial, methods=["GET"], response_class=HTMLResponse
         )
+        self.router.add_api_route(
+            "/{job_run_id}/cancel", self.cancel_job, methods=["POST"], response_class=HTMLResponse
+        )
 
     async def list_jobs(self, request: Request) -> HTMLResponse:
         """Render job runs list page."""
@@ -62,6 +65,21 @@ class JobsRouter:
                 "total": data.get("total", 0),
                 **params,
             },
+        )
+
+    async def cancel_job(self, request: Request, job_run_id: int) -> HTMLResponse:
+        """Cancel a running job — returns an alert partial."""
+        api: AdminApiClient = request.app.state.api
+        try:
+            result = await api.cancel_job_run(job_run_id)
+            alert_type = "success" if result.get("success") else "warning"
+            message = result.get("message", "Job cancelled")
+        except ApiError as e:
+            alert_type = "danger"
+            message = e.detail
+        return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            "partials/_alert.html",
+            {"request": request, "alert_type": alert_type, "message": message},
         )
 
     @staticmethod

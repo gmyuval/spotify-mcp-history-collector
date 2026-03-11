@@ -3,6 +3,7 @@
 import json
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,13 +43,20 @@ from shared.db.models.user import SpotifyToken, User
 from shared.spotify.client import SpotifyClient
 from shared.spotify.embed import SpotifyEmbedClient
 from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
-from shared.spotify.models import SpotifyPlaylistTrackItem
+from shared.spotify.models import SpotifyPlaylistSimplified, SpotifyPlaylistTrackItem
 
 logger = logging.getLogger(__name__)
 
 
 class ExplorerService:
     """Stateless service providing data for the explorer frontend."""
+
+    # Playlist cache TTL — auto-refresh if older than this
+    _PLAYLIST_CACHE_TTL: timedelta = timedelta(hours=1)
+    # Spotify API page size for playlist listing (max allowed is 50)
+    _PLAYLIST_FETCH_PAGE_SIZE: int = 50
+    # Safety cap: stop fetching after this many playlists to avoid runaway pagination
+    _PLAYLIST_FETCH_MAX: int = 500
 
     async def get_dashboard(self, user_id: int, session: AsyncSession) -> DashboardData:
         """Return all-time summary stats + 30-day top artists and top tracks."""
@@ -85,24 +93,129 @@ class ExplorerService:
             offset=offset,
         )
 
+    @staticmethod
+    def _playlist_to_summary(p: CachedPlaylist) -> PlaylistSummary:
+        return PlaylistSummary(
+            id=p.id,
+            spotify_playlist_id=p.spotify_playlist_id,
+            name=p.name or "",
+            description=p.description,
+            total_tracks=p.total_tracks or 0,
+            owner_display_name=p.owner_display_name,
+            external_url=p.external_url,
+        )
+
     async def get_playlists(self, user_id: int, session: AsyncSession) -> list[PlaylistSummary]:
-        """Return all cached playlists for the user, ordered by name."""
+        """Return all cached playlists for the user.
+
+        Auto-fetches from Spotify if the cache is empty or older than 1 hour.
+        """
         result = await session.execute(
             select(CachedPlaylist).where(CachedPlaylist.user_id == user_id).order_by(CachedPlaylist.name)
         )
-        playlists = result.scalars().all()
-        return [
-            PlaylistSummary(
-                id=p.id,
-                spotify_playlist_id=p.spotify_playlist_id,
-                name=p.name or "",
-                description=p.description,
-                total_tracks=p.total_tracks or 0,
-                owner_display_name=p.owner_display_name,
-                external_url=p.external_url,
+        playlists: list[CachedPlaylist] = list(result.scalars().all())
+
+        cache_stale = not playlists or (
+            datetime.now(UTC) - max(p.fetched_at for p in playlists) > self._PLAYLIST_CACHE_TTL
+        )
+        if cache_stale:
+            refreshed = await self._fetch_playlists_from_spotify(user_id, session)
+            if refreshed is not None:
+                playlists = refreshed
+
+        return [self._playlist_to_summary(p) for p in playlists]
+
+    async def refresh_playlists(self, user_id: int, session: AsyncSession) -> list[PlaylistSummary]:
+        """Force-refresh playlists from Spotify API regardless of cache age."""
+        refreshed = await self._fetch_playlists_from_spotify(user_id, session)
+        if refreshed is None:
+            # Spotify unavailable — return whatever is in the DB
+            result = await session.execute(
+                select(CachedPlaylist).where(CachedPlaylist.user_id == user_id).order_by(CachedPlaylist.name)
             )
-            for p in playlists
-        ]
+            refreshed = list(result.scalars().all())
+        return [self._playlist_to_summary(p) for p in refreshed]
+
+    async def _fetch_playlists_from_spotify(self, user_id: int, session: AsyncSession) -> list[CachedPlaylist] | None:
+        """Fetch user playlists from Spotify API and upsert metadata into cached_playlists.
+
+        Returns the updated list ordered by name, or None if Spotify is unreachable.
+        Does NOT fetch tracks — only playlist metadata.
+        """
+        try:
+            settings = get_settings()
+            token_mgr = TokenManager(settings)
+            access_token = await token_mgr.get_valid_token(user_id, session)
+
+            async def _on_token_expired() -> str:
+                return await token_mgr.refresh_access_token(user_id, session)
+
+            client = SpotifyClient(access_token, on_token_expired=_on_token_expired)
+
+            # Page through all playlists (Spotify max 50 per request, cap at _PLAYLIST_FETCH_MAX total)
+            offset = 0
+            all_items: list[SpotifyPlaylistSimplified] = []
+            while offset < self._PLAYLIST_FETCH_MAX:
+                response = await client.get_user_playlists(limit=self._PLAYLIST_FETCH_PAGE_SIZE, offset=offset)
+                all_items.extend(response.items)
+                if len(response.items) < self._PLAYLIST_FETCH_PAGE_SIZE or response.next is None:
+                    break
+                offset += self._PLAYLIST_FETCH_PAGE_SIZE
+
+            now = datetime.now(UTC)
+            for item in all_items:
+                if not item.id:
+                    continue
+                existing_result = await session.execute(
+                    select(CachedPlaylist).where(
+                        CachedPlaylist.user_id == user_id,
+                        CachedPlaylist.spotify_playlist_id == item.id,
+                    )
+                )
+                existing = existing_result.scalar_one_or_none()
+                total_tracks = (item.tracks or {}).get("total", 0)
+                external_url = (item.external_urls or {}).get("spotify")
+                owner_id = item.owner.id if item.owner else None
+                owner_name = item.owner.display_name if item.owner else None
+
+                if existing is not None:
+                    existing.name = item.name
+                    existing.description = item.description
+                    existing.public = item.public
+                    existing.snapshot_id = item.snapshot_id
+                    existing.total_tracks = total_tracks
+                    existing.external_url = external_url
+                    existing.owner_id = owner_id
+                    existing.owner_display_name = owner_name
+                    existing.fetched_at = now
+                else:
+                    session.add(
+                        CachedPlaylist(
+                            spotify_playlist_id=item.id,
+                            user_id=user_id,
+                            name=item.name,
+                            description=item.description,
+                            public=item.public,
+                            snapshot_id=item.snapshot_id,
+                            total_tracks=total_tracks,
+                            external_url=external_url,
+                            owner_id=owner_id,
+                            owner_display_name=owner_name,
+                            fetched_at=now,
+                        )
+                    )
+
+            await session.flush()
+
+            # Re-query to return fresh sorted list
+            result = await session.execute(
+                select(CachedPlaylist).where(CachedPlaylist.user_id == user_id).order_by(CachedPlaylist.name)
+            )
+            return list(result.scalars().all())
+
+        except Exception:
+            logger.warning("Failed to fetch playlists from Spotify for user %d", user_id, exc_info=True)
+            return None
 
     async def get_profile(self, user_id: int, session: AsyncSession) -> UserProfile:
         """Return user profile with all-time listening stats."""

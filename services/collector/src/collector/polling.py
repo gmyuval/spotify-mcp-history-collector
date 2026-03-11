@@ -57,6 +57,14 @@ class PollingService:
                 on_token_expired=_on_token_expired,
             )
 
+            # Check if job was cancelled before making Spotify API call
+            if await self._job_tracker.is_cancelled(job_run.id, session):
+                await self._job_tracker.mark_cancelled(job_run, session)
+                checkpoint.status = SyncStatus.IDLE
+                await session.flush()
+                logger.info("Poll job %d cancelled for user %d", job_run.id, user_id)
+                return 0, 0
+
             # 3. Fetch recently played
             response = await client.get_recently_played(limit=50)
             logger.info("Fetched %d recently-played items for user %d", len(response.items), user_id)

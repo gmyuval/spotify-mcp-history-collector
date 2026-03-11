@@ -7,6 +7,7 @@
     {% if job.status == "success" %}<span class="badge bg-success">{{ job.status }}</span>
     {% elif job.status == "error" %}<span class="badge bg-danger">{{ job.status }}</span>
     {% elif job.status == "running" %}<span class="badge bg-primary">{{ job.status }}</span>
+    {% elif job.status == "cancelled" %}<span class="badge bg-warning text-dark">{{ job.status }}</span>
     {% else %}<span class="badge bg-secondary">{{ job.status }}</span>{% endif %}
   </td>
   <td>{{ job.records_fetched }}</td>
@@ -15,10 +16,20 @@
   <td>{{ job.started_at[:19] if job.started_at else "—" }}</td>
   <td>{{ job.completed_at[:19] if job.completed_at else "—" }}</td>
   <td class="log-message">{{ job.error_message or "—" }}</td>
+  <td>
+    {% if job.status == "running" %}
+    <button class="btn btn-warning btn-sm"
+            hx-post="{{ base_path }}/jobs/{{ job.id }}/cancel"
+            hx-target="#cancel-result-{{ job.id }}"
+            hx-swap="innerHTML"
+            hx-confirm="Cancel job {{ job.id }}?">Cancel</button>
+    <span id="cancel-result-{{ job.id }}"></span>
+    {% endif %}
+  </td>
 </tr>
 {% endfor %}
 {% if not jobs %}
-<tr><td colspan="10" class="text-muted text-center py-3">No job runs found</td></tr>
+<tr><td colspan="11" class="text-muted text-center py-3">No job runs found</td></tr>
 {% endif %}
 
 {% if total > limit %}

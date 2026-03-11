@@ -27,6 +27,7 @@ class JobStatus(enum.StrEnum):
     RUNNING = "running"
     SUCCESS = "success"
     ERROR = "error"
+    CANCELLED = "cancelled"
 
 
 class ImportStatus(enum.StrEnum):

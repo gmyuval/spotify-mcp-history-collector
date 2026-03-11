@@ -15,6 +15,8 @@ class PlaylistsRouter:
     def __init__(self) -> None:
         self.router = APIRouter()
         self.router.add_api_route("/", self.playlists, methods=["GET"], response_class=HTMLResponse)
+        # /refresh must be registered before /{spotify_playlist_id} to avoid being swallowed by the catch-all
+        self.router.add_api_route("/refresh", self.refresh_playlists, methods=["POST"])
         self.router.add_api_route("/{spotify_playlist_id}/fetch-tracks", self.fetch_tracks, methods=["POST"])
         self.router.add_api_route(
             "/{spotify_playlist_id}", self.playlist_detail, methods=["GET"], response_class=HTMLResponse
@@ -80,6 +82,21 @@ class PlaylistsRouter:
                 "fetch_error": fetch_error,
             },
         )
+
+    async def refresh_playlists(self, request: Request) -> RedirectResponse:
+        """Force-refresh playlist list from Spotify, then redirect back to playlists page."""
+        token = require_login(request)
+        if isinstance(token, RedirectResponse):
+            return token
+
+        api: ExplorerApiClient = request.app.state.api
+        try:
+            await api.refresh_playlists(token)
+        except ApiError as e:
+            if e.status_code == 401:
+                return RedirectResponse(url="/login", status_code=303)
+            # On error, redirect back — the page will show whatever is cached
+        return RedirectResponse(url="/playlists", status_code=303)
 
     async def fetch_tracks(self, request: Request, spotify_playlist_id: str) -> RedirectResponse:
         """Fetch tracks from Spotify API and redirect back to playlist detail."""
