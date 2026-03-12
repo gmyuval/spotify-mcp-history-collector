@@ -64,6 +64,7 @@ class JobRun(Base):
     )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Statistics
     records_fetched: Mapped[int] = mapped_column(Integer, default=0)

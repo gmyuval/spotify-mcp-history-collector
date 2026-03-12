@@ -302,6 +302,23 @@ class AdminService:
             total,
         )
 
+    async def cancel_job_run(self, job_run_id: int, session: AsyncSession) -> ActionResponse:
+        """Mark a running JobRun as cancelled so the collector stops it.
+
+        Uses SELECT FOR UPDATE to avoid a read-then-write race with the collector.
+        """
+        result = await session.execute(select(JobRun).where(JobRun.id == job_run_id).with_for_update())
+        job_run = result.scalar_one_or_none()
+        if job_run is None:
+            return ActionResponse(success=False, message=f"Job run {job_run_id} not found", not_found=True)
+        if job_run.status != JobStatus.RUNNING:
+            return ActionResponse(
+                success=False, message=f"Job run {job_run_id} is not running (status={job_run.status.value})"
+            )
+        job_run.cancelled_at = datetime.now(UTC)
+        await session.flush()
+        return ActionResponse(success=True, message=f"Job run {job_run_id} marked for cancellation")
+
     # --- Import Jobs ---
 
     async def list_import_jobs(

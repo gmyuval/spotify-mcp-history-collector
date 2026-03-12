@@ -9,6 +9,7 @@ from collector.runloop import CollectorRunLoop
 from collector.settings import CollectorSettings
 from shared.db import DatabaseManager
 from shared.logging.handler import DBLogHandler
+from shared.version import __version__
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ def _register_shutdown_signals(loop: asyncio.AbstractEventLoop, shutdown_event: 
 
 async def main() -> None:
     """Main collector entry point with graceful shutdown."""
-    logger.info("Spotify History Collector starting...")
+    logger.info("Spotify History Collector v%s starting...", __version__)
     settings = CollectorSettings()
     db_manager = DatabaseManager.from_env()
     shutdown_event = asyncio.Event()

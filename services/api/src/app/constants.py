@@ -21,7 +21,6 @@ class ServiceName(enum.StrEnum):
 
 APP_TITLE = "Spotify MCP API"
 APP_DESCRIPTION = "Spotify OAuth, MCP tool endpoints, and admin APIs"
-APP_VERSION = "0.1.0"
 
 
 # --- Route configuration ---

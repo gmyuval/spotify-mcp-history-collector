@@ -24,6 +24,10 @@ ENV PYTHONPATH=/app/src
 RUN useradd --create-home --shell /bin/bash appuser
 USER appuser
 
+# Image version label
+ARG APP_VERSION=dev
+LABEL org.opencontainers.image.version="$APP_VERSION"
+
 # Expose port
 EXPOSE 8002
 

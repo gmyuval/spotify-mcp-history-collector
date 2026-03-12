@@ -52,6 +52,7 @@ class ExplorerRouter:
         r.add_api_route("/top-tracks", self.top_tracks, methods=["GET"])
         r.add_api_route("/profile", self.profile, methods=["GET"])
         r.add_api_route("/playlists", self.playlists, methods=["GET"])
+        r.add_api_route("/playlists/refresh", self.refresh_playlists, methods=["POST"])
         r.add_api_route("/playlists/{spotify_playlist_id}", self.playlist_detail, methods=["GET"])
         r.add_api_route("/playlists/{spotify_playlist_id}/fetch-tracks", self.fetch_playlist_tracks, methods=["POST"])
         r.add_api_route("/taste-profile", self.taste_profile, methods=["GET"])
@@ -107,6 +108,19 @@ class ExplorerRouter:
 
     async def playlists(self, user_id: RequireOwnDataView, session: DBSession) -> list[PlaylistSummary]:
         return await self._service.get_playlists(user_id, session)
+
+    async def refresh_playlists(self, user_id: RequireOwnDataView, session: DBSession) -> list[PlaylistSummary]:
+        """Force-refresh playlist list from Spotify API."""
+        try:
+            return await self._service.refresh_playlists(user_id, session)
+        except (TokenNotFoundError, TokenRefreshError, SpotifyAuthError) as exc:
+            logger.warning("Auth failure refreshing playlists for user %d: %s", user_id, exc)
+            raise HTTPException(status_code=401, detail="Spotify authentication failed") from exc
+        except SpotifyRateLimitError as exc:
+            raise HTTPException(status_code=429, detail="Spotify rate limit exceeded, try again later") from exc
+        except SpotifyClientError as exc:
+            logger.error("Spotify client error refreshing playlists for user %d: %s", user_id, exc)
+            raise HTTPException(status_code=502, detail="Spotify service unavailable") from exc
 
     async def playlist_detail(
         self,

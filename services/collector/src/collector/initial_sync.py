@@ -80,6 +80,20 @@ class InitialSyncService:
 
         try:
             while True:
+                # Stop condition: job cancelled
+                if await self._job_tracker.is_cancelled(job_run.id, session):
+                    await self._job_tracker.mark_cancelled(job_run, session)
+                    checkpoint.status = SyncStatus.IDLE
+                    checkpoint.error_message = None
+                    await session.flush()
+                    logger.info(
+                        "Initial sync job %d cancelled for user %d after %d requests",
+                        job_run.id,
+                        user_id,
+                        request_count,
+                    )
+                    return total_inserted, total_skipped
+
                 # Stop condition: max requests
                 if request_count >= self._settings.INITIAL_SYNC_MAX_REQUESTS:
                     stop_reason = "max_requests"

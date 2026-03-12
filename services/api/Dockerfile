@@ -27,6 +27,10 @@ COPY api/alembic.ini ./
 # Set Python path (shared_src first so shared is importable)
 ENV PYTHONPATH=/app/src:/app/shared_src
 
+# Image version label
+ARG APP_VERSION=dev
+LABEL org.opencontainers.image.version="$APP_VERSION"
+
 # Expose port
 EXPOSE 8000
 

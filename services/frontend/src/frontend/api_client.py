@@ -128,6 +128,10 @@ class AdminApiClient:
         """GET /admin/sync-status — global sync overview."""
         return await self._request("GET", "/admin/sync-status")
 
+    async def cancel_job_run(self, job_run_id: int) -> dict[str, Any]:
+        """POST /admin/job-runs/{job_run_id}/cancel — mark a running job for cancellation."""
+        return await self._request("POST", f"/admin/job-runs/{job_run_id}/cancel")
+
     async def list_job_runs(
         self,
         user_id: int | None = None,

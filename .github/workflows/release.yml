@@ -1,0 +1,87 @@
+name: Auto-tag and create GitHub Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from version.py
+        id: version
+        run: |
+          VERSION=$(python3 -c "
+          import re
+          with open('services/shared/src/shared/version.py') as f:
+              content = f.read()
+          m = re.search(r'''__version__\s*=\s*['\"]([^'\"]+)['\"]''', content)
+          print(m.group(1))
+          ")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION"
+
+      - name: Check if tag already exists
+        id: tag_check
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG already exists — skipping release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG does not exist — will create release."
+          fi
+
+      - name: Build changelog from commits since last tag
+        if: steps.tag_check.outputs.exists == 'false'
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --oneline)
+          else
+            CHANGELOG=$(git log --oneline "${PREV_TAG}..HEAD")
+          fi
+          # Write changelog to a temp file to avoid quoting issues
+          echo "$CHANGELOG" > /tmp/changelog.txt
+          echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and GitHub Release
+        if: steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Configure git identity for tag creation
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create annotated tag on the current commit
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          # Pre-release for 0.x.x, full release for 1.x.x+
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          if [ "$MAJOR" -eq 0 ]; then
+            PRERELEASE_FLAG="--prerelease"
+          else
+            PRERELEASE_FLAG=""
+          fi
+
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/changelog.txt \
+            $PRERELEASE_FLAG

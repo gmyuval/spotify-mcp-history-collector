@@ -11,6 +11,7 @@ from app.auth.jwt import JWTError, JWTService
 from app.constants import Routes
 from app.dependencies import db_manager
 from app.settings import get_settings
+from shared.logging.context import log_context
 
 logger = logging.getLogger(__name__)
 
@@ -59,24 +60,26 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
         request.state.user_id = user_id
 
-        # Provide a DB session for permission checks via request.state.db_session.
-        # We separate session acquisition from request handling so that an
-        # exception inside the downstream handler is never caught here (which
-        # would cause call_next to be invoked twice).
-        try:
-            session_cm = db_manager.session()
-            session = await session_cm.__aenter__()
-        except Exception:
-            logger.debug("Could not open DB session for user %d; proceeding without", user_id)
-            return await call_next(request)
+        # Scope the log context to this request so it's reset on all exit paths.
+        async with log_context(user_id=user_id):
+            # Provide a DB session for permission checks via request.state.db_session.
+            # We separate session acquisition from request handling so that an
+            # exception inside the downstream handler is never caught here (which
+            # would cause call_next to be invoked twice).
+            try:
+                session_cm = db_manager.session()
+                session = await session_cm.__aenter__()
+            except Exception:
+                logger.debug("Could not open DB session for user %d; proceeding without", user_id)
+                return await call_next(request)
 
-        try:
-            request.state.db_session = session
-            response = await call_next(request)
-            return response
-        finally:
-            request.state.db_session = None
-            await session_cm.__aexit__(*sys.exc_info())
+            try:
+                request.state.db_session = session
+                response = await call_next(request)
+                return response
+            finally:
+                request.state.db_session = None
+                await session_cm.__aexit__(*sys.exc_info())
 
     @staticmethod
     def _should_skip(path: str) -> bool:

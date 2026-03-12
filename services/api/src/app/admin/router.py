@@ -118,6 +118,12 @@ class AdminRouter:
             "/job-runs", self.list_job_runs, methods=["GET"], response_model=PaginatedResponse[JobRunResponse]
         )
         r.add_api_route(
+            "/job-runs/{job_run_id}/cancel",
+            self.cancel_job_run,
+            methods=["POST"],
+            response_model=ActionResponse,
+        )
+        r.add_api_route(
             "/import-jobs",
             self.list_import_jobs,
             methods=["GET"],
@@ -352,6 +358,18 @@ class AdminRouter:
             session, user_id=user_id, job_type=job_type, status=status, limit=limit, offset=offset
         )
         return PaginatedResponse(items=items, total=total, limit=limit, offset=offset)
+
+    async def cancel_job_run(
+        self,
+        job_run_id: int,
+        session: Annotated[AsyncSession, Depends(db_manager.dependency)],
+    ) -> ActionResponse:
+        """Mark a running job as cancelled (collector will stop it on next check)."""
+        result = await self._service.cancel_job_run(job_run_id, session)
+        if not result.success:
+            status_code = 404 if result.not_found else 400
+            raise HTTPException(status_code=status_code, detail=result.message)
+        return result
 
     async def list_import_jobs(
         self,

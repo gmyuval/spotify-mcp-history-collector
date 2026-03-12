@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from shared.db.enums import LogLevel
 from shared.db.models.log import Log
 from shared.db.session import DatabaseManager
+from shared.logging.context import LogContext
 
 _LEVEL_MAP: dict[int, LogLevel] = {
     logging.DEBUG: LogLevel.DEBUG,
@@ -53,9 +54,9 @@ class DBLogHandler(logging.Handler):
             "service": self._service,
             "level": _LEVEL_MAP.get(record.levelno, LogLevel.INFO),
             "message": self.format(record),
-            "user_id": getattr(record, "user_id", None),
-            "job_run_id": getattr(record, "job_run_id", None),
-            "import_job_id": getattr(record, "import_job_id", None),
+            "user_id": getattr(record, "user_id", None) or LogContext.get_user_id(),
+            "job_run_id": getattr(record, "job_run_id", None) or LogContext.get_job_run_id(),
+            "import_job_id": getattr(record, "import_job_id", None) or LogContext.get_import_job_id(),
             "log_metadata": getattr(record, "log_metadata", None),
         }
 
