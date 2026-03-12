@@ -9,6 +9,7 @@ from sqlalchemy import delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.auth.exceptions import TokenNotFoundError, TokenRefreshError
 from app.auth.tokens import TokenManager
 from app.cache.service import SpotifyCacheService
 from app.explorer.schemas import (
@@ -42,7 +43,13 @@ from shared.db.models.music import Track
 from shared.db.models.user import SpotifyToken, User
 from shared.spotify.client import SpotifyClient
 from shared.spotify.embed import SpotifyEmbedClient
-from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
+from shared.spotify.exceptions import (
+    SpotifyAuthError,
+    SpotifyClientError,
+    SpotifyEmbedError,
+    SpotifyRateLimitError,
+    SpotifyRequestError,
+)
 from shared.spotify.models import SpotifyPlaylistSimplified, SpotifyPlaylistTrackItem
 
 logger = logging.getLogger(__name__)
@@ -165,22 +172,26 @@ class ExplorerService:
                     break
                 offset += self._PLAYLIST_FETCH_PAGE_SIZE
 
+            # Preload all existing rows in one query to avoid N+1 selects
+            existing_rows_result = await session.execute(
+                select(CachedPlaylist).where(CachedPlaylist.user_id == user_id)
+            )
+            existing_by_id: dict[str, CachedPlaylist] = {
+                row.spotify_playlist_id: row for row in existing_rows_result.scalars() if row.spotify_playlist_id
+            }
+
+            fetched_ids: set[str] = set()
             now = datetime.now(UTC)
             for item in all_items:
                 if not item.id:
                     continue
-                existing_result = await session.execute(
-                    select(CachedPlaylist).where(
-                        CachedPlaylist.user_id == user_id,
-                        CachedPlaylist.spotify_playlist_id == item.id,
-                    )
-                )
-                existing = existing_result.scalar_one_or_none()
+                fetched_ids.add(item.id)
                 total_tracks = (item.tracks or {}).get("total", 0)
                 external_url = (item.external_urls or {}).get("spotify")
                 owner_id = item.owner.id if item.owner else None
                 owner_name = item.owner.display_name if item.owner else None
 
+                existing = existing_by_id.get(item.id)
                 if existing is not None:
                     existing.name = item.name
                     existing.description = item.description
@@ -208,6 +219,12 @@ class ExplorerService:
                         )
                     )
 
+            # Remove playlists the user unfollowed / that disappeared from Spotify
+            stale_stmt = delete(CachedPlaylist).where(CachedPlaylist.user_id == user_id)
+            if fetched_ids:
+                stale_stmt = stale_stmt.where(~CachedPlaylist.spotify_playlist_id.in_(fetched_ids))
+            await session.execute(stale_stmt)
+
             await session.flush()
 
             # Re-query to return fresh sorted list
@@ -216,7 +233,14 @@ class ExplorerService:
             )
             return list(result.scalars().all())
 
-        except Exception:
+        except (
+            TokenNotFoundError,
+            TokenRefreshError,
+            SpotifyAuthError,
+            SpotifyClientError,
+            SpotifyRateLimitError,
+            SpotifyRequestError,
+        ):
             logger.warning("Failed to fetch playlists from Spotify for user %d", user_id, exc_info=True)
             return None
 

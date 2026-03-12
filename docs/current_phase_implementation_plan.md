@@ -9,7 +9,7 @@
 
 ### New files
 - `services/shared/src/shared/version.py`
-  - `__version__ = "0.1.0"` — single source of truth for all services
+  - `__version__ = "0.2.0"` — single source of truth for all services
 - `.github/workflows/release.yml`
   - Trigger: push to `main`
   - Read version from `services/shared/src/shared/version.py` via regex
@@ -105,7 +105,7 @@ Add `cancelled_at TIMESTAMPTZ NULL` to `job_runs` table.
 1. Admin clicks "Cancel" on running job in jobs.html
 2. `POST /admin/jobs/{job_run_id}/cancel` → sets `cancelled_at = now()` (400 if not RUNNING, 404 if not found)
 3. Collector: `job_tracker.is_cancelled(job_run_id, session)` called between batches in `polling.py` and `initial_sync.py`
-4. If cancelled → `job_tracker.fail_job(job_run_id, "Cancelled by admin")`
+4. If cancelled → `job_tracker.mark_cancelled(job_run, session)` → status transitions to `CANCELLED`
 
 ### Trigger flow
 - "Trigger Initial Sync" → calls existing `POST /admin/users/{user_id}/trigger-sync`
@@ -179,6 +179,6 @@ Add `cancelled_at TIMESTAMPTZ NULL` to `job_runs` table.
 - [ ] Explorer `/playlists` loads playlists without prior "Fetch Tracks"
 - [ ] "Refresh" button on playlists page re-fetches from Spotify
 - [ ] Admin logs: trigger a poll job, verify `user_id` + `job_run_id` populated in Logs page
-- [ ] Cancel: trigger initial sync, immediately cancel → job shows `cancelled_at`, status ERROR
+- [ ] Cancel: trigger initial sync, immediately cancel → job shows `cancelled_at`, status `CANCELLED`
 - [ ] Trigger Poll: click button, verify `last_poll_completed_at` reset, collector picks up on next cycle
 - [ ] `docker-compose down` after tests

@@ -14,7 +14,8 @@ def test_healthz(client: TestClient) -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
-    assert "version" in data
+    assert isinstance(data.get("version"), str)
+    assert data["version"]
 
 
 # --- Auth ---

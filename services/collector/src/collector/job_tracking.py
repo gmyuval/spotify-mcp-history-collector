@@ -59,6 +59,7 @@ class JobTracker:
             inserted,
             skipped,
         )
+        LogContext.clear()
 
     async def fail_job(
         self,
@@ -72,6 +73,7 @@ class JobTracker:
         job_run.error_message = error_message
         await session.flush()
         logger.error("Job %d failed: %s", job_run.id, error_message)
+        LogContext.clear()
 
     async def is_cancelled(self, job_run_id: int, session: AsyncSession) -> bool:
         """Check (via fresh DB query) whether a running job has been cancelled."""
@@ -86,3 +88,4 @@ class JobTracker:
         job_run.completed_at = datetime.now(UTC)
         await session.flush()
         logger.info("Job %d cancelled", job_run.id)
+        LogContext.clear()

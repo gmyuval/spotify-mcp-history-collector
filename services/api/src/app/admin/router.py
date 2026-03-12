@@ -367,7 +367,8 @@ class AdminRouter:
         """Mark a running job as cancelled (collector will stop it on next check)."""
         result = await self._service.cancel_job_run(job_run_id, session)
         if not result.success:
-            raise HTTPException(status_code=400, detail=result.message)
+            status_code = 404 if result.not_found else 400
+            raise HTTPException(status_code=status_code, detail=result.message)
         return result
 
     async def list_import_jobs(

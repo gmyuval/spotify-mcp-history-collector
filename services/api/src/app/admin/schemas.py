@@ -161,6 +161,7 @@ class ActionResponse(BaseModel):
 
     success: bool
     message: str
+    not_found: bool = False
 
 
 # --- Cache Invalidation ---

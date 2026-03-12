@@ -45,10 +45,18 @@ class PollingService:
             checkpoint.status = SyncStatus.SYNCING
             await session.flush()
 
-            # 1. Get valid token
+            # 1. Check for cancellation before any external I/O
+            if await self._job_tracker.is_cancelled(job_run.id, session):
+                await self._job_tracker.mark_cancelled(job_run, session)
+                checkpoint.status = SyncStatus.IDLE
+                await session.flush()
+                logger.info("Poll job %d cancelled for user %d (pre-token)", job_run.id, user_id)
+                return 0, 0
+
+            # 2. Get valid token
             access_token = await self._token_manager.get_valid_token(user_id, session)
 
-            # 2. Create SpotifyClient with token-expired callback
+            # 3. Create SpotifyClient with token-expired callback
             async def _on_token_expired() -> str:
                 return await self._token_manager.refresh_access_token(user_id, session)
 
@@ -57,15 +65,7 @@ class PollingService:
                 on_token_expired=_on_token_expired,
             )
 
-            # Check if job was cancelled before making Spotify API call
-            if await self._job_tracker.is_cancelled(job_run.id, session):
-                await self._job_tracker.mark_cancelled(job_run, session)
-                checkpoint.status = SyncStatus.IDLE
-                await session.flush()
-                logger.info("Poll job %d cancelled for user %d", job_run.id, user_id)
-                return 0, 0
-
-            # 3. Fetch recently played
+            # 4. Fetch recently played
             response = await client.get_recently_played(limit=50)
             logger.info("Fetched %d recently-played items for user %d", len(response.items), user_id)
 
@@ -76,10 +76,10 @@ class PollingService:
                 await self._job_tracker.complete_job(job_run, fetched=0, inserted=0, skipped=0, session=session)
                 return 0, 0
 
-            # 4. Upsert via MusicRepository
+            # 5. Upsert via MusicRepository
             inserted, skipped = await self._music_repo.batch_process_play_history(response.items, user_id, session)
 
-            # 5. Update SyncCheckpoint
+            # 6. Update SyncCheckpoint
             checkpoint.last_poll_completed_at = datetime.now(UTC)
             checkpoint.status = SyncStatus.IDLE
             checkpoint.error_message = None

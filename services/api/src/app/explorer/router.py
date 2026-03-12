@@ -111,7 +111,16 @@ class ExplorerRouter:
 
     async def refresh_playlists(self, user_id: RequireOwnDataView, session: DBSession) -> list[PlaylistSummary]:
         """Force-refresh playlist list from Spotify API."""
-        return await self._service.refresh_playlists(user_id, session)
+        try:
+            return await self._service.refresh_playlists(user_id, session)
+        except (TokenNotFoundError, TokenRefreshError, SpotifyAuthError) as exc:
+            logger.warning("Auth failure refreshing playlists for user %d: %s", user_id, exc)
+            raise HTTPException(status_code=401, detail="Spotify authentication failed") from exc
+        except SpotifyRateLimitError as exc:
+            raise HTTPException(status_code=429, detail="Spotify rate limit exceeded, try again later") from exc
+        except SpotifyClientError as exc:
+            logger.error("Spotify client error refreshing playlists for user %d: %s", user_id, exc)
+            raise HTTPException(status_code=502, detail="Spotify service unavailable") from exc
 
     async def playlist_detail(
         self,

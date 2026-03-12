@@ -18,7 +18,7 @@
   <td class="log-message">{{ job.error_message or "—" }}</td>
   <td>
     {% if job.status == "running" %}
-    <button class="btn btn-warning btn-sm"
+    <button type="button" class="btn btn-warning btn-sm"
             hx-post="{{ base_path }}/jobs/{{ job.id }}/cancel"
             hx-target="#cancel-result-{{ job.id }}"
             hx-swap="innerHTML"

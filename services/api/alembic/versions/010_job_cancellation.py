@@ -29,5 +29,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Rewrite any 'cancelled' rows to 'error' so pre-010 code can read them after rollback
+    op.execute("UPDATE job_runs SET status = 'error' WHERE status = 'cancelled'")
     op.drop_column("job_runs", "cancelled_at")
     # Note: PostgreSQL does not support removing enum values — downgrade leaves enum intact
