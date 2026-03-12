@@ -24,7 +24,7 @@ jobs:
           import re
           with open('services/shared/src/shared/version.py') as f:
               content = f.read()
-          m = re.search(r'''__version__\s*=\s*['\"]([^'\"]+)['\"]''', content)
+          m = re.search(r'''__version__(?:\s*:\s*\w+)?\s*=\s*['\"]([^'\"]+)['\"]''', content)
           print(m.group(1))
           ")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
