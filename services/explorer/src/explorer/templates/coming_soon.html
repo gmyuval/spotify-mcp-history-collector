@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Coming Soon{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 50vh;">
+  <h2 class="text-muted mb-3">Under Construction</h2>
+  <p class="text-muted mb-4">{{ entity_type }} detail pages are coming in a future update.</p>
+  <a href="{{ back_url }}" class="btn btn-outline-secondary">&larr; Back to {{ entity_type }}s</a>
+</div>
+{% endblock %}

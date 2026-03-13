@@ -107,9 +107,12 @@ class ExplorerApiClient:
             raise ApiError(resp.status_code, str(detail))
         return resp.json()
 
-    async def get_dashboard(self, access_token: str) -> dict[str, Any]:
+    async def get_dashboard(self, access_token: str, days: int | None = None) -> dict[str, Any]:
         """GET /api/me/dashboard"""
-        result: dict[str, Any] = await self._request("GET", "/api/me/dashboard", access_token)
+        params: dict[str, Any] = {}
+        if days is not None:
+            params["days"] = days
+        result: dict[str, Any] = await self._request("GET", "/api/me/dashboard", access_token, params=params or None)
         return result
 
     async def get_history(
@@ -138,6 +141,42 @@ class ExplorerApiClient:
         result: list[dict[str, Any]] = await self._request(
             "GET", "/api/me/top-tracks", access_token, params={"days": days, "limit": limit}
         )
+        return result
+
+    async def get_tracks(
+        self,
+        access_token: str,
+        limit: int = 50,
+        offset: int = 0,
+        sort: str = "play_count",
+        q: str | None = None,
+        days: int | None = None,
+    ) -> dict[str, Any]:
+        """GET /api/me/tracks"""
+        params: dict[str, Any] = {"limit": limit, "offset": offset, "sort": sort}
+        if q:
+            params["q"] = q
+        if days is not None:
+            params["days"] = days
+        result: dict[str, Any] = await self._request("GET", "/api/me/tracks", access_token, params=params)
+        return result
+
+    async def get_artists(
+        self,
+        access_token: str,
+        limit: int = 50,
+        offset: int = 0,
+        sort: str = "play_count",
+        q: str | None = None,
+        days: int | None = None,
+    ) -> dict[str, Any]:
+        """GET /api/me/artists"""
+        params: dict[str, Any] = {"limit": limit, "offset": offset, "sort": sort}
+        if q:
+            params["q"] = q
+        if days is not None:
+            params["days"] = days
+        result: dict[str, Any] = await self._request("GET", "/api/me/artists", access_token, params=params)
         return result
 
     async def get_playlists(self, access_token: str) -> list[dict[str, Any]]:

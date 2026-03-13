@@ -1,0 +1,56 @@
+<!-- Top Artists -->
+<div class="col-md-6">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between">
+      <strong>Top Artists</strong>
+      <a href="/artists" class="text-muted small">See all</a>
+    </div>
+    <div class="card-body p-0">
+      {% if data.top_artists %}
+      <table class="table table-hover mb-0">
+        <tbody>
+          {% for artist in data.top_artists %}
+          <tr>
+            <td class="rank-number">{{ loop.index }}</td>
+            <td><a href="/artists/{{ artist.artist_id }}" class="text-decoration-none">{{ artist.artist_name }}</a></td>
+            <td class="text-end text-muted">{{ artist.play_count }} plays</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-muted text-center py-4 mb-0">No listening data yet</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Top Tracks -->
+<div class="col-md-6">
+  <div class="card">
+    <div class="card-header d-flex justify-content-between">
+      <strong>Top Tracks</strong>
+      <a href="/tracks" class="text-muted small">See all</a>
+    </div>
+    <div class="card-body p-0">
+      {% if data.top_tracks %}
+      <table class="table table-hover mb-0">
+        <tbody>
+          {% for track in data.top_tracks %}
+          <tr>
+            <td class="rank-number">{{ loop.index }}</td>
+            <td>
+              <div><a href="/tracks/{{ track.track_id }}" class="text-decoration-none">{{ track.track_name }}</a></div>
+              <small class="text-muted">{{ track.artist_name }}</small>
+            </td>
+            <td class="text-end text-muted">{{ track.play_count }} plays</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-muted text-center py-4 mb-0">No listening data yet</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
