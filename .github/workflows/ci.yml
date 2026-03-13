@@ -4,21 +4,32 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  PYTHON_VERSION: '3.14'
+
 jobs:
-  test:
-    name: Test
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-
+    timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.14'
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
 
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
         run: |
           pip install -e services/shared
@@ -26,24 +37,65 @@ jobs:
           pip install -e "services/collector[dev]"
           pip install -e "services/frontend[dev]"
           pip install -e "services/explorer[dev]"
+      - run: mypy services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src
 
-      - name: Lint
+  test-api:
+    name: Test API
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
         run: |
-          ruff check .
-          ruff format --check .
+          pip install -e services/shared
+          pip install -e "services/api[dev]"
+      - run: pytest services/api/tests/
 
-      - name: Type check
-        run: mypy services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src
-
-      - name: Test API
-        run: pytest services/api/tests/
-
-      - name: Test Collector
-        working-directory: services/collector
+  test-collector:
+    name: Test Collector
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          pip install -e services/shared
+          pip install -e "services/collector[dev]"
+      - working-directory: services/collector
         run: pytest tests/
 
-      - name: Test Frontend
-        run: pytest services/frontend/tests/
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          pip install -e services/shared
+          pip install -e "services/frontend[dev]"
+      - run: pytest services/frontend/tests/
 
-      - name: Test Explorer
-        run: pytest services/explorer/tests/
+  test-explorer:
+    name: Test Explorer
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          pip install -e services/shared
+          pip install -e "services/explorer[dev]"
+      - run: pytest services/explorer/tests/

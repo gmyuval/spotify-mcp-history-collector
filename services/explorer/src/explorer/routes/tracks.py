@@ -79,11 +79,13 @@ class TracksRouter:
         if isinstance(token, RedirectResponse):
             return token  # type: ignore[return-value]
 
+        error: str | None = None
         try:
             context = await self._fetch_tracks(request, token)
         except ApiError as e:
             if e.status_code == 401:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
+            error = e.detail
             context = {
                 "data": {"items": [], "total": 0},
                 "limit": 50,
@@ -105,6 +107,7 @@ class TracksRouter:
                 "sort": context["sort"],
                 "q": context["q"],
                 "days": context["days"],
+                "error": error,
             },
         )
 

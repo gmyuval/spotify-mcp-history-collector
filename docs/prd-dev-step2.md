@@ -64,7 +64,7 @@ Git tags (`v0.1.0`, `v0.2.0`, ...) created on each merge to main. GitHub Release
   - Creates a GitHub Release using `gh release create`:
     - Title: `v{version}`
     - Body: auto-generated from commit messages since last tag (`git log --oneline <prev>..HEAD`)
-    - Marks as pre-release if version is `0.x.x`, full release for `1.x.x` and above
+    - Creates a full GitHub Release for the tagged version
 - This means: bumping `version.py` + merging the PR is the only manual step; tagging and release notes are fully automated
 
 **Files:**

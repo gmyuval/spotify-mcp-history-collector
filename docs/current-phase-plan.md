@@ -59,9 +59,9 @@ Response:
 {
   "items": [
     {
-      "track_id": "string",
+      "track_id": 123,
       "name": "string",
-      "artists": ["string"],
+      "artist_name": "string",
       "play_count": 42,
       "last_played": "2026-01-01T00:00:00Z"
     }
@@ -81,7 +81,7 @@ Response:
 {
   "items": [
     {
-      "artist_id": "string",
+      "artist_id": 456,
       "name": "string",
       "play_count": 42,
       "track_count": 8

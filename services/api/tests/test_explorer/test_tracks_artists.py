@@ -289,11 +289,17 @@ class TestArtists:
         self, client: TestClient, seeded_data: dict[str, object], jwt_service: JWTService
     ) -> None:
         user_id: int = seeded_data["user_id"]  # type: ignore[assignment]
-        # 30 days: Alpha has 5 plays (recent), Beta has 3 plays (recent), Gamma is through Alpha (60d ago)
-        resp = client.get("/api/me/artists?days=30", cookies=_auth_cookies(jwt_service, user_id))
-        assert resp.status_code == 200
-        # Only Alpha and Beta have recent plays
-        assert resp.json()["total"] == 2
+        cookies = _auth_cookies(jwt_service, user_id)
+
+        # 30 days: only Alpha (5 recent plays) and Beta (3 recent plays)
+        resp_30 = client.get("/api/me/artists?days=30", cookies=cookies)
+        assert resp_30.status_code == 200
+        assert resp_30.json()["total"] == 2
+
+        # 90 days: should include all artists (Alpha has a 60-day-old play via track_3)
+        resp_90 = client.get("/api/me/artists?days=90", cookies=cookies)
+        assert resp_90.status_code == 200
+        assert resp_90.json()["total"] == 2  # Still 2 artists, but Alpha's play_count is higher
 
     def test_artists_track_count(
         self, client: TestClient, seeded_data: dict[str, object], jwt_service: JWTService

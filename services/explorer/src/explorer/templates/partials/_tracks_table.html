@@ -1,3 +1,6 @@
+{% if error %}
+<tr><td colspan="4" class="text-center py-4"><span class="text-danger">{{ error }}</span></td></tr>
+{% else %}
 {% for item in items %}
 <tr>
   <td><a href="/tracks/{{ item.track_id }}" class="text-decoration-none">{{ item.name }}</a></td>
@@ -11,13 +14,14 @@
 {% if not items %}
 <tr><td colspan="4" class="text-muted text-center py-4">No tracks found</td></tr>
 {% endif %}
+{% endif %}
 
 <div id="tracks-pagination" hx-swap-oob="innerHTML">
 {% if total > limit %}
   {% set total_pages = ((total - 1) // limit) + 1 if total > 0 else 1 %}
   {% set current_page = (offset // limit) + 1 %}
   {% set base_url = "/tracks/partials/tracks-table" %}
-  {% set qs = "limit=" ~ limit ~ "&sort=" ~ sort ~ "&q=" ~ (q | default('')) ~ ("&days=" ~ days if days else "") %}
+  {% set qs = "limit=" ~ limit ~ "&sort=" ~ sort ~ "&q=" ~ ((q | default('')) | urlencode) ~ ("&days=" ~ days if days else "") %}
   <nav>
     <ul class="pagination pagination-sm justify-content-center mb-0">
       <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">

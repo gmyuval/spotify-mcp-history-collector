@@ -296,7 +296,7 @@ class HistoryQueries:
         else:
             order = func.count(Play.id).desc()
 
-        stmt = base.order_by(order).limit(limit).offset(offset)
+        stmt = base.order_by(order, Track.id.asc()).limit(limit).offset(offset)
         result = await session.execute(stmt)
         rows = [dict(row._mapping) for row in result.all()]
         return rows, total
@@ -317,7 +317,7 @@ class HistoryQueries:
         """
         base = (
             select(
-                func.min(Artist.id).label("artist_id"),
+                Artist.id.label("artist_id"),
                 Artist.name.label("name"),
                 func.count(Play.id).label("play_count"),
                 func.count(distinct(Play.track_id)).label("track_count"),
@@ -327,7 +327,7 @@ class HistoryQueries:
             .join(TrackArtist, TrackArtist.track_id == Track.id)
             .join(Artist, TrackArtist.artist_id == Artist.id)
             .where(Play.user_id == user_id)
-            .group_by(Artist.name)
+            .group_by(Artist.id, Artist.name)
         )
 
         if days is not None:
@@ -341,7 +341,7 @@ class HistoryQueries:
         total = (await session.execute(count_stmt)).scalar() or 0
 
         order = Artist.name.asc() if sort == "name" else func.count(Play.id).desc()
-        stmt = base.order_by(order).limit(limit).offset(offset)
+        stmt = base.order_by(order, Artist.id.asc()).limit(limit).offset(offset)
         result = await session.execute(stmt)
         rows = [dict(row._mapping) for row in result.all()]
         return rows, total

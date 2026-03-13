@@ -10,11 +10,13 @@
       hx-trigger="keyup changed delay:500ms from:input[name='q'], change from:select[name='sort']"
       class="row g-2 mb-3">
   <div class="col-md-4">
-    <input type="search" name="q" class="form-control"
+    <label for="tracks-search" class="visually-hidden">Search tracks or artists</label>
+    <input id="tracks-search" type="search" name="q" class="form-control"
            placeholder="Search tracks or artists..." value="{{ q | default('') }}">
   </div>
   <div class="col-md-3">
-    <select name="sort" class="form-select">
+    <label for="tracks-sort" class="visually-hidden">Sort tracks</label>
+    <select id="tracks-sort" name="sort" class="form-select">
       <option value="play_count" {% if sort == "play_count" %}selected{% endif %}>Most Played</option>
       <option value="name" {% if sort == "name" %}selected{% endif %}>Name</option>
       <option value="last_played" {% if sort == "last_played" %}selected{% endif %}>Last Played</option>
@@ -35,7 +37,19 @@
         </tr>
       </thead>
       <tbody id="tracks-tbody">
-        {% include "partials/_tracks_table.html" %}
+        {% for item in items %}
+        <tr>
+          <td><a href="/tracks/{{ item.track_id }}" class="text-decoration-none">{{ item.name }}</a></td>
+          <td class="text-muted">{{ item.artist_name }}</td>
+          <td class="text-end">{{ item.play_count }}</td>
+          <td class="text-end text-muted text-nowrap">
+            {% if item.last_played %}{{ item.last_played[:16] }}{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% if not items %}
+        <tr><td colspan="4" class="text-muted text-center py-4">No tracks found</td></tr>
+        {% endif %}
       </tbody>
     </table>
   </div>
@@ -46,7 +60,7 @@
   {% set total_pages = ((total - 1) // limit) + 1 if total > 0 else 1 %}
   {% set current_page = (offset // limit) + 1 %}
   {% set base_url = "/tracks/partials/tracks-table" %}
-  {% set qs = "limit=" ~ limit ~ "&sort=" ~ sort ~ "&q=" ~ (q | default('')) ~ ("&days=" ~ days if days else "") %}
+  {% set qs = "limit=" ~ limit ~ "&sort=" ~ sort ~ "&q=" ~ ((q | default('')) | urlencode) ~ ("&days=" ~ days if days else "") %}
   <nav>
     <ul class="pagination pagination-sm justify-content-center mb-0">
       <li class="page-item {% if current_page <= 1 %}disabled{% endif %}">
