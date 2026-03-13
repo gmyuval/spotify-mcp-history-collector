@@ -104,7 +104,7 @@ services:
       - API_BASE_URL=${API_BASE_URL:-http://api:8000}
       - FRONTEND_AUTH_MODE=${FRONTEND_AUTH_MODE:-token}
       - ADMIN_TOKEN=${ADMIN_TOKEN}
-      - APP_VERSION=${APP_VERSION:-0.2.0}
+      - APP_VERSION=${APP_VERSION:-0.3.0}
     volumes:
       - ./services/frontend/src:/app/src
     depends_on:
@@ -134,7 +134,7 @@ services:
       - API_BASE_URL=${API_BASE_URL:-http://api:8000}
       - API_PUBLIC_URL=${API_PUBLIC_URL:-http://localhost:8000}
       - EXPLORER_BASE_URL=${EXPLORER_BASE_URL:-http://localhost:8002}
-      - APP_VERSION=${APP_VERSION:-0.2.0}
+      - APP_VERSION=${APP_VERSION:-0.3.0}
     volumes:
       - ./services/explorer/src:/app/src
     depends_on:
