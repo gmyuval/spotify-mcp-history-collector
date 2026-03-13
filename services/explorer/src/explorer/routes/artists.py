@@ -18,6 +18,7 @@ class ArtistsRouter:
         self.router.add_api_route(
             "/partials/artists-table", self.artists_table_partial, methods=["GET"], response_class=HTMLResponse
         )
+        self.router.add_api_route("/{artist_id}", self.artist_detail, methods=["GET"], response_class=HTMLResponse)
 
     async def _fetch_artists(self, request: Request, token: str) -> dict[str, Any]:
         """Shared logic for fetching artists data from the API."""
@@ -105,6 +106,17 @@ class ArtistsRouter:
                 "q": context["q"],
                 "days": context["days"],
             },
+        )
+
+    async def artist_detail(self, request: Request, artist_id: int) -> HTMLResponse:
+        """Placeholder for artist detail page (Phase 4)."""
+        token = require_login(request)
+        if isinstance(token, RedirectResponse):
+            return token  # type: ignore[return-value]
+
+        return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            "coming_soon.html",
+            {"request": request, "active_page": "artists", "entity_type": "Artist", "back_url": "/artists"},
         )
 
 

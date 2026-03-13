@@ -215,6 +215,34 @@ class TestDashboardClickableCards:
         client.cookies.clear()
 
 
+class TestDetailPlaceholders:
+    def test_track_detail_shows_coming_soon(self, client: TestClient, mock_api: AsyncMock) -> None:
+        client.cookies.set("access_token", "test-jwt")
+        resp = client.get("/tracks/123")
+        assert resp.status_code == 200
+        assert "Under Construction" in resp.text
+        assert 'href="/tracks"' in resp.text
+        client.cookies.clear()
+
+    def test_artist_detail_shows_coming_soon(self, client: TestClient, mock_api: AsyncMock) -> None:
+        client.cookies.set("access_token", "test-jwt")
+        resp = client.get("/artists/456")
+        assert resp.status_code == 200
+        assert "Under Construction" in resp.text
+        assert 'href="/artists"' in resp.text
+        client.cookies.clear()
+
+    def test_track_detail_requires_login(self, client: TestClient) -> None:
+        resp = client.get("/tracks/123", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/login"
+
+    def test_artist_detail_requires_login(self, client: TestClient) -> None:
+        resp = client.get("/artists/456", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/login"
+
+
 class TestNavLinks:
     def test_tracks_nav_link(self, client: TestClient, mock_api: AsyncMock) -> None:
         client.cookies.set("access_token", "test-jwt")

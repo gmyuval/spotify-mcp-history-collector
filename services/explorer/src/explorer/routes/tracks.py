@@ -18,6 +18,7 @@ class TracksRouter:
         self.router.add_api_route(
             "/partials/tracks-table", self.tracks_table_partial, methods=["GET"], response_class=HTMLResponse
         )
+        self.router.add_api_route("/{track_id}", self.track_detail, methods=["GET"], response_class=HTMLResponse)
 
     async def _fetch_tracks(self, request: Request, token: str) -> dict[str, Any]:
         """Shared logic for fetching tracks data from the API."""
@@ -105,6 +106,17 @@ class TracksRouter:
                 "q": context["q"],
                 "days": context["days"],
             },
+        )
+
+    async def track_detail(self, request: Request, track_id: int) -> HTMLResponse:
+        """Placeholder for track detail page (Phase 4)."""
+        token = require_login(request)
+        if isinstance(token, RedirectResponse):
+            return token  # type: ignore[return-value]
+
+        return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            "coming_soon.html",
+            {"request": request, "active_page": "tracks", "entity_type": "Track", "back_url": "/tracks"},
         )
 
 
