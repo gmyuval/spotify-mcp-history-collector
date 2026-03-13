@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: |
+          pip install -e services/shared
+          pip install -e "services/api[dev]"
+          pip install -e "services/collector[dev]"
+          pip install -e "services/frontend[dev]"
+          pip install -e "services/explorer[dev]"
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Type check
+        run: mypy services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src
+
+      - name: Test API
+        run: pytest services/api/tests/
+
+      - name: Test Collector
+        working-directory: services/collector
+        run: pytest tests/
+
+      - name: Test Frontend
+        run: pytest services/frontend/tests/
+
+      - name: Test Explorer
+        run: pytest services/explorer/tests/
