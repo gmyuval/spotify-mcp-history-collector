@@ -13,16 +13,19 @@ from app.auth.exceptions import TokenNotFoundError, TokenRefreshError
 from app.auth.tokens import TokenManager
 from app.cache.service import SpotifyCacheService
 from app.explorer.schemas import (
+    ArtistBrowserItem,
     ArtistSummary,
     DashboardData,
     MemoryPlaylistDetail,
     MemoryPlaylistEventItem,
     MemoryPlaylistSummary,
     MemoryPlaylistTrack,
+    PaginatedArtists,
     PaginatedHistory,
     PaginatedMemoryPlaylistEvents,
     PaginatedMemoryPlaylists,
     PaginatedPreferenceEvents,
+    PaginatedTracks,
     PlayHistoryItem,
     PlaylistDetail,
     PlaylistSummary,
@@ -31,6 +34,7 @@ from app.explorer.schemas import (
     PreferenceEventItem,
     TasteProfileResponse,
     TasteProfileWithEvents,
+    TrackBrowserItem,
     TrackSummary,
     UserProfile,
 )
@@ -65,13 +69,13 @@ class ExplorerService:
     # Safety cap: stop fetching after this many playlists to avoid runaway pagination
     _PLAYLIST_FETCH_MAX: int = 500
 
-    async def get_dashboard(self, user_id: int, session: AsyncSession) -> DashboardData:
-        """Return all-time summary stats + 30-day top artists and top tracks."""
+    async def get_dashboard(self, user_id: int, session: AsyncSession, days: int = 30) -> DashboardData:
+        """Return all-time summary stats + top artists and top tracks for the given window."""
         # All-time stats for summary cards
         stats = await HistoryQueries.play_stats(user_id, session, days=99999)
-        # 30-day top lists
-        top_artists_raw = await HistoryQueries.top_artists(user_id, session, days=30, limit=5)
-        top_tracks_raw = await HistoryQueries.top_tracks(user_id, session, days=30, limit=5)
+        # Top lists for the selected time window
+        top_artists_raw = await HistoryQueries.top_artists(user_id, session, days=days, limit=10)
+        top_tracks_raw = await HistoryQueries.top_tracks(user_id, session, days=days, limit=10)
 
         total_ms: int = stats["total_ms_played"]  # type: ignore[assignment]
         return DashboardData(
@@ -95,6 +99,48 @@ class ExplorerService:
         rows, total = await HistoryQueries.recent_plays(user_id, session, limit=limit, offset=offset, q=q)
         return PaginatedHistory(
             items=[PlayHistoryItem(**r) for r in rows],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def get_tracks(
+        self,
+        user_id: int,
+        session: AsyncSession,
+        limit: int = 50,
+        offset: int = 0,
+        sort: str = "play_count",
+        q: str | None = None,
+        days: int | None = None,
+    ) -> PaginatedTracks:
+        """Return paginated track browser with optional search, sort, and time window."""
+        rows, total = await HistoryQueries.tracks_list(
+            user_id, session, limit=limit, offset=offset, sort=sort, q=q, days=days
+        )
+        return PaginatedTracks(
+            items=[TrackBrowserItem(**r) for r in rows],
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def get_artists(
+        self,
+        user_id: int,
+        session: AsyncSession,
+        limit: int = 50,
+        offset: int = 0,
+        sort: str = "play_count",
+        q: str | None = None,
+        days: int | None = None,
+    ) -> PaginatedArtists:
+        """Return paginated artist browser with optional search, sort, and time window."""
+        rows, total = await HistoryQueries.artists_list(
+            user_id, session, limit=limit, offset=offset, sort=sort, q=q, days=days
+        )
+        return PaginatedArtists(
+            items=[ArtistBrowserItem(**r) for r in rows],
             total=total,
             limit=limit,
             offset=offset,

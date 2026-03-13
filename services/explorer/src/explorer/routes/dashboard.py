@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from explorer.api_client import ApiError, ExplorerApiClient, PaginatedMemoryPlaylists
-from explorer.routes._helpers import require_login
+from explorer.routes._helpers import require_login, safe_int
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,9 @@ class DashboardRouter:
     def __init__(self) -> None:
         self.router = APIRouter()
         self.router.add_api_route("/dashboard", self.dashboard, methods=["GET"], response_class=HTMLResponse)
+        self.router.add_api_route(
+            "/dashboard/partials/top", self.top_content_partial, methods=["GET"], response_class=HTMLResponse
+        )
 
     async def dashboard(self, request: Request) -> HTMLResponse:
         """Render the main dashboard with stats, top artists, and top tracks."""
@@ -59,9 +62,35 @@ class DashboardRouter:
                 "request": request,
                 "active_page": "dashboard",
                 "data": dashboard_data,
+                "days": 30,
                 "taste": taste_data,
                 "memory_playlists": memory_playlists_data,
                 "error": error,
+            },
+        )
+
+    async def top_content_partial(self, request: Request) -> HTMLResponse:
+        """HTMX partial — top artists + top tracks for a given time window."""
+        token = require_login(request)
+        if isinstance(token, RedirectResponse):
+            return token  # type: ignore[return-value]
+
+        api: ExplorerApiClient = request.app.state.api
+        days = safe_int(request.query_params.get("days"), 30)
+
+        dashboard_data: dict[str, object] = {}
+        try:
+            dashboard_data = await api.get_dashboard(token, days=days)
+        except ApiError as e:
+            if e.status_code == 401:
+                return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
+
+        return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            "partials/_top_content.html",
+            {
+                "request": request,
+                "data": dashboard_data,
+                "days": days,
             },
         )
 

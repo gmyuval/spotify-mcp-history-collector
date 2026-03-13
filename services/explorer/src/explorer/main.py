@@ -15,7 +15,7 @@ from explorer.middleware import GoogleAuthMiddleware
 from explorer.settings import get_settings
 
 # Explorer has no access to the shared package — read version from env var set by docker-compose/CI.
-__version__ = os.environ.get("APP_VERSION", "0.2.0")
+__version__ = os.environ.get("APP_VERSION", "0.3.0")
 
 
 class HealthResponse(TypedDict):
@@ -67,6 +67,7 @@ class ExplorerApp:
 
     def _setup_routers(self) -> None:
         from explorer.routes import (
+            artists_router,
             auth_router,
             dashboard_router,
             history_router,
@@ -75,12 +76,15 @@ class ExplorerApp:
             playlists_router,
             profile_router,
             taste_router,
+            tracks_router,
         )
 
         self.app.include_router(landing_router)
         self.app.include_router(auth_router)
         self.app.include_router(dashboard_router)
         self.app.include_router(history_router, prefix="/history", tags=["history"])
+        self.app.include_router(tracks_router, prefix="/tracks", tags=["tracks"])
+        self.app.include_router(artists_router, prefix="/artists", tags=["artists"])
         # memory_playlists must come before playlists to avoid /{spotify_playlist_id} match
         self.app.include_router(memory_playlists_router, prefix="/playlists/memory", tags=["memory-playlists"])
         self.app.include_router(playlists_router, prefix="/playlists", tags=["playlists"])

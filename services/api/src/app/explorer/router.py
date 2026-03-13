@@ -12,10 +12,12 @@ from app.dependencies import db_manager
 from app.explorer.schemas import (
     DashboardData,
     MemoryPlaylistDetail,
+    PaginatedArtists,
     PaginatedHistory,
     PaginatedMemoryPlaylistEvents,
     PaginatedMemoryPlaylists,
     PaginatedPreferenceEvents,
+    PaginatedTracks,
     PlaylistDetail,
     PlaylistSummary,
     TasteProfilePatch,
@@ -62,9 +64,16 @@ class ExplorerRouter:
         r.add_api_route("/memory-playlists", self.memory_playlists, methods=["GET"])
         r.add_api_route("/memory-playlists/{playlist_id}", self.memory_playlist_detail, methods=["GET"])
         r.add_api_route("/memory-playlists/{playlist_id}/events", self.memory_playlist_events, methods=["GET"])
+        r.add_api_route("/tracks", self.tracks, methods=["GET"])
+        r.add_api_route("/artists", self.artists, methods=["GET"])
 
-    async def dashboard(self, user_id: RequireOwnDataView, session: DBSession) -> DashboardData:
-        return await self._service.get_dashboard(user_id, session)
+    async def dashboard(
+        self,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        days: int = Query(default=30, ge=1),
+    ) -> DashboardData:
+        return await self._service.get_dashboard(user_id, session, days=days)
 
     async def history(
         self,
@@ -221,6 +230,32 @@ class ExplorerRouter:
         if result is None:
             raise HTTPException(status_code=404, detail="Memory playlist not found")
         return result
+
+    async def tracks(
+        self,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+        sort: str = Query(default="play_count"),
+        q: str | None = Query(default=None),
+        days: int | None = Query(default=None, ge=1),
+    ) -> PaginatedTracks:
+        """Browse all tracks with pagination, search, sort, and optional time window."""
+        return await self._service.get_tracks(user_id, session, limit=limit, offset=offset, sort=sort, q=q, days=days)
+
+    async def artists(
+        self,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+        sort: str = Query(default="play_count"),
+        q: str | None = Query(default=None),
+        days: int | None = Query(default=None, ge=1),
+    ) -> PaginatedArtists:
+        """Browse all artists with pagination, search, sort, and optional time window."""
+        return await self._service.get_artists(user_id, session, limit=limit, offset=offset, sort=sort, q=q, days=days)
 
 
 _instance = ExplorerRouter()

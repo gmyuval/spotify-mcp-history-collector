@@ -1,6 +1,7 @@
 """SQLAlchemy query builders for history analysis — class-based."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import Integer, case, cast, distinct, extract, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -234,6 +235,115 @@ class HistoryQueries:
         result = await session.execute(stmt)
         rows = [dict(row._mapping) for row in result.all()]
 
+        return rows, total
+
+    @staticmethod
+    async def tracks_list(
+        user_id: int,
+        session: AsyncSession,
+        limit: int = 50,
+        offset: int = 0,
+        sort: str = "play_count",
+        q: str | None = None,
+        days: int | None = None,
+    ) -> tuple[list[dict[str, object]], int]:
+        """Paginated track browser with optional search, sort, and time window.
+
+        Returns (rows, total_count) for pagination.
+        """
+        primary_artist = (
+            select(TrackArtist.track_id, Artist.name.label("artist_name"))
+            .join(Artist, TrackArtist.artist_id == Artist.id)
+            .where(TrackArtist.position == 0)
+            .subquery()
+        )
+
+        base = (
+            select(
+                Track.id.label("track_id"),
+                Track.name.label("name"),
+                func.coalesce(primary_artist.c.artist_name, literal("Unknown")).label("artist_name"),
+                func.count(Play.id).label("play_count"),
+                func.max(Play.played_at).label("last_played"),
+            )
+            .select_from(Play)
+            .join(Track, Play.track_id == Track.id)
+            .outerjoin(primary_artist, primary_artist.c.track_id == Track.id)
+            .where(Play.user_id == user_id)
+            .group_by(Track.id, Track.name, primary_artist.c.artist_name)
+        )
+
+        if days is not None:
+            base = base.where(Play.played_at >= HistoryQueries._cutoff(days))
+
+        if q:
+            dialect = session.bind.dialect.name if session.bind else "postgresql"
+            base = base.where(
+                or_(
+                    text_match(Track.name, q, dialect),
+                    text_match(primary_artist.c.artist_name, q, dialect),
+                )
+            )
+
+        count_stmt = select(func.count()).select_from(base.subquery())
+        total = (await session.execute(count_stmt)).scalar() or 0
+
+        order: Any
+        if sort == "name":
+            order = Track.name.asc()
+        elif sort == "last_played":
+            order = func.max(Play.played_at).desc()
+        else:
+            order = func.count(Play.id).desc()
+
+        stmt = base.order_by(order, Track.id.asc()).limit(limit).offset(offset)
+        result = await session.execute(stmt)
+        rows = [dict(row._mapping) for row in result.all()]
+        return rows, total
+
+    @staticmethod
+    async def artists_list(
+        user_id: int,
+        session: AsyncSession,
+        limit: int = 50,
+        offset: int = 0,
+        sort: str = "play_count",
+        q: str | None = None,
+        days: int | None = None,
+    ) -> tuple[list[dict[str, object]], int]:
+        """Paginated artist browser with optional search, sort, and time window.
+
+        Returns (rows, total_count) for pagination.
+        """
+        base = (
+            select(
+                Artist.id.label("artist_id"),
+                Artist.name.label("name"),
+                func.count(Play.id).label("play_count"),
+                func.count(distinct(Play.track_id)).label("track_count"),
+            )
+            .select_from(Play)
+            .join(Track, Play.track_id == Track.id)
+            .join(TrackArtist, TrackArtist.track_id == Track.id)
+            .join(Artist, TrackArtist.artist_id == Artist.id)
+            .where(Play.user_id == user_id)
+            .group_by(Artist.id, Artist.name)
+        )
+
+        if days is not None:
+            base = base.where(Play.played_at >= HistoryQueries._cutoff(days))
+
+        if q:
+            dialect = session.bind.dialect.name if session.bind else "postgresql"
+            base = base.where(text_match(Artist.name, q, dialect))
+
+        count_stmt = select(func.count()).select_from(base.subquery())
+        total = (await session.execute(count_stmt)).scalar() or 0
+
+        order = Artist.name.asc() if sort == "name" else func.count(Play.id).desc()
+        stmt = base.order_by(order, Artist.id.asc()).limit(limit).offset(offset)
+        result = await session.execute(stmt)
+        rows = [dict(row._mapping) for row in result.all()]
         return rows, total
 
 

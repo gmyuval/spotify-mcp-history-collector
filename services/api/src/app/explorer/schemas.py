@@ -178,3 +178,35 @@ class PaginatedMemoryPlaylistEvents(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ── Track/artist browser schemas ──────────────────────────────────
+
+
+class TrackBrowserItem(BaseModel):
+    track_id: int
+    name: str
+    artist_name: str
+    play_count: int
+    last_played: datetime | None
+
+
+class PaginatedTracks(BaseModel):
+    items: list[TrackBrowserItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class ArtistBrowserItem(BaseModel):
+    artist_id: int
+    name: str
+    play_count: int
+    track_count: int
+
+
+class PaginatedArtists(BaseModel):
+    items: list[ArtistBrowserItem]
+    total: int
+    limit: int
+    offset: int
