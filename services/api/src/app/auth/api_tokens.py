@@ -70,22 +70,23 @@ class ApiTokenService:
     async def validate(raw_token: str, session: AsyncSession) -> int | None:
         """Validate a raw token and return the user_id, or None if invalid/revoked.
 
-        Also updates ``last_used_at`` on success.
+        Atomically checks revocation status and updates ``last_used_at`` in a
+        single UPDATE statement to avoid a TOCTOU race with ``revoke()``.
 
         Note: The caller must commit the session for the ``last_used_at``
-        update to persist. The ``JWTAuthMiddleware`` handles this by
-        committing after the downstream response completes.
+        update to persist. The ``JWTAuthMiddleware`` handles this.
         """
         token_hash = _hash_token(raw_token)
+        # Single atomic UPDATE: only matches non-revoked tokens
         result = await session.execute(
-            select(ApiToken.id, ApiToken.user_id, ApiToken.revoked_at).where(ApiToken.token_hash == token_hash)
+            update(ApiToken)
+            .where(ApiToken.token_hash == token_hash, ApiToken.revoked_at.is_(None))
+            .values(last_used_at=utc_now())
+            .returning(ApiToken.user_id)
         )
         row = result.one_or_none()
-        if row is None or row.revoked_at is not None:
+        if row is None:
             return None
-
-        # Update last_used_at
-        await session.execute(update(ApiToken).where(ApiToken.id == row.id).values(last_used_at=utc_now()))
 
         return int(row.user_id)
 

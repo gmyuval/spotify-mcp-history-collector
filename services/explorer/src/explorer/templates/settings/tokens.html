@@ -39,7 +39,9 @@
 <div class="card">
   <div class="card-header"><strong>Active Tokens</strong></div>
   <div class="card-body">
-    {% if tokens %}
+    {% if error %}
+    <div class="alert alert-danger mb-3" role="alert">{{ error }}</div>
+    {% elif tokens %}
     <div class="table-responsive">
       <table class="table table-hover mb-0">
         <thead>
@@ -60,7 +62,8 @@
             <td>{{ t.last_used_at[:10] if t.last_used_at else "Never" }}</td>
             <td>
               <form action="/settings/tokens/revoke" method="post" class="d-inline"
-                    onsubmit="return confirm('Revoke token {{ t.name }}?')">
+                    data-token-name="{{ t.name }}"
+                    onsubmit="return confirm('Revoke token ' + this.dataset.tokenName + '?')">
                 <input type="hidden" name="token_id" value="{{ t.token_id }}">
                 <button type="submit" class="btn btn-outline-danger btn-sm">Revoke</button>
               </form>

@@ -122,7 +122,11 @@ def create_mcp_server() -> FastMCP:
     # Override the default streamable HTTP path so it serves at "/" when mounted
     mcp.settings.streamable_http_path = "/"
 
-    # Register list_tools handler on the underlying low-level Server
+    # We use the low-level Server API (mcp._mcp_server) instead of the public
+    # @mcp.tool() decorator because our tools are registered in a custom
+    # MCPToolRegistry singleton — we need to inject user_id from auth context
+    # and redact sensitive errors, which the high-level API doesn't support.
+    # This couples us to FastMCP internals; treat SDK upgrades with care.
     @mcp._mcp_server.list_tools()  # type: ignore[no-untyped-call,untyped-decorator]
     async def handle_list_tools() -> list[Tool]:
         """Return all registered tools in MCP format."""

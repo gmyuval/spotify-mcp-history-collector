@@ -54,22 +54,23 @@ class SettingsRouter:
         error: str | None = None
         tokens_data: dict[str, Any] = {"items": []}
 
-        # Retrieve a newly created token from the in-memory store (single-use)
-        new_token: str | None = None
-        new_token_name: str | None = None
-        nonce = request.query_params.get("nonce")
-        if nonce:
-            pending = _pending_tokens.pop(nonce, None)
-            if pending:
-                new_token = pending["token"]
-                new_token_name = pending["name"]
-
         try:
             tokens_data = await api.get_tokens(token)
         except ApiError as e:
             if e.status_code == 401:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
             error = e.detail
+
+        # Consume the nonce only after page data is ready — avoids burning the
+        # single-use token if the API call above fails.
+        new_token: str | None = None
+        new_token_name: str | None = None
+        nonce = request.query_params.get("nonce")
+        if nonce and error is None:
+            pending = _pending_tokens.pop(nonce, None)
+            if pending:
+                new_token = pending["token"]
+                new_token_name = pending["name"]
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "settings/tokens.html",
