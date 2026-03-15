@@ -42,9 +42,6 @@ class SpotifyMCPApp:
 
     def __init__(self) -> None:
         configure_logging(ServiceName.API)
-        # Create MCP SDK server and ASGI app (must call streamable_http_app before session_manager)
-        self._mcp_fastmcp = create_mcp_server()
-        self._mcp_asgi_app = create_mcp_asgi_app(self._mcp_fastmcp)
         self.app = FastAPI(
             title=APP_TITLE,
             description=APP_DESCRIPTION,
@@ -56,12 +53,23 @@ class SpotifyMCPApp:
 
     @asynccontextmanager
     async def _lifespan(self, app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG002
-        """Application lifespan: start DB log handler, MCP session manager, clean up on shutdown."""
+        """Application lifespan: start DB log handler, MCP session manager, clean up on shutdown.
+
+        A fresh FastMCP server is created on each lifespan entry because the
+        MCP SDK's ``StreamableHTTPSessionManager.run()`` can only be called
+        once per instance.  Re-creating it here allows tests (which re-enter
+        the lifespan via multiple ``TestClient`` contexts) to work correctly.
+        """
+        mcp_fastmcp = create_mcp_server()
+        mcp_asgi_app = create_mcp_asgi_app(mcp_fastmcp)
+        # Update the mounted ASGI app so it points to the fresh instance
+        self._mcp_mount.app = mcp_asgi_app
+
         db_log_handler = DBLogHandler(db_manager, service=ServiceName.API)
         await db_log_handler.start()
         logging.getLogger().addHandler(db_log_handler)
         try:
-            async with self._mcp_fastmcp.session_manager.run():
+            async with mcp_fastmcp.session_manager.run():
                 yield
         finally:
             logging.getLogger().removeHandler(db_log_handler)
@@ -105,7 +113,11 @@ class SpotifyMCPApp:
         self.app.include_router(explorer_router, prefix=Routes.EXPLORER.prefix, tags=[Routes.EXPLORER.tag])
 
         # Mount MCP SDK ASGI app at /mcp/v1 (standards-compliant JSON-RPC 2.0)
-        self.app.routes.append(Mount("/mcp/v1", app=self._mcp_asgi_app))
+        # A placeholder app is used here; the real ASGI app is set in _lifespan
+        # (fresh per entry, since StreamableHTTPSessionManager.run() is single-use).
+        mcp_placeholder = create_mcp_server()
+        self._mcp_mount = Mount("/mcp/v1", app=create_mcp_asgi_app(mcp_placeholder))
+        self.app.routes.append(self._mcp_mount)
 
         @self.app.get(Routes.HEALTH)
         async def health_check() -> HealthResponse:
