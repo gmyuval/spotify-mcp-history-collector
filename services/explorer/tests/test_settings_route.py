@@ -49,13 +49,52 @@ class TestTokensPage:
         assert response.headers["location"] == "/login"
         client.cookies.clear()
 
-    def test_shows_new_token(self, client: TestClient, mock_api: AsyncMock) -> None:
+    def test_shows_new_token_via_nonce(self, client: TestClient, mock_api: AsyncMock) -> None:
+        from explorer.routes.settings import _pending_tokens
+
         mock_api.get_tokens.return_value = {"items": []}
         client.cookies.set("access_token", "test-jwt")
-        response = client.get("/settings/tokens?new_token=smcp_abc123&new_token_name=Test")
+
+        # Simulate a pending token stored by create_token
+        import time
+
+        nonce = "test-nonce-abc"
+        _pending_tokens[nonce] = {
+            "token": "smcp_abc123",
+            "name": "Test",
+            "created_at": time.monotonic(),
+        }
+
+        response = client.get(f"/settings/tokens?nonce={nonce}")
         assert response.status_code == 200
         assert "smcp_abc123" in response.text
         assert "won't be shown again" in response.text.lower() or "won" in response.text
+        # Nonce should be consumed (single-use)
+        assert nonce not in _pending_tokens
+        client.cookies.clear()
+
+    def test_nonce_is_single_use(self, client: TestClient, mock_api: AsyncMock) -> None:
+        from explorer.routes.settings import _pending_tokens
+
+        mock_api.get_tokens.return_value = {"items": []}
+        client.cookies.set("access_token", "test-jwt")
+
+        import time
+
+        nonce = "test-nonce-single"
+        _pending_tokens[nonce] = {
+            "token": "smcp_secret",
+            "name": "Once",
+            "created_at": time.monotonic(),
+        }
+
+        # First request consumes the nonce
+        response1 = client.get(f"/settings/tokens?nonce={nonce}")
+        assert "smcp_secret" in response1.text
+
+        # Second request with same nonce shows no token
+        response2 = client.get(f"/settings/tokens?nonce={nonce}")
+        assert "smcp_secret" not in response2.text
         client.cookies.clear()
 
 
@@ -76,7 +115,10 @@ class TestCreateToken:
         client.cookies.set("access_token", "test-jwt")
         response = client.post("/settings/tokens/create", data={"name": "My Token"}, follow_redirects=False)
         assert response.status_code == 303
-        assert "new_token=smcp_newtoken123" in response.headers["location"]
+        location = response.headers["location"]
+        assert "nonce=" in location
+        # Token should NOT appear in the URL
+        assert "smcp_newtoken123" not in location
         mock_api.create_token.assert_called_once_with("test-jwt", "My Token")
         client.cookies.clear()
 

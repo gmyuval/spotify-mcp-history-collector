@@ -17,13 +17,12 @@ Three deliverables:
 
 ## Key Design Decision: Official MCP Python SDK
 
-Instead of implementing JSON-RPC 2.0 from scratch, we use the **official `mcp` Python SDK** (`modelcontextprotocol/python-sdk`, `mcp>=1.12.0`). It provides:
-- `Server` class with `streamable_http_app()` → returns an ASGI app
-- Built-in streamable HTTP transport (POST for requests, GET for SSE)
+Instead of implementing JSON-RPC 2.0 from scratch, we use the **official `mcp` Python SDK** (`modelcontextprotocol/python-sdk`, `mcp>=1.8.0`). It provides:
+- `FastMCP` class (from `mcp.server.fastmcp`) with built-in streamable HTTP transport
 - Session management (`Mcp-Session-Id` header)
 - JSON-RPC 2.0 handling (initialize, tools/list, tools/call, ping)
 
-We write a thin **adapter layer** that bridges our existing `MCPToolRegistry` (34 tools) to the SDK's handler callbacks. No need for custom `jsonrpc.py` or `sse_transport.py`.
+We write a thin **adapter layer** that bridges our existing `MCPToolRegistry` (34 tools) to the SDK's handler callbacks via `FastMCP`'s low-level `@mcp._mcp_server.list_tools()` and `@mcp._mcp_server.call_tool()` decorators. No need for custom `jsonrpc.py` or `sse_transport.py`.
 
 ---
 
@@ -31,7 +30,7 @@ We write a thin **adapter layer** that bridges our existing `MCPToolRegistry` (3
 
 ### API layer (`services/api/`)
 
-- [ ] **NEW** `src/app/mcp/mcp_server.py` — MCP SDK adapter: creates `mcp.server.Server`, registers `list_tools` and `call_tool` handlers that delegate to `MCPToolRegistry`, exposes ASGI app for mounting
+- [ ] **NEW** `src/app/mcp/mcp_server.py` — MCP SDK adapter: creates `FastMCP` instance (from `mcp.server.fastmcp`), registers `list_tools` and `call_tool` handlers that delegate to `MCPToolRegistry`, exposes ASGI app for mounting
 - [ ] `src/app/mcp/router.py` — Keep existing `/mcp/call` and `/mcp/tools` (ChatGPT compat); no changes needed
 - [ ] `src/app/main.py` — Mount MCP SDK ASGI app; manage MCP session lifecycle in lifespan
 - [ ] `src/app/auth/middleware.py` — Extend `_extract_token` to resolve non-JWT Bearer tokens by looking up hashed tokens in `api_tokens` table
@@ -64,7 +63,7 @@ We write a thin **adapter layer** that bridges our existing `MCPToolRegistry` (3
 
 ### Dependencies
 
-- [ ] `services/api/pyproject.toml` — Add `mcp>=1.12.0` dependency
+- [ ] `services/api/pyproject.toml` — Add `mcp>=1.8.0` dependency
 - [ ] `services/api/requirements.txt` — Recompile via pip-compile
 
 ### Version bump
@@ -91,11 +90,13 @@ Auth: `Authorization: Bearer <token>` header (JWT or API token). The adapter res
 ### `POST /api/me/tokens` — Create API token
 
 Request:
+
 ```json
 {"name": "Claude Desktop"}
 ```
 
 Response (201, token shown only once):
+
 ```json
 {
   "token_id": 1,
@@ -109,6 +110,7 @@ Response (201, token shown only once):
 ### `GET /api/me/tokens` — List tokens
 
 Response:
+
 ```json
 {
   "items": [

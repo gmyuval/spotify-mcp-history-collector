@@ -1,5 +1,7 @@
 """Settings page — API token management for Claude Desktop / Claude Code."""
 
+import secrets
+import time
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -7,6 +9,26 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from explorer.api_client import ApiError, ExplorerApiClient
 from explorer.routes._helpers import require_login
+
+# Short-lived in-memory store for newly created tokens.
+# Keyed by random nonce; each entry is consumed (popped) on first read.
+_pending_tokens: dict[str, dict[str, Any]] = {}
+
+_PENDING_TOKEN_MAX_AGE_S = 300  # 5 minutes
+_PENDING_TOKEN_MAX_ENTRIES = 100
+
+
+def _cleanup_pending_tokens() -> None:
+    """Remove expired entries and cap total size."""
+    now = time.monotonic()
+    expired = [k for k, v in _pending_tokens.items() if now - v["created_at"] > _PENDING_TOKEN_MAX_AGE_S]
+    for k in expired:
+        _pending_tokens.pop(k, None)
+    # If still over limit, remove oldest entries
+    if len(_pending_tokens) > _PENDING_TOKEN_MAX_ENTRIES:
+        by_age = sorted(_pending_tokens.items(), key=lambda kv: kv[1]["created_at"])
+        for k, _ in by_age[: len(_pending_tokens) - _PENDING_TOKEN_MAX_ENTRIES]:
+            _pending_tokens.pop(k, None)
 
 
 class SettingsRouter:
@@ -32,9 +54,15 @@ class SettingsRouter:
         error: str | None = None
         tokens_data: dict[str, Any] = {"items": []}
 
-        # Check for a newly created token to display
-        new_token: str | None = request.query_params.get("new_token")
-        new_token_name: str | None = request.query_params.get("new_token_name")
+        # Retrieve a newly created token from the in-memory store (single-use)
+        new_token: str | None = None
+        new_token_name: str | None = None
+        nonce = request.query_params.get("nonce")
+        if nonce:
+            pending = _pending_tokens.pop(nonce, None)
+            if pending:
+                new_token = pending["token"]
+                new_token_name = pending["name"]
 
         try:
             tokens_data = await api.get_tokens(token)
@@ -70,10 +98,17 @@ class SettingsRouter:
 
         try:
             result = await api.create_token(token, name)
-            # Pass the newly created token via query params so it can be shown once
             raw_token = result.get("token", "")
+            # Store token in short-lived memory, redirect with opaque nonce only
+            _cleanup_pending_tokens()
+            nonce = secrets.token_urlsafe(32)
+            _pending_tokens[nonce] = {
+                "token": raw_token,
+                "name": name,
+                "created_at": time.monotonic(),
+            }
             return RedirectResponse(  # type: ignore[return-value]
-                url=f"/settings/tokens?new_token={raw_token}&new_token_name={name}",
+                url=f"/settings/tokens?nonce={nonce}",
                 status_code=303,
             )
         except ApiError as e:

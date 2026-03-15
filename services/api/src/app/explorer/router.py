@@ -285,8 +285,6 @@ class ExplorerRouter:
         self, body: CreateTokenRequest, user_id: RequireOwnDataView, session: DBSession
     ) -> CreatedTokenResponse:
         """Create a new API token. The plaintext token is returned only once."""
-        if not body.name.strip():
-            raise HTTPException(status_code=422, detail="Token name must not be empty")
         created = await ApiTokenService.create(user_id, body.name.strip(), session)
         return CreatedTokenResponse(
             token_id=created.token_id,

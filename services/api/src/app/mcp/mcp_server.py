@@ -14,6 +14,7 @@ from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.mcp.registry import registry
+from app.mcp.router import _redact_sensitive
 from app.mcp.schemas import MCPToolParam
 
 logger = logging.getLogger(__name__)
@@ -33,9 +34,17 @@ def _param_to_json_schema(param: MCPToolParam) -> dict[str, Any]:
         "boolean": "boolean",
         "str": "string",
         "string": "string",
+        "array": "array",
+        "list": "array",
+        "object": "object",
+        "dict": "object",
     }
+    json_type = type_map.get(param.type)
+    if json_type is None:
+        logger.warning("Unmapped parameter type %r for param %r, falling back to 'string'", param.type, param.name)
+        json_type = "string"
     schema: dict[str, Any] = {
-        "type": type_map.get(param.type, "string"),
+        "type": json_type,
         "description": param.description,
     }
     if param.default is not None:
@@ -76,8 +85,12 @@ def _build_transport_security() -> TransportSecuritySettings:
     allowed_origins: list[str] = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
 
     for origin in cors_origins:
+        if origin == "*":
+            continue
         parsed = urlparse(origin)
         host = parsed.hostname or ""
+        if not host:
+            continue
         port = parsed.port
         if port:
             host_pattern = f"{host}:{port}"
@@ -141,7 +154,7 @@ def create_mcp_server() -> FastMCP:
         except KeyError:
             return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Unknown tool: {name}"}))]
         except ValueError as exc:
-            return [TextContent(type="text", text=json.dumps({"success": False, "error": str(exc)}))]
+            return [TextContent(type="text", text=json.dumps({"success": False, "error": _redact_sensitive(str(exc))}))]
         except Exception:
             logger.exception("Tool %s failed", name)
             return [TextContent(type="text", text=json.dumps({"success": False, "error": "Internal server error"}))]

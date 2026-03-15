@@ -71,6 +71,10 @@ class ApiTokenService:
         """Validate a raw token and return the user_id, or None if invalid/revoked.
 
         Also updates ``last_used_at`` on success.
+
+        Note: The caller must commit the session for the ``last_used_at``
+        update to persist. The ``JWTAuthMiddleware`` handles this by
+        committing after the downstream response completes.
         """
         token_hash = _hash_token(raw_token)
         result = await session.execute(

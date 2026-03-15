@@ -11,8 +11,8 @@
   <strong>Token created: {{ new_token_name }}</strong>
   <p class="mb-2">Copy this token now — it won't be shown again.</p>
   <div class="input-group mb-2" style="max-width: 600px;">
-    <input type="text" class="form-control font-monospace" value="{{ new_token }}" id="newTokenValue" readonly>
-    <button class="btn btn-outline-light" type="button" onclick="copyToken()">Copy</button>
+    <input type="text" class="form-control font-monospace" value="{{ new_token }}" id="newTokenValue" readonly aria-label="New API token">
+    <button class="btn btn-outline-light" type="button" id="copyBtn" onclick="copyToken()">Copy</button>
   </div>
   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
 </div>
@@ -79,10 +79,24 @@
 
 {% block scripts %}
 <script>
-function copyToken() {
+async function copyToken() {
   const input = document.getElementById('newTokenValue');
+  const btn = document.getElementById('copyBtn');
   input.select();
-  navigator.clipboard.writeText(input.value);
+  try {
+    await navigator.clipboard.writeText(input.value);
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  } catch {
+    try {
+      document.execCommand('copy');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    } catch {
+      btn.textContent = 'Failed';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    }
+  }
 }
 </script>
 {% endblock %}

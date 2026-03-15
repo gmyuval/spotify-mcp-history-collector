@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ArtistSummary(BaseModel):
@@ -216,7 +216,7 @@ class PaginatedArtists(BaseModel):
 
 
 class CreateTokenRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=255)
 
 
 class CreatedTokenResponse(BaseModel):

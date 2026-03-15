@@ -24,7 +24,7 @@ def upgrade() -> None:
         sa.Column("user_id", sa.BigInteger, sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("token_prefix", sa.String(16), nullable=False),
-        sa.Column("token_hash", sa.Text, nullable=False, unique=True),
+        sa.Column("token_hash", sa.Text, nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),

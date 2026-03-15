@@ -12,7 +12,7 @@ Connect Claude Desktop or Claude Code to your Spotify listening data via MCP.
 1. Open the Explorer UI and navigate to **Settings > API Tokens** (`/settings/tokens`)
 2. Enter a name (e.g., "Claude Desktop") and click **Create Token**
 3. Copy the token immediately — it won't be shown again
-4. The token format is `smcp_...` (approximately 49 characters)
+4. The token starts with `smcp_`
 
 ## 2. Claude Code
 
