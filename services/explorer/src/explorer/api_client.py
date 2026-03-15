@@ -260,6 +260,20 @@ class ExplorerApiClient:
         )
         return result
 
+    async def get_tokens(self, access_token: str) -> dict[str, Any]:
+        """GET /api/me/tokens — list active API tokens."""
+        result: dict[str, Any] = await self._request("GET", "/api/me/tokens", access_token)
+        return result
+
+    async def create_token(self, access_token: str, name: str) -> dict[str, Any]:
+        """POST /api/me/tokens — create a new API token."""
+        result: dict[str, Any] = await self._request("POST", "/api/me/tokens", access_token, json={"name": name})
+        return result
+
+    async def revoke_token(self, access_token: str, token_id: int) -> None:
+        """DELETE /api/me/tokens/{token_id} — revoke an API token."""
+        await self._request("DELETE", f"/api/me/tokens/{token_id}", access_token)
+
     async def exchange_google_email(self, email: str, internal_api_key: str) -> dict[str, Any] | None:
         """POST /auth/exchange-google — exchange Google email for JWT tokens.
 

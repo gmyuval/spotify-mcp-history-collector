@@ -210,3 +210,30 @@ class PaginatedArtists(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# ── API token schemas ──────────────────────────────────────────
+
+
+class CreateTokenRequest(BaseModel):
+    name: str
+
+
+class CreatedTokenResponse(BaseModel):
+    token_id: int
+    name: str
+    token: str
+    prefix: str
+    created_at: datetime
+
+
+class TokenListItem(BaseModel):
+    token_id: int
+    name: str
+    prefix: str
+    created_at: datetime
+    last_used_at: datetime | None
+
+
+class TokenListResponse(BaseModel):
+    items: list[TokenListItem]

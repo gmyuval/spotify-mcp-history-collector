@@ -7,9 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.auth import require_permission
+from app.auth.api_tokens import ApiTokenService
 from app.auth.exceptions import TokenNotFoundError, TokenRefreshError
 from app.dependencies import db_manager
 from app.explorer.schemas import (
+    CreatedTokenResponse,
+    CreateTokenRequest,
     DashboardData,
     MemoryPlaylistDetail,
     PaginatedArtists,
@@ -23,6 +26,8 @@ from app.explorer.schemas import (
     TasteProfilePatch,
     TasteProfileResponse,
     TasteProfileWithEvents,
+    TokenListItem,
+    TokenListResponse,
     TrackSummary,
     UserProfile,
 )
@@ -66,6 +71,9 @@ class ExplorerRouter:
         r.add_api_route("/memory-playlists/{playlist_id}/events", self.memory_playlist_events, methods=["GET"])
         r.add_api_route("/tracks", self.tracks, methods=["GET"])
         r.add_api_route("/artists", self.artists, methods=["GET"])
+        r.add_api_route("/tokens", self.list_tokens, methods=["GET"])
+        r.add_api_route("/tokens", self.create_token, methods=["POST"], status_code=201)
+        r.add_api_route("/tokens/{token_id}", self.revoke_token, methods=["DELETE"], status_code=204)
 
     async def dashboard(
         self,
@@ -256,6 +264,43 @@ class ExplorerRouter:
     ) -> PaginatedArtists:
         """Browse all artists with pagination, search, sort, and optional time window."""
         return await self._service.get_artists(user_id, session, limit=limit, offset=offset, sort=sort, q=q, days=days)
+
+    async def list_tokens(self, user_id: RequireOwnDataView, session: DBSession) -> TokenListResponse:
+        """List all active API tokens for the user."""
+        tokens = await ApiTokenService.list_tokens(user_id, session)
+        return TokenListResponse(
+            items=[
+                TokenListItem(
+                    token_id=t.id,
+                    name=t.name,
+                    prefix=t.token_prefix,
+                    created_at=t.created_at,
+                    last_used_at=t.last_used_at,
+                )
+                for t in tokens
+            ]
+        )
+
+    async def create_token(
+        self, body: CreateTokenRequest, user_id: RequireOwnDataView, session: DBSession
+    ) -> CreatedTokenResponse:
+        """Create a new API token. The plaintext token is returned only once."""
+        if not body.name.strip():
+            raise HTTPException(status_code=422, detail="Token name must not be empty")
+        created = await ApiTokenService.create(user_id, body.name.strip(), session)
+        return CreatedTokenResponse(
+            token_id=created.token_id,
+            name=created.name,
+            token=created.token,
+            prefix=created.prefix,
+            created_at=created.created_at,
+        )
+
+    async def revoke_token(self, token_id: int, user_id: RequireOwnDataView, session: DBSession) -> None:
+        """Revoke an API token (soft delete)."""
+        revoked = await ApiTokenService.revoke(token_id, user_id, session)
+        if not revoked:
+            raise HTTPException(status_code=404, detail="Token not found")
 
 
 _instance = ExplorerRouter()

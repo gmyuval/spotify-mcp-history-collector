@@ -1,5 +1,6 @@
 """Re-export all model classes."""
 
+from shared.db.models.api_token import ApiToken
 from shared.db.models.cache import CachedPlaylist, CachedPlaylistTrack, SpotifyEntityCache
 from shared.db.models.log import Log
 from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnapshot, PreferenceEvent, TasteProfile
@@ -10,6 +11,7 @@ from shared.db.models.settings import AppSetting
 from shared.db.models.user import SpotifyToken, User
 
 __all__ = [
+    "ApiToken",
     "AppSetting",
     "Artist",
     "AudioFeatures",

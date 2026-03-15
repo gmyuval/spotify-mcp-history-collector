@@ -7,6 +7,7 @@ from typing import TypedDict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.routing import Mount
 
 from app.admin import router as admin_router
 from app.auth import router as auth_router
@@ -17,6 +18,7 @@ from app.explorer.router import router as explorer_router
 from app.history import router as history_router
 from app.logging import DBLogHandler, configure_logging
 from app.mcp import router as mcp_router
+from app.mcp.mcp_server import create_mcp_asgi_app, create_mcp_server
 from app.middleware import (
     RateLimitMiddleware,
     RequestIDMiddleware,
@@ -40,6 +42,9 @@ class SpotifyMCPApp:
 
     def __init__(self) -> None:
         configure_logging(ServiceName.API)
+        # Create MCP SDK server and ASGI app (must call streamable_http_app before session_manager)
+        self._mcp_fastmcp = create_mcp_server()
+        self._mcp_asgi_app = create_mcp_asgi_app(self._mcp_fastmcp)
         self.app = FastAPI(
             title=APP_TITLE,
             description=APP_DESCRIPTION,
@@ -49,15 +54,15 @@ class SpotifyMCPApp:
         self._setup_middleware()
         self._setup_routers()
 
-    @staticmethod
     @asynccontextmanager
-    async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG004
-        """Application lifespan: start DB log handler, clean up on shutdown."""
+    async def _lifespan(self, app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG002
+        """Application lifespan: start DB log handler, MCP session manager, clean up on shutdown."""
         db_log_handler = DBLogHandler(db_manager, service=ServiceName.API)
         await db_log_handler.start()
         logging.getLogger().addHandler(db_log_handler)
         try:
-            yield
+            async with self._mcp_fastmcp.session_manager.run():
+                yield
         finally:
             logging.getLogger().removeHandler(db_log_handler)
             await db_log_handler.stop()
@@ -98,6 +103,9 @@ class SpotifyMCPApp:
         self.app.include_router(history_router, prefix=Routes.HISTORY.prefix, tags=[Routes.HISTORY.tag])
         self.app.include_router(mcp_router, prefix=Routes.MCP.prefix, tags=[Routes.MCP.tag])
         self.app.include_router(explorer_router, prefix=Routes.EXPLORER.prefix, tags=[Routes.EXPLORER.tag])
+
+        # Mount MCP SDK ASGI app at /mcp/v1 (standards-compliant JSON-RPC 2.0)
+        self.app.routes.append(Mount("/mcp/v1", app=self._mcp_asgi_app))
 
         @self.app.get(Routes.HEALTH)
         async def health_check() -> HealthResponse:

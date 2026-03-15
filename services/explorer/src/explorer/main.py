@@ -75,6 +75,7 @@ class ExplorerApp:
             memory_playlists_router,
             playlists_router,
             profile_router,
+            settings_router,
             taste_router,
             tracks_router,
         )
@@ -90,6 +91,7 @@ class ExplorerApp:
         self.app.include_router(playlists_router, prefix="/playlists", tags=["playlists"])
         self.app.include_router(profile_router)
         self.app.include_router(taste_router)
+        self.app.include_router(settings_router)
 
         @self.app.get("/healthz")
         async def health_check() -> HealthResponse:

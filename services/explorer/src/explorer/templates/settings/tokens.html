@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}API Tokens{% endblock %}
+{% block content %}
+<h2 class="mb-4">API Tokens</h2>
+<p class="text-muted mb-4">
+  Create tokens to connect Claude Desktop, Claude Code, or other MCP clients to your Spotify data.
+</p>
+
+{% if new_token %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+  <strong>Token created: {{ new_token_name }}</strong>
+  <p class="mb-2">Copy this token now — it won't be shown again.</p>
+  <div class="input-group mb-2" style="max-width: 600px;">
+    <input type="text" class="form-control font-monospace" value="{{ new_token }}" id="newTokenValue" readonly>
+    <button class="btn btn-outline-light" type="button" onclick="copyToken()">Copy</button>
+  </div>
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<!-- Create Token -->
+<div class="card mb-4">
+  <div class="card-header"><strong>Create New Token</strong></div>
+  <div class="card-body">
+    <form action="/settings/tokens/create" method="post" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label for="tokenName" class="form-label">Token Name</label>
+        <input type="text" class="form-control" id="tokenName" name="name"
+               placeholder="e.g. Claude Desktop" required maxlength="255">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary">Create Token</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Token List -->
+<div class="card">
+  <div class="card-header"><strong>Active Tokens</strong></div>
+  <div class="card-body">
+    {% if tokens %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Prefix</th>
+            <th>Created</th>
+            <th>Last Used</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in tokens %}
+          <tr>
+            <td>{{ t.name }}</td>
+            <td><code>{{ t.prefix }}...</code></td>
+            <td>{{ t.created_at[:10] if t.created_at else "—" }}</td>
+            <td>{{ t.last_used_at[:10] if t.last_used_at else "Never" }}</td>
+            <td>
+              <form action="/settings/tokens/revoke" method="post" class="d-inline"
+                    onsubmit="return confirm('Revoke token {{ t.name }}?')">
+                <input type="hidden" name="token_id" value="{{ t.token_id }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm">Revoke</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">No API tokens yet. Create one to use with Claude Desktop or Claude Code.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyToken() {
+  const input = document.getElementById('newTokenValue');
+  input.select();
+  navigator.clipboard.writeText(input.value);
+}
+</script>
+{% endblock %}
