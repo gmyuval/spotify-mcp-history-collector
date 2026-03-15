@@ -4,8 +4,10 @@ import json
 import logging
 from contextvars import ContextVar
 from typing import Any
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import TextContent, Tool
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -57,12 +59,52 @@ def _build_input_schema(params: list[MCPToolParam]) -> dict[str, Any]:
     return schema
 
 
+def _build_transport_security() -> TransportSecuritySettings:
+    """Build transport security settings from CORS_ALLOWED_ORIGINS.
+
+    The MCP SDK validates Host and Origin headers to prevent DNS rebinding.
+    We derive allowed hosts/origins from the same CORS config used by FastAPI,
+    plus the default localhost entries for local development.
+    """
+    from app.settings import get_settings
+
+    settings = get_settings()
+    cors_origins = [o.strip() for o in settings.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    # Defaults: localhost variants (always allowed for dev)
+    allowed_hosts: list[str] = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    allowed_origins: list[str] = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
+
+    for origin in cors_origins:
+        parsed = urlparse(origin)
+        host = parsed.hostname or ""
+        port = parsed.port
+        if port:
+            host_pattern = f"{host}:{port}"
+        else:
+            # No port: add both bare hostname (for proxied requests) and wildcard
+            host_pattern = host
+        if host_pattern not in allowed_hosts:
+            allowed_hosts.append(host_pattern)
+        if not port and f"{host}:*" not in allowed_hosts:
+            allowed_hosts.append(f"{host}:*")
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
+
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
+
+
 def create_mcp_server() -> FastMCP:
     """Create the MCP SDK FastMCP server with registry-backed handlers."""
     mcp = FastMCP(
         "spotify-mcp",
         stateless_http=True,
         json_response=True,
+        transport_security=_build_transport_security(),
     )
     # Override the default streamable HTTP path so it serves at "/" when mounted
     mcp.settings.streamable_http_path = "/"
