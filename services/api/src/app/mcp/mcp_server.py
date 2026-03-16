@@ -91,16 +91,18 @@ def _build_transport_security() -> TransportSecuritySettings:
         host = parsed.hostname or ""
         if not host:
             continue
+        # urlparse strips IPv6 brackets — re-add them for host patterns
+        host_fmt = f"[{host}]" if ":" in host else host
         port = parsed.port
         if port:
-            host_pattern = f"{host}:{port}"
+            host_pattern = f"{host_fmt}:{port}"
         else:
             # No port: add both bare hostname (for proxied requests) and wildcard
-            host_pattern = host
+            host_pattern = host_fmt
         if host_pattern not in allowed_hosts:
             allowed_hosts.append(host_pattern)
-        if not port and f"{host}:*" not in allowed_hosts:
-            allowed_hosts.append(f"{host}:*")
+        if not port and f"{host_fmt}:*" not in allowed_hosts:
+            allowed_hosts.append(f"{host_fmt}:*")
         if origin not in allowed_origins:
             allowed_origins.append(origin)
 
@@ -152,11 +154,12 @@ def create_mcp_server() -> FastMCP:
         args: dict[str, Any] = dict(arguments) if arguments else {}
         args["user_id"] = user_id
 
+        if not registry.is_registered(name):
+            return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Unknown tool: {name}"}))]
+
         try:
             async with db_manager.session() as session:
                 result = await registry.invoke(name, args, session)
-        except KeyError:
-            return [TextContent(type="text", text=json.dumps({"success": False, "error": f"Unknown tool: {name}"}))]
         except ValueError as exc:
             return [TextContent(type="text", text=json.dumps({"success": False, "error": _redact_sensitive(str(exc))}))]
         except Exception:
