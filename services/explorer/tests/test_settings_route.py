@@ -122,6 +122,10 @@ class TestCreateToken:
         # Token should NOT appear in the URL
         assert "smcp_newtoken123" not in location
         mock_api.create_token.assert_called_once_with("test-jwt", "My Token")
+        # Clean up module-scoped pending tokens to avoid leaking into other tests
+        from explorer.routes.settings import _pending_tokens
+
+        _pending_tokens.clear()
         client.cookies.clear()
 
     def test_empty_name_redirects(self, client: TestClient, mock_api: AsyncMock) -> None:
