@@ -41,6 +41,19 @@ class TestBuildInputSchema:
         assert schema["properties"]["b"]["type"] == "number"
         assert schema["properties"]["c"]["type"] == "boolean"
 
+    def test_array_and_object_type_mapping(self) -> None:
+        params = [
+            MCPToolParam(name="ids", type="array", description="IDs", required=True),
+            MCPToolParam(name="tags", type="list", description="Tags", required=False),
+            MCPToolParam(name="ctx", type="object", description="Context", required=False),
+            MCPToolParam(name="meta", type="dict", description="Metadata", required=False),
+        ]
+        schema = _build_input_schema(params)
+        assert schema["properties"]["ids"]["type"] == "array"
+        assert schema["properties"]["tags"]["type"] == "array"
+        assert schema["properties"]["ctx"]["type"] == "object"
+        assert schema["properties"]["meta"]["type"] == "object"
+
     def test_empty_params(self) -> None:
         schema = _build_input_schema([])
         assert schema == {"type": "object", "properties": {}}

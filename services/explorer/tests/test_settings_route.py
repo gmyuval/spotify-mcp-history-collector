@@ -68,7 +68,9 @@ class TestTokensPage:
         response = client.get(f"/settings/tokens?nonce={nonce}")
         assert response.status_code == 200
         assert "smcp_abc123" in response.text
-        assert "won't be shown again" in response.text.lower() or "won" in response.text
+        text = response.text.lower()
+        assert "copy this token now" in text
+        assert "shown again" in text
         # Nonce should be consumed (single-use)
         assert nonce not in _pending_tokens
         client.cookies.clear()

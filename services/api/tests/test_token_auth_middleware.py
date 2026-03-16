@@ -39,11 +39,12 @@ class TestExtractToken:
     """Unit tests for the static _extract_token method — JWT extraction."""
 
     def _make_request(self, auth_header: str | None = None, cookie: str | None = None) -> Request:
-        scope: dict[str, object] = {"type": "http", "headers": []}
+        headers: list[tuple[bytes, bytes]] = []
         if auth_header:
-            scope["headers"] = [(b"authorization", auth_header.encode())]
+            headers = [(b"authorization", auth_header.encode())]
         if cookie:
-            scope["headers"].append((b"cookie", f"access_token={cookie}".encode()))
+            headers.append((b"cookie", f"access_token={cookie}".encode()))
+        scope: dict[str, object] = {"type": "http", "headers": headers}
         return Request(scope)
 
     def test_extracts_jwt_from_header(self) -> None:

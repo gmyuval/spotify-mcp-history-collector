@@ -67,10 +67,15 @@ class SettingsRouter:
         new_token_name: str | None = None
         nonce = request.query_params.get("nonce")
         if nonce and error is None:
+            _cleanup_pending_tokens()
             pending = _pending_tokens.pop(nonce, None)
             if pending:
                 new_token = pending["token"]
                 new_token_name = pending["name"]
+
+        # Surface create/revoke errors passed via query param
+        if error is None:
+            error = request.query_params.get("error")
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             "settings/tokens.html",
@@ -115,7 +120,12 @@ class SettingsRouter:
         except ApiError as e:
             if e.status_code == 401:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
-            return RedirectResponse(url="/settings/tokens", status_code=303)  # type: ignore[return-value]
+            from urllib.parse import quote
+
+            return RedirectResponse(  # type: ignore[return-value]
+                url=f"/settings/tokens?error={quote(e.detail)}",
+                status_code=303,
+            )
 
     async def revoke_token(self, request: Request) -> HTMLResponse:
         """Handle token revocation."""
@@ -132,8 +142,15 @@ class SettingsRouter:
             await api.revoke_token(token, token_id)
         except ValueError, TypeError:
             pass
-        except ApiError:
-            pass
+        except ApiError as e:
+            if e.status_code == 401:
+                return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
+            from urllib.parse import quote
+
+            return RedirectResponse(  # type: ignore[return-value]
+                url=f"/settings/tokens?error={quote(e.detail)}",
+                status_code=303,
+            )
 
         return RedirectResponse(url="/settings/tokens", status_code=303)  # type: ignore[return-value]
 

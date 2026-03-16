@@ -105,6 +105,8 @@ class ExplorerApiClient:
             except Exception:
                 detail = resp.text
             raise ApiError(resp.status_code, str(detail))
+        if resp.status_code == 204:
+            return None
         return resp.json()
 
     async def get_dashboard(self, access_token: str, days: int | None = None) -> dict[str, Any]:

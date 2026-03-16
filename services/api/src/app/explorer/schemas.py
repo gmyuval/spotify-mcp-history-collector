@@ -216,7 +216,7 @@ class PaginatedArtists(BaseModel):
 
 
 class CreateTokenRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=255, pattern=r".*\S.*")
 
 
 class CreatedTokenResponse(BaseModel):
