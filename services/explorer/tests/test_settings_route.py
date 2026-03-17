@@ -55,7 +55,6 @@ class TestTokensPage:
         mock_api.get_tokens.return_value = {"items": []}
         client.cookies.set("access_token", "test-jwt")
 
-        # Simulate a pending token stored by create_token
         import time
 
         nonce = "test-nonce-abc"
@@ -65,15 +64,18 @@ class TestTokensPage:
             "created_at": time.monotonic(),
         }
 
-        response = client.get(f"/settings/tokens?nonce={nonce}")
-        assert response.status_code == 200
-        assert "smcp_abc123" in response.text
-        text = response.text.lower()
-        assert "copy this token now" in text
-        assert "shown again" in text
-        # Nonce should be consumed (single-use)
-        assert nonce not in _pending_tokens
-        client.cookies.clear()
+        try:
+            response = client.get(f"/settings/tokens?nonce={nonce}")
+            assert response.status_code == 200
+            assert "smcp_abc123" in response.text
+            text = response.text.lower()
+            assert "copy this token now" in text
+            assert "shown again" in text
+            # Nonce should be consumed (single-use)
+            assert nonce not in _pending_tokens
+        finally:
+            _pending_tokens.clear()
+            client.cookies.clear()
 
     def test_nonce_is_single_use(self, client: TestClient, mock_api: AsyncMock) -> None:
         from explorer.routes.settings import _pending_tokens
@@ -90,14 +92,17 @@ class TestTokensPage:
             "created_at": time.monotonic(),
         }
 
-        # First request consumes the nonce
-        response1 = client.get(f"/settings/tokens?nonce={nonce}")
-        assert "smcp_secret" in response1.text
+        try:
+            # First request consumes the nonce
+            response1 = client.get(f"/settings/tokens?nonce={nonce}")
+            assert "smcp_secret" in response1.text
 
-        # Second request with same nonce shows no token
-        response2 = client.get(f"/settings/tokens?nonce={nonce}")
-        assert "smcp_secret" not in response2.text
-        client.cookies.clear()
+            # Second request with same nonce shows no token
+            response2 = client.get(f"/settings/tokens?nonce={nonce}")
+            assert "smcp_secret" not in response2.text
+        finally:
+            _pending_tokens.clear()
+            client.cookies.clear()
 
 
 class TestCreateToken:
