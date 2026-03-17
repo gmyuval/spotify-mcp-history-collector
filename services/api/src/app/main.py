@@ -7,6 +7,7 @@ from typing import TypedDict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.routing import Mount
 
 from app.admin import router as admin_router
 from app.auth import router as auth_router
@@ -17,6 +18,7 @@ from app.explorer.router import router as explorer_router
 from app.history import router as history_router
 from app.logging import DBLogHandler, configure_logging
 from app.mcp import router as mcp_router
+from app.mcp.mcp_server import create_mcp_asgi_app, create_mcp_server
 from app.middleware import (
     RateLimitMiddleware,
     RequestIDMiddleware,
@@ -49,15 +51,26 @@ class SpotifyMCPApp:
         self._setup_middleware()
         self._setup_routers()
 
-    @staticmethod
     @asynccontextmanager
-    async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG004
-        """Application lifespan: start DB log handler, clean up on shutdown."""
+    async def _lifespan(self, app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG002
+        """Application lifespan: start DB log handler, MCP session manager, clean up on shutdown.
+
+        A fresh FastMCP server is created on each lifespan entry because the
+        MCP SDK's ``StreamableHTTPSessionManager.run()`` can only be called
+        once per instance.  Re-creating it here allows tests (which re-enter
+        the lifespan via multiple ``TestClient`` contexts) to work correctly.
+        """
+        mcp_fastmcp = create_mcp_server()
+        mcp_asgi_app = create_mcp_asgi_app(mcp_fastmcp)
+        # Update the mounted ASGI app so it points to the fresh instance
+        self._mcp_mount.app = mcp_asgi_app
+
         db_log_handler = DBLogHandler(db_manager, service=ServiceName.API)
         await db_log_handler.start()
         logging.getLogger().addHandler(db_log_handler)
         try:
-            yield
+            async with mcp_fastmcp.session_manager.run():
+                yield
         finally:
             logging.getLogger().removeHandler(db_log_handler)
             await db_log_handler.stop()
@@ -98,6 +111,13 @@ class SpotifyMCPApp:
         self.app.include_router(history_router, prefix=Routes.HISTORY.prefix, tags=[Routes.HISTORY.tag])
         self.app.include_router(mcp_router, prefix=Routes.MCP.prefix, tags=[Routes.MCP.tag])
         self.app.include_router(explorer_router, prefix=Routes.EXPLORER.prefix, tags=[Routes.EXPLORER.tag])
+
+        # Mount MCP SDK ASGI app at /mcp/v1 (standards-compliant JSON-RPC 2.0)
+        # A placeholder app is used here; the real ASGI app is set in _lifespan
+        # (fresh per entry, since StreamableHTTPSessionManager.run() is single-use).
+        mcp_placeholder = create_mcp_server()
+        self._mcp_mount = Mount("/mcp/v1", app=create_mcp_asgi_app(mcp_placeholder))
+        self.app.routes.append(self._mcp_mount)
 
         @self.app.get(Routes.HEALTH)
         async def health_check() -> HealthResponse:

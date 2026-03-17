@@ -105,6 +105,8 @@ class ExplorerApiClient:
             except Exception:
                 detail = resp.text
             raise ApiError(resp.status_code, str(detail))
+        if resp.status_code == 204:
+            return None
         return resp.json()
 
     async def get_dashboard(self, access_token: str, days: int | None = None) -> dict[str, Any]:
@@ -259,6 +261,20 @@ class ExplorerApiClient:
             params={"limit": limit, "offset": offset},
         )
         return result
+
+    async def get_tokens(self, access_token: str) -> dict[str, Any]:
+        """GET /api/me/tokens — list active API tokens."""
+        result: dict[str, Any] = await self._request("GET", "/api/me/tokens", access_token)
+        return result
+
+    async def create_token(self, access_token: str, name: str) -> dict[str, Any]:
+        """POST /api/me/tokens — create a new API token."""
+        result: dict[str, Any] = await self._request("POST", "/api/me/tokens", access_token, json={"name": name})
+        return result
+
+    async def revoke_token(self, access_token: str, token_id: int) -> None:
+        """DELETE /api/me/tokens/{token_id} — revoke an API token."""
+        await self._request("DELETE", f"/api/me/tokens/{token_id}", access_token)
 
     async def exchange_google_email(self, email: str, internal_api_key: str) -> dict[str, Any] | None:
         """POST /auth/exchange-google — exchange Google email for JWT tokens.

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "spotify-mcp": {
+      "type": "streamable-http",
+      "url": "https://music.praxiscode.dev/mcp/v1",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_TOKEN_HERE"
+      }
+    }
+  }
+}

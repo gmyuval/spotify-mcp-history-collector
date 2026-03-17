@@ -7,6 +7,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
+from app.auth.api_tokens import ApiTokenService
 from app.auth.jwt import JWTError, JWTService
 from app.constants import Routes
 from app.dependencies import db_manager
@@ -19,9 +20,12 @@ logger = logging.getLogger(__name__)
 _SKIP_PREFIXES = (Routes.HEALTH, "/docs", "/openapi.json", "/redoc")
 _SKIP_EXACT = frozenset({"/", f"{Routes.AUTH.prefix}/login", f"{Routes.AUTH.prefix}/callback"})
 
+# API token prefix for quick identification
+_API_TOKEN_PREFIX = "smcp_"
+
 
 class JWTAuthMiddleware(BaseHTTPMiddleware):
-    """Extract JWT from Authorization header or cookie, set request.state.
+    """Extract JWT or API token from Authorization header or cookie, set request.state.
 
     Sets on every request (even if no token):
     - ``request.state.user_id``: int | None
@@ -36,7 +40,7 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        """Process each request, extracting JWT if present."""
+        """Process each request, extracting JWT or API token if present."""
         # Initialize state to unauthenticated
         request.state.user_id = None
         request.state.db_session = None
@@ -44,6 +48,11 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if self._should_skip(path):
             return await call_next(request)
+
+        # Check for API token (smcp_...) first — requires DB lookup
+        api_token = self._extract_api_token(request)
+        if api_token is not None:
+            return await self._handle_api_token(api_token, request, call_next)
 
         token = self._extract_token(request)
         if token is None:
@@ -60,12 +69,36 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
 
         request.state.user_id = user_id
 
-        # Scope the log context to this request so it's reset on all exit paths.
+        return await self._with_session(user_id, request, call_next)
+
+    async def _handle_api_token(self, raw_token: str, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        """Validate an API token via DB lookup and set user context."""
+        try:
+            session_cm = db_manager.session()
+            session = await session_cm.__aenter__()
+        except Exception:
+            logger.debug("Could not open DB session for API token validation")
+            return await call_next(request)
+
+        try:
+            user_id = await ApiTokenService.validate(raw_token, session)
+            if user_id is None:
+                # Invalid or revoked token — proceed unauthenticated
+                return await call_next(request)
+
+            request.state.user_id = user_id
+            request.state.db_session = session
+
+            async with log_context(user_id=user_id):
+                response = await call_next(request)
+                return response
+        finally:
+            request.state.db_session = None
+            await session_cm.__aexit__(*sys.exc_info())
+
+    async def _with_session(self, user_id: int, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        """Open a DB session for the authenticated user and proceed."""
         async with log_context(user_id=user_id):
-            # Provide a DB session for permission checks via request.state.db_session.
-            # We separate session acquisition from request handling so that an
-            # exception inside the downstream handler is never caught here (which
-            # would cause call_next to be invoked twice).
             try:
                 session_cm = db_manager.session()
                 session = await session_cm.__aenter__()
@@ -87,6 +120,16 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         if path in _SKIP_EXACT:
             return True
         return any(path.startswith(prefix) for prefix in _SKIP_PREFIXES)
+
+    @staticmethod
+    def _extract_api_token(request: Request) -> str | None:
+        """Extract an API token (smcp_...) from the Bearer header."""
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            candidate = auth_header[7:]
+            if candidate.startswith(_API_TOKEN_PREFIX):
+                return candidate
+        return None
 
     @staticmethod
     def _extract_token(request: Request) -> str | None:
