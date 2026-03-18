@@ -1,28 +1,26 @@
-# Phase 3 — MCP Protocol Compliance & Claude Integration
+# Phase 4a — Entity Detail Pages + Spotify Enrichment
 
-**Branch:** `feat/phase-3-mcp-protocol`
-**Version:** 0.3.0 → 0.4.0
-**PRD reference:** `docs/prd-dev-step2.md` § Phase 3
+**Branch:** `feat/phase-4a-detail-pages`
+**Version:** 0.4.0 → 0.5.0
+**PRD reference:** `docs/prd-dev-step2.md` § Phase 4a
 
 ---
 
 ## Overview
 
-Three deliverables:
-1. **3.1 MCP JSON-RPC Server** — Standards-compliant MCP server using the official `mcp` Python SDK, mounted alongside the existing ChatGPT-compatible `/mcp/call` endpoint.
-2. **3.2 User API Tokens** — New `api_tokens` DB table, token management API endpoints, and Explorer UI so users can generate long-lived Bearer tokens for Claude Desktop / Claude Code.
-3. **3.3 Claude Integration Config** — `.mcp.json` for Claude Code + setup guide documentation.
+Replace the "Under Construction" placeholder pages for track, artist, and album detail with fully functional pages. Uses DB data + optional live Spotify API enrichment. No new external services or infrastructure.
 
 ---
 
-## Key Design Decision: Official MCP Python SDK
+## Data Sources
 
-Instead of implementing JSON-RPC 2.0 from scratch, we use the **official `mcp` Python SDK** (`modelcontextprotocol/python-sdk`, `mcp>=1.8.0`). It provides:
-- `FastMCP` class (from `mcp.server.fastmcp`) with built-in streamable HTTP transport
-- Session management (`Mcp-Session-Id` header)
-- JSON-RPC 2.0 handling (initialize, tools/list, tools/call, ping)
+| Source | Provides | Already available? |
+|--------|----------|--------------------|
+| **DB (tracks/artists/plays)** | Name, duration, album, play count, first/last played, listening time | Yes |
+| **DB (audio_features)** | Danceability, energy, valence, tempo, etc. | Table exists, unpopulated — show gracefully |
+| **Spotify API (live)** | Images, popularity, preview URLs, followers, genres, album art | Yes — `SpotifyClient.get_track()`, `get_artist()`, `get_album()` |
 
-We write a thin **adapter layer** that bridges our existing `MCPToolRegistry` (34 tools) to the SDK's handler callbacks via `FastMCP`'s low-level `@mcp._mcp_server.list_tools()` and `@mcp._mcp_server.call_tool()` decorators. No need for custom `jsonrpc.py` or `sse_transport.py`.
+Spotify enrichment is **optional** — pages render with DB data alone if the user has no Spotify token or API returns errors.
 
 ---
 
@@ -30,183 +28,198 @@ We write a thin **adapter layer** that bridges our existing `MCPToolRegistry` (3
 
 ### API layer (`services/api/`)
 
-- [ ] **NEW** `src/app/mcp/mcp_server.py` — MCP SDK adapter: creates `FastMCP` instance (from `mcp.server.fastmcp`), registers `list_tools` and `call_tool` handlers that delegate to `MCPToolRegistry`, exposes ASGI app for mounting
-- [ ] `src/app/mcp/router.py` — Keep existing `/mcp/call` and `/mcp/tools` (ChatGPT compat); no changes needed
-- [ ] `src/app/main.py` — Mount MCP SDK ASGI app; manage MCP session lifecycle in lifespan
-- [ ] `src/app/auth/middleware.py` — Extend `_extract_token` to resolve non-JWT Bearer tokens by looking up hashed tokens in `api_tokens` table
-- [ ] **NEW** `src/app/auth/api_tokens.py` — `ApiTokenService`: generate, validate, list, revoke tokens; SHA-256 hashing
-- [ ] `src/app/explorer/router.py` — Add token management endpoints: `GET /api/me/tokens`, `POST /api/me/tokens`, `DELETE /api/me/tokens/{token_id}`
-- [ ] `src/app/explorer/schemas.py` — Add token request/response schemas
-
-### Shared DB (`services/shared/`)
-
-- [ ] **NEW** `src/shared/db/models/api_token.py` — `ApiToken` model: id, user_id (FK), name, token_prefix (first 8 chars), token_hash (SHA-256), created_at, last_used_at, revoked_at
-- [ ] `src/shared/db/models/__init__.py` — Export `ApiToken`
-
-### Migration (`services/api/alembic/`)
-
-- [ ] **NEW** `versions/011_api_tokens.py` — Create `api_tokens` table with index on `(user_id, revoked_at)`
+- [ ] `src/app/explorer/schemas.py` — Add `TrackDetail`, `ArtistDetail`, `AlbumDetail`, `RecentPlayItem` response schemas
+- [ ] `src/app/explorer/service.py` — Add `get_track_detail()`, `get_artist_detail()`, `get_album_detail()` + Spotify enrichment helpers
+- [ ] `src/app/explorer/router.py` — Add `GET /tracks/{track_id}`, `GET /artists/{artist_id}`, `GET /albums/{album_spotify_id}`
+- [ ] **NEW** `src/app/explorer/enrichment_cache.py` — Simple in-memory TTL cache for Spotify API responses (24h TTL, max 500 entries)
 
 ### Explorer frontend (`services/explorer/`)
 
-- [ ] `src/explorer/api_client.py` — Add `get_tokens()`, `create_token()`, `revoke_token()` methods
-- [ ] **NEW** `src/explorer/routes/settings.py` — `SettingsRouter`: token list page, create/revoke actions
-- [ ] `src/explorer/routes/__init__.py` — Export `settings_router`
-- [ ] `src/explorer/main.py` — Register settings router at `/settings`
-- [ ] **NEW** `src/explorer/templates/settings/tokens.html` — Token management UI (list, create, revoke, show-once modal for new tokens)
-- [ ] `src/explorer/templates/base.html` — Add "Settings" nav link
+- [ ] `src/explorer/api_client.py` — Add `get_track_detail()`, `get_artist_detail()`, `get_album_detail()` methods
+- [ ] `src/explorer/routes/tracks.py` — Replace `coming_soon.html` with actual data fetch + `track_detail.html`
+- [ ] `src/explorer/routes/artists.py` — Replace `coming_soon.html` with actual data fetch + `artist_detail.html`
+- [ ] **NEW** `src/explorer/routes/albums.py` — Album detail route at `/albums/{album_spotify_id}`
+- [ ] `src/explorer/routes/__init__.py` — Export `albums_router`
+- [ ] `src/explorer/main.py` — Register albums router
+- [ ] **NEW** `src/explorer/templates/track_detail.html` — Header card, stats, audio features radar (ECharts), recent plays
+- [ ] **NEW** `src/explorer/templates/artist_detail.html` — Header card with image, genre badges, stats, top tracks
+- [ ] **NEW** `src/explorer/templates/album_detail.html` — Header card with cover art, stats, track listing
+- [ ] `src/explorer/templates/base.html` — Add ECharts CDN script
 
-### Config files
+### Tests
 
-- [ ] **NEW** `.mcp.json` — Claude Code MCP config (placeholder URL + Bearer token)
-- [ ] **NEW** `docs/claude-integration-setup.md` — Setup guide for Claude Desktop + Claude Code
-
-### Dependencies
-
-- [ ] `services/api/pyproject.toml` — Add `mcp>=1.8.0` dependency
-- [ ] `services/api/requirements.txt` — Recompile via pip-compile
+- [ ] **NEW** `services/api/tests/test_explorer/test_detail_endpoints.py` — Track/artist/album detail: found, not found, user isolation, audio features
+- [ ] **NEW** `services/explorer/tests/test_detail_routes.py` — Route rendering, 404 handling, enrichment optional
 
 ### Version bump
 
-- [ ] `services/shared/src/shared/version.py` — `0.3.0` → `0.4.0`
+- [ ] `services/shared/src/shared/version.py` — `0.4.0` → `0.5.0`
+
+---
+
+## Page Designs
+
+### Track Detail (`/tracks/{track_id}`)
+
+- **Header card:** Track name, artist(s) (linked to `/artists/{id}`), album name (linked to `/albums/{album_id}`), duration, Spotify external link
+- **Spotify enrichment (if available):** Album cover art, popularity bar, ISRC, preview player
+- **Personal Stats card:** Total plays, first/last played, total listening time
+- **Audio Features card (if data exists):** Radar chart (ECharts) — danceability, energy, valence, acousticness, instrumentalness, speechiness
+- **Recent Plays table:** Paginated play history for this track
+
+### Artist Detail (`/artists/{artist_id}`)
+
+- **Header card:** Artist name, Spotify external link
+- **Spotify enrichment (if available):** Artist image, genres (as badges), popularity, followers count
+- **Personal Stats card:** Total plays, unique tracks, total listening time, first/last played
+- **Top Tracks table:** Most-played tracks by this artist (linked to `/tracks/{id}`)
+
+### Album Detail (`/albums/{album_spotify_id}`)
+
+- **Header card:** Album name, artist(s), Spotify external link
+- **Spotify enrichment (if available):** Album cover art, release date, label, total tracks
+- **Personal Stats card:** Total plays across all album tracks, unique tracks played
+- **Track Listing table:** All user-played tracks from this album with play counts (linked to `/tracks/{id}`)
+
+Album detail uses `album_spotify_id` as the path parameter (no separate album DB table exists).
 
 ---
 
 ## API Contracts
 
-### MCP Protocol Endpoint
-
-Standard MCP JSON-RPC 2.0 — handled by the SDK. The ASGI app is mounted so that `POST` and `GET` requests reach the SDK's streamable HTTP handler.
-
-Supported methods:
-- `initialize` → server info + capabilities (`{tools: {listChanged: false}}`)
-- `tools/list` → all 34 tools in MCP `inputSchema` format
-- `tools/call` → dispatches to existing handlers, wraps result as `{content: [{type: "text", text: "<json>"}]}`
-- `ping` → keep-alive
-- `notifications/cancelled` → no-op (acknowledged)
-
-Auth: `Authorization: Bearer <token>` header (JWT or API token). The adapter resolves `user_id` from request context and injects it into tool args.
-
-### `POST /api/me/tokens` — Create API token
-
-Request:
-
-```json
-{"name": "Claude Desktop"}
-```
-
-Response (201, token shown only once):
-
-```json
-{
-  "token_id": 1,
-  "name": "Claude Desktop",
-  "token": "smcp_a1b2c3d4e5f6...",
-  "prefix": "smcp_a1b",
-  "created_at": "2026-03-14T12:00:00Z"
-}
-```
-
-### `GET /api/me/tokens` — List tokens
+### `GET /api/me/tracks/{track_id}` — Track Detail
 
 Response:
 
 ```json
 {
-  "items": [
-    {
-      "token_id": 1,
-      "name": "Claude Desktop",
-      "prefix": "smcp_a1b",
-      "created_at": "2026-03-14T12:00:00Z",
-      "last_used_at": "2026-03-14T15:30:00Z"
-    }
-  ]
+  "track_id": 42,
+  "name": "Master of Puppets",
+  "spotify_track_id": "6NwbeybX6TDtXlpXvnUOZC",
+  "duration_ms": 515387,
+  "album_name": "Master of Puppets",
+  "album_spotify_id": "2Lq2qX3hYhiuPckC8Flj21",
+  "artists": [{"artist_id": 7, "name": "Metallica"}],
+  "play_count": 23,
+  "first_played": "2025-06-15T14:30:00Z",
+  "last_played": "2026-03-10T22:15:00Z",
+  "total_ms_played": 11853801,
+  "audio_features": {
+    "danceability": 0.28,
+    "energy": 0.87,
+    "valence": 0.12,
+    "acousticness": 0.003,
+    "instrumentalness": 0.55,
+    "speechiness": 0.05
+  },
+  "recent_plays": [
+    {"played_at": "2026-03-10T22:15:00Z", "ms_played": 515387, "context_type": "playlist"}
+  ],
+  "spotify": {
+    "images": [{"url": "https://i.scdn.co/image/...", "height": 640, "width": 640}],
+    "popularity": 78,
+    "isrc": "USBL10500280",
+    "preview_url": "https://p.scdn.co/mp3-preview/...",
+    "external_url": "https://open.spotify.com/track/6NwbeybX6TDtXlpXvnUOZC"
+  }
 }
 ```
 
-### `DELETE /api/me/tokens/{token_id}` — Revoke token
+### `GET /api/me/artists/{artist_id}` — Artist Detail
 
-Response: 204 No Content (soft delete via `revoked_at` timestamp)
+Response:
 
-### Existing ChatGPT Endpoints (unchanged)
+```json
+{
+  "artist_id": 7,
+  "name": "Metallica",
+  "spotify_artist_id": "2ye2Wgw4gimLv2eAKyk1NB",
+  "play_count": 342,
+  "unique_tracks": 45,
+  "total_ms_played": 95832000,
+  "first_played": "2025-01-20T10:00:00Z",
+  "last_played": "2026-03-15T18:30:00Z",
+  "top_tracks": [
+    {"track_id": 42, "name": "Master of Puppets", "play_count": 23}
+  ],
+  "spotify": {
+    "images": [{"url": "https://i.scdn.co/image/...", "height": 640, "width": 640}],
+    "genres": ["thrash metal", "metal", "hard rock"],
+    "popularity": 82,
+    "followers": 24500000,
+    "external_url": "https://open.spotify.com/artist/2ye2Wgw4gimLv2eAKyk1NB"
+  }
+}
+```
 
-`POST /mcp/call` and `GET /mcp/tools` continue working with admin Bearer token at their current paths.
+### `GET /api/me/albums/{album_spotify_id}` — Album Detail
+
+Response:
+
+```json
+{
+  "album_spotify_id": "2Lq2qX3hYhiuPckC8Flj21",
+  "name": "Master of Puppets",
+  "artist_names": ["Metallica"],
+  "play_count": 87,
+  "unique_tracks": 8,
+  "tracks": [
+    {"track_id": 42, "name": "Master of Puppets", "play_count": 23, "duration_ms": 515387}
+  ],
+  "spotify": {
+    "images": [{"url": "https://i.scdn.co/image/...", "height": 640, "width": 640}],
+    "release_date": "1986-03-03",
+    "label": "Blackened Recordings",
+    "total_tracks": 8,
+    "external_url": "https://open.spotify.com/album/2Lq2qX3hYhiuPckC8Flj21"
+  }
+}
+```
 
 ---
 
-## Routing Strategy
+## ECharts Integration
 
-The existing `/mcp` prefix hosts ChatGPT endpoints (`/mcp/call`, `/mcp/tools`). The MCP SDK app handles `POST /mcp/v1` and `GET /mcp/v1`.
-
-- ChatGPT: `POST /mcp/call`, `GET /mcp/tools` — existing FastAPI router (unchanged)
-- MCP protocol: `POST /mcp/v1`, `GET /mcp/v1` — SDK ASGI app mounted via Starlette `Mount`
-- Claude Desktop/Code config uses `url: "https://music.praxiscode.dev/mcp/v1"`
-- Caddy already routes `/mcp/*` → api:8000 with no auth gate
-
----
-
-## Auth Flow for MCP
-
-1. User generates API token via Explorer UI (`/settings/tokens`)
-2. Token format: `smcp_` prefix + 32 bytes URL-safe base64 (total ~49 chars)
-3. Token stored as SHA-256 hash in DB; plaintext shown once on creation
-4. User configures Claude Desktop/Code with `Authorization: Bearer smcp_...`
-5. On MCP request: middleware extracts Bearer token → not a JWT (no dots) → not admin token → look up `sha256(token)` in `api_tokens` → set `request.state.user_id`
-6. MCP server adapter reads `user_id` from request context and injects into tool args
-7. `last_used_at` updated on each successful token validation
+- Apache ECharts via CDN (`<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js">`)
+- Audio features radar chart on track detail page
+- Dark theme matching Bootstrap dark
+- No build step required
+- Ready for reuse in Phase 5 (Analytics)
 
 ---
 
-## UI Behavior
+## In-Memory Enrichment Cache
 
-### `/settings/tokens` page
+Simple module-level TTL dict for Spotify API responses. Avoids repeated API calls for the same entity within a session.
 
-- Card-based layout showing existing tokens (name, prefix, created, last used)
-- "Create Token" button → modal/form with name input
-- On create: show token once in a highlighted box with copy button + warning "This token won't be shown again"
-- "Revoke" button per token → confirmation → soft delete
-- Empty state: "No API tokens yet. Create one to use with Claude Desktop or Claude Code."
-
----
-
-## Tests
-
-### API tests (`services/api/tests/`)
-
-- `test_api_tokens.py` — Token CRUD: create, list, revoke, validate hash, duplicate names allowed, revoked tokens rejected
-- `test_token_auth_middleware.py` — API token auth in middleware: valid token → user_id set, revoked token → unauthenticated, unknown token → unauthenticated
-- `test_mcp/test_mcp_server.py` — MCP protocol: adapter correctly translates registry tools to MCP schema, tools/call dispatches correctly
-
-### Explorer tests (`services/explorer/tests/`)
-
-- `test_settings_route.py` — Token management pages: list, create, revoke, login required
+- 24-hour default TTL
+- Max 500 entries, oldest-first eviction when full
+- Keys: `track:{spotify_id}`, `artist:{spotify_id}`, `album:{spotify_id}`
+- Replaced by Valkey `CacheBackend` in Phase 4b
 
 ---
 
 ## Implementation Order
 
-1. DB model + migration (`api_tokens` table)
-2. `ApiTokenService` (generate, validate, hash, list, revoke)
-3. Auth middleware extension (resolve API tokens from DB)
-4. Token management API endpoints + schemas
-5. MCP SDK adapter (`mcp_server.py`) — bridge registry → SDK handlers
-6. Mount MCP SDK app in `main.py`
-7. Explorer API client methods for tokens
-8. Explorer settings router + template
-9. Config files (`.mcp.json`, `docs/claude-integration-setup.md`)
-10. Tests
-11. Version bump to 0.4.0
-12. Docker test (`docker-compose up --build`), verify all services healthy
-13. Present changes for approval
+1. Response schemas (`schemas.py`)
+2. Enrichment cache module
+3. Service layer queries (`service.py` — DB queries + Spotify enrichment)
+4. API endpoints (`router.py`)
+5. Explorer API client methods
+6. Explorer routes (replace placeholders + new album route)
+7. Templates (track, artist, album detail + ECharts)
+8. Tests
+9. Version bump to 0.5.0
+10. Docker test (`docker-compose up --build`), verify detail pages render
+11. `docker-compose down`
+12. Present changes for approval
 
 ---
 
-## Workflow
+## Out of Scope
 
-1. Implement in order above
-2. Run unit tests locally (API + Explorer separately)
-3. `docker-compose up --build` — verify all services healthy, test MCP endpoint with curl, test token management UI
-4. `docker-compose down`
-5. Present summarized file list for approval
-6. Bump version to 0.4.0, commit, push, create PR via GitHub MCP
+- MusicBrainz enrichment (Phase 4b)
+- Soundcharts / audio features population (Phase 4b)
+- Valkey infrastructure (Phase 4b)
+- Analytics page (Phase 5)
+- HTMX pagination on recent plays (keep simple for now, full page)

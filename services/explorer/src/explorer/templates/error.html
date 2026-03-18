@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Error{% endblock %}
+{% block content %}
+<div class="d-flex flex-column align-items-center justify-content-center" style="min-height: 50vh;">
+  <h2 class="text-danger mb-3">{{ error_title | default("Something went wrong") }}</h2>
+  <p class="text-muted mb-4">{{ error_message | default("An unexpected error occurred. Please try again later.") }}</p>
+  <a href="{{ back_url | default('/') }}" class="btn btn-outline-secondary">&larr; {{ back_label | default("Go back") }}</a>
+</div>
+{% endblock %}

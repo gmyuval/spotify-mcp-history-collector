@@ -1,5 +1,6 @@
 """Explorer route modules."""
 
+from explorer.routes.albums import router as albums_router
 from explorer.routes.artists import router as artists_router
 from explorer.routes.auth import router as auth_router
 from explorer.routes.dashboard import router as dashboard_router
@@ -13,6 +14,7 @@ from explorer.routes.taste import router as taste_router
 from explorer.routes.tracks import router as tracks_router
 
 __all__ = [
+    "albums_router",
     "artists_router",
     "auth_router",
     "dashboard_router",

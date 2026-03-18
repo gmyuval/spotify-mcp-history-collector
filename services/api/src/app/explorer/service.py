@@ -5,6 +5,7 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import httpx
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -12,9 +13,14 @@ from sqlalchemy.orm import selectinload
 from app.auth.exceptions import TokenNotFoundError, TokenRefreshError
 from app.auth.tokens import TokenManager
 from app.cache.service import SpotifyCacheService
+from app.explorer.enrichment_cache import cache as enrichment_cache
 from app.explorer.schemas import (
+    AlbumDetail,
+    AlbumTrackItem,
     ArtistBrowserItem,
+    ArtistDetail,
     ArtistSummary,
+    AudioFeaturesData,
     DashboardData,
     MemoryPlaylistDetail,
     MemoryPlaylistEventItem,
@@ -32,9 +38,17 @@ from app.explorer.schemas import (
     PlaylistTrackArtist,
     PlaylistTrackItem,
     PreferenceEventItem,
+    RecentPlayItem,
+    SpotifyAlbumEnrichment,
+    SpotifyArtistEnrichment,
+    SpotifyImage,
+    SpotifyTrackEnrichment,
     TasteProfileResponse,
     TasteProfileWithEvents,
+    TrackArtistRef,
     TrackBrowserItem,
+    TrackDetail,
+    TrackDetailArtist,
     TrackSummary,
     UserProfile,
 )
@@ -43,7 +57,7 @@ from app.settings import get_settings
 from shared.db.enums import PlaylistSnapshotSource
 from shared.db.models.cache import CachedPlaylist, CachedPlaylistTrack
 from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnapshot, PreferenceEvent, TasteProfile
-from shared.db.models.music import Track
+from shared.db.models.music import Artist, Play, Track, TrackArtist
 from shared.db.models.user import SpotifyToken, User
 from shared.spotify.client import SpotifyClient
 from shared.spotify.embed import SpotifyEmbedClient
@@ -145,6 +159,315 @@ class ExplorerService:
             limit=limit,
             offset=offset,
         )
+
+    # ── Entity detail ────────────────────────────────────────────
+
+    async def get_track_detail(self, user_id: int, track_id: int, session: AsyncSession) -> TrackDetail | None:
+        """Return detailed track info with play stats, audio features, and recent plays."""
+        # User-scoped: only return tracks that the user has actually played
+        stats_result = await session.execute(
+            select(
+                func.count(),
+                func.min(Play.played_at),
+                func.max(Play.played_at),
+                func.coalesce(func.sum(Play.ms_played), 0),
+            ).where(Play.user_id == user_id, Play.track_id == track_id)
+        )
+        play_count, first_played, last_played, total_ms = stats_result.one()
+
+        if play_count == 0:
+            return None
+
+        result = await session.execute(
+            select(Track)
+            .where(Track.id == track_id)
+            .options(selectinload(Track.artists), selectinload(Track.audio_features))
+        )
+        track = result.scalar_one_or_none()
+        if track is None:
+            return None
+
+        # Recent plays (limit 20)
+        recent_result = await session.execute(
+            select(Play.played_at, Play.ms_played, Play.context_type)
+            .where(Play.user_id == user_id, Play.track_id == track_id)
+            .order_by(desc(Play.played_at))
+            .limit(20)
+        )
+        recent_plays = [
+            RecentPlayItem(played_at=row.played_at, ms_played=row.ms_played, context_type=row.context_type)
+            for row in recent_result.all()
+        ]
+
+        # Audio features
+        audio_features: AudioFeaturesData | None = None
+        if track.audio_features is not None:
+            af = track.audio_features
+            audio_features = AudioFeaturesData(
+                danceability=af.danceability,
+                energy=af.energy,
+                valence=af.valence,
+                acousticness=af.acousticness,
+                instrumentalness=af.instrumentalness,
+                speechiness=af.speechiness,
+                tempo=af.tempo,
+                loudness=af.loudness,
+                key=af.key,
+                mode=af.mode,
+                time_signature=af.time_signature,
+                liveness=af.liveness,
+            )
+
+        # Artists
+        artists = [TrackArtistRef(artist_id=a.id, name=a.name) for a in track.artists]
+
+        # Spotify enrichment (optional, non-blocking)
+        spotify_enrichment: SpotifyTrackEnrichment | None = None
+        if track.spotify_track_id:
+            spotify_enrichment = await self._enrich_track_spotify(track.spotify_track_id, user_id, session)
+
+        return TrackDetail(
+            track_id=track.id,
+            name=track.name,
+            spotify_track_id=track.spotify_track_id,
+            duration_ms=track.duration_ms,
+            album_name=track.album_name,
+            album_spotify_id=track.album_spotify_id,
+            artists=artists,
+            play_count=play_count,
+            first_played=first_played,
+            last_played=last_played,
+            total_ms_played=total_ms,
+            audio_features=audio_features,
+            recent_plays=recent_plays,
+            spotify=spotify_enrichment,
+        )
+
+    async def get_artist_detail(self, user_id: int, artist_id: int, session: AsyncSession) -> ArtistDetail | None:
+        """Return detailed artist info with play stats and top tracks."""
+        # User-scoped: verify the user has plays for this artist before loading
+        stats_result = await session.execute(
+            select(
+                func.count(),
+                func.count(func.distinct(Play.track_id)),
+                func.coalesce(func.sum(Play.ms_played), 0),
+                func.min(Play.played_at),
+                func.max(Play.played_at),
+            )
+            .select_from(Play)
+            .join(TrackArtist, TrackArtist.track_id == Play.track_id)
+            .where(Play.user_id == user_id, TrackArtist.artist_id == artist_id)
+        )
+        play_count, unique_tracks, total_ms, first_played, last_played = stats_result.one()
+
+        if play_count == 0:
+            return None
+
+        result = await session.execute(select(Artist).where(Artist.id == artist_id))
+        artist = result.scalar_one_or_none()
+        if artist is None:
+            return None
+
+        # Top tracks by play count (limit 20)
+        top_tracks_result = await session.execute(
+            select(
+                Track.id.label("track_id"),
+                Track.name.label("name"),
+                func.count().label("play_count"),
+            )
+            .select_from(Play)
+            .join(Track, Track.id == Play.track_id)
+            .join(TrackArtist, TrackArtist.track_id == Play.track_id)
+            .where(Play.user_id == user_id, TrackArtist.artist_id == artist_id)
+            .group_by(Track.id, Track.name)
+            .order_by(desc(func.count()))
+            .limit(20)
+        )
+        top_tracks = [
+            TrackDetailArtist(track_id=row.track_id, name=row.name, play_count=row.play_count)
+            for row in top_tracks_result.all()
+        ]
+
+        # Spotify enrichment (optional, non-blocking)
+        spotify_enrichment: SpotifyArtistEnrichment | None = None
+        if artist.spotify_artist_id:
+            spotify_enrichment = await self._enrich_artist_spotify(artist.spotify_artist_id, user_id, session)
+
+        return ArtistDetail(
+            artist_id=artist.id,
+            name=artist.name,
+            spotify_artist_id=artist.spotify_artist_id,
+            play_count=play_count,
+            unique_tracks=unique_tracks,
+            total_ms_played=total_ms,
+            first_played=first_played,
+            last_played=last_played,
+            top_tracks=top_tracks,
+            spotify=spotify_enrichment,
+        )
+
+    async def get_album_detail(self, user_id: int, album_spotify_id: str, session: AsyncSession) -> AlbumDetail | None:
+        """Return album detail with per-track play stats."""
+        # User-scoped: only return albums where the user has played at least one track
+        user_track_ids_result = await session.execute(
+            select(func.distinct(Play.track_id))
+            .join(Track, Track.id == Play.track_id)
+            .where(Play.user_id == user_id, Track.album_spotify_id == album_spotify_id)
+        )
+        user_played_track_ids = set(user_track_ids_result.scalars().all())
+        if not user_played_track_ids:
+            return None
+
+        # Find tracks from this album that the user has played
+        tracks_result = await session.execute(
+            select(Track)
+            .where(Track.album_spotify_id == album_spotify_id, Track.id.in_(user_played_track_ids))
+            .options(selectinload(Track.artists))
+        )
+        tracks = list(tracks_result.scalars().all())
+
+        album_name = tracks[0].album_name or ""
+        # Collect unique artist names from all tracks
+        artist_name_set: set[str] = set()
+        for t in tracks:
+            for a in t.artists:
+                artist_name_set.add(a.name)
+
+        track_ids = [t.id for t in tracks]
+
+        # Per-track play counts for this user
+        play_counts_result = await session.execute(
+            select(Play.track_id, func.count().label("play_count"))
+            .where(Play.user_id == user_id, Play.track_id.in_(track_ids))
+            .group_by(Play.track_id)
+        )
+        play_counts: dict[int, int] = {row.track_id: row.play_count for row in play_counts_result.all()}
+
+        album_tracks = [
+            AlbumTrackItem(
+                track_id=t.id,
+                name=t.name,
+                play_count=play_counts.get(t.id, 0),
+                duration_ms=t.duration_ms,
+            )
+            for t in tracks
+        ]
+
+        total_play_count = sum(item.play_count for item in album_tracks)
+        unique_track_count = sum(1 for item in album_tracks if item.play_count > 0)
+
+        # Spotify enrichment (optional, non-blocking)
+        spotify_enrichment: SpotifyAlbumEnrichment | None = None
+        spotify_enrichment = await self._enrich_album_spotify(album_spotify_id, user_id, session)
+
+        return AlbumDetail(
+            album_spotify_id=album_spotify_id,
+            name=album_name,
+            artist_names=sorted(artist_name_set),
+            play_count=total_play_count,
+            unique_tracks=unique_track_count,
+            tracks=album_tracks,
+            spotify=spotify_enrichment,
+        )
+
+    # ── Spotify enrichment helpers ─────────────────────────────
+
+    async def _get_spotify_client(self, user_id: int, session: AsyncSession) -> SpotifyClient:
+        """Create a SpotifyClient with token management for the given user."""
+        settings = get_settings()
+        token_mgr = TokenManager(settings)
+        access_token = await token_mgr.get_valid_token(user_id, session)
+
+        async def _on_token_expired() -> str:
+            return await token_mgr.refresh_access_token(user_id, session)
+
+        return SpotifyClient(access_token, on_token_expired=_on_token_expired)
+
+    async def _enrich_track_spotify(
+        self, spotify_track_id: str, user_id: int, session: AsyncSession
+    ) -> SpotifyTrackEnrichment | None:
+        """Fetch track enrichment from Spotify API with caching."""
+        cache_key = f"track:{spotify_track_id}"
+        cached: SpotifyTrackEnrichment | None = enrichment_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            client = await self._get_spotify_client(user_id, session)
+            sp_track = await client.get_track(spotify_track_id)
+            images = []
+            if sp_track.album and sp_track.album.images:
+                images = [
+                    SpotifyImage(url=img.url, height=img.height, width=img.width) for img in sp_track.album.images
+                ]
+            result = SpotifyTrackEnrichment(
+                images=images,
+                popularity=sp_track.popularity,
+                isrc=sp_track.external_ids.isrc if sp_track.external_ids else None,
+                preview_url=sp_track.preview_url,
+                external_url=sp_track.external_urls.get("spotify") if sp_track.external_urls else None,
+            )
+            enrichment_cache.put(cache_key, result)
+            return result
+        except (TokenNotFoundError, TokenRefreshError, SpotifyClientError, httpx.HTTPError) as exc:
+            logger.debug("Spotify enrichment failed for track %s: %s", spotify_track_id, exc)
+            return None
+
+    async def _enrich_artist_spotify(
+        self, spotify_artist_id: str, user_id: int, session: AsyncSession
+    ) -> SpotifyArtistEnrichment | None:
+        """Fetch artist enrichment from Spotify API with caching."""
+        cache_key = f"artist:{spotify_artist_id}"
+        cached: SpotifyArtistEnrichment | None = enrichment_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            client = await self._get_spotify_client(user_id, session)
+            sp_artist = await client.get_artist(spotify_artist_id)
+            images = []
+            if sp_artist.images:
+                images = [SpotifyImage(url=img.url, height=img.height, width=img.width) for img in sp_artist.images]
+            followers_total = None
+            if sp_artist.followers and isinstance(sp_artist.followers, dict):
+                followers_total = sp_artist.followers.get("total")
+            result = SpotifyArtistEnrichment(
+                images=images,
+                genres=sp_artist.genres,
+                popularity=sp_artist.popularity,
+                followers=followers_total,
+                external_url=sp_artist.external_urls.get("spotify") if sp_artist.external_urls else None,
+            )
+            enrichment_cache.put(cache_key, result)
+            return result
+        except (TokenNotFoundError, TokenRefreshError, SpotifyClientError, httpx.HTTPError) as exc:
+            logger.debug("Spotify enrichment failed for artist %s: %s", spotify_artist_id, exc)
+            return None
+
+    async def _enrich_album_spotify(
+        self, album_spotify_id: str, user_id: int, session: AsyncSession
+    ) -> SpotifyAlbumEnrichment | None:
+        """Fetch album enrichment from Spotify API with caching."""
+        cache_key = f"album:{album_spotify_id}"
+        cached: SpotifyAlbumEnrichment | None = enrichment_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        try:
+            client = await self._get_spotify_client(user_id, session)
+            sp_album = await client.get_album(album_spotify_id)
+            images = []
+            if sp_album.images:
+                images = [SpotifyImage(url=img.url, height=img.height, width=img.width) for img in sp_album.images]
+            result = SpotifyAlbumEnrichment(
+                images=images,
+                release_date=sp_album.release_date,
+                label=sp_album.label,
+                total_tracks=sp_album.total_tracks,
+                external_url=sp_album.external_urls.get("spotify") if sp_album.external_urls else None,
+            )
+            enrichment_cache.put(cache_key, result)
+            return result
+        except (TokenNotFoundError, TokenRefreshError, SpotifyClientError, httpx.HTTPError) as exc:
+            logger.debug("Spotify enrichment failed for album %s: %s", album_spotify_id, exc)
+            return None
 
     @staticmethod
     def _playlist_to_summary(p: CachedPlaylist) -> PlaylistSummary:

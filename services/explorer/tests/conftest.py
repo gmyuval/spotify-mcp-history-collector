@@ -162,6 +162,62 @@ def _default_mock_api() -> AsyncMock:
         "offset": 0,
     }
 
+    api.get_track_detail.return_value = {
+        "track_id": 123,
+        "name": "Test Track",
+        "spotify_track_id": "sp_track_123",
+        "album_name": "Test Album",
+        "album_spotify_id": "sp_album_123",
+        "duration_ms": 240000,
+        "play_count": 42,
+        "total_ms_played": 10080000,
+        "first_played": "2025-06-01T10:00:00",
+        "last_played": "2026-03-01T18:30:00",
+        "artists": [
+            {"artist_id": 1, "name": "Test Artist"},
+        ],
+        "spotify": None,
+        "audio_features": None,
+        "recent_plays": [
+            {
+                "played_at": "2026-03-01T18:30:00",
+                "ms_played": 240000,
+                "context_type": "playlist",
+            },
+        ],
+    }
+
+    api.get_artist_detail.return_value = {
+        "artist_id": 456,
+        "name": "Test Artist",
+        "spotify_artist_id": "sp_artist_456",
+        "play_count": 150,
+        "unique_tracks": 25,
+        "total_ms_played": 54000000,
+        "first_played": "2025-05-15T08:00:00",
+        "genres": ["symphonic metal", "power metal"],
+        "spotify": None,
+        "top_tracks": [
+            {"track_id": 123, "name": "Test Track", "play_count": 42},
+            {"track_id": 124, "name": "Another Track", "play_count": 30},
+        ],
+    }
+
+    api.get_album_detail.return_value = {
+        "name": "Test Album",
+        "spotify_album_id": "sp_album_123",
+        "play_count": 80,
+        "unique_tracks": 10,
+        "artists": [
+            {"artist_id": 1, "name": "Test Artist"},
+        ],
+        "spotify": None,
+        "tracks": [
+            {"track_id": 123, "name": "Test Track", "duration_ms": 240000, "play_count": 42},
+            {"track_id": 124, "name": "Another Track", "duration_ms": 180000, "play_count": 30},
+        ],
+    }
+
     api.get_preference_events.return_value = {
         "items": [
             {
