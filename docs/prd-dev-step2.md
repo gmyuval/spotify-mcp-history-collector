@@ -284,26 +284,98 @@ New migration: `011_api_tokens`
 
 ---
 
-## Phase 4 — Entity Detail Views (Track, Artist, Album) + MusicBrainz + Audio Features + Valkey
+## Phase 4a — Entity Detail Pages + Spotify Enrichment
 
-**Branch:** `feat/phase-4-entity-details`
+**Branch:** `feat/phase-4a-detail-pages`
 **Version:** 0.4.0 → 0.5.0
 
-### 4.1 Data Source Strategy
+Delivers track, artist, and album detail pages using DB data + live Spotify API enrichment. Replaces the "Under Construction" placeholders from Phase 2. No new external services or infrastructure.
 
-| Source | Provides | Lookup method | Cache TTL |
-|--------|----------|---------------|-----------|
-| **Spotify API** | Images, popularity, preview URLs, followers, album art | Spotify ID | 24 hours |
-| **MusicBrainz** | Labels, credits, release dates, country info, relationships, detailed genre tags | ISRC (preferred) or artist+title search | 7 days |
-| **Soundcharts** | Audio features: danceability, energy, valence, tempo, key, mode, etc. | Spotify ID or ISRC | 30 days |
+### 4a.1 Data Sources
 
-**Audio features provider abstraction:**
-- `AudioFeaturesProvider` interface
-- `SpotifyAudioFeaturesProvider` — uses existing `SpotifyClient.get_audio_features()`, auto-disables on 403
-- `SoundchartsAudioFeaturesProvider` — uses Soundcharts API
-- `ChainedAudioFeaturesProvider` — tries providers in order, returns first success
+| Source | Provides | Already available? |
+|--------|----------|--------------------|
+| **DB (tracks/artists/plays)** | Name, duration, album, play count, first/last played, listening time | Yes |
+| **DB (audio_features)** | Danceability, energy, valence, tempo, etc. | Table exists, unpopulated — show gracefully |
+| **Spotify API (live)** | Images, popularity, preview URLs, followers, genres, album art | Yes — `SpotifyClient.get_track()`, `get_artist()`, `get_album()` |
 
-### 4.2 CacheBackend Abstraction + Valkey
+Spotify enrichment is **optional** — pages render with DB data alone if the user has no Spotify token or API returns errors. Spotify responses are cached in-memory with a simple TTL dict (no new infrastructure).
+
+### 4a.2 Track Detail Page (`/tracks/{track_id}`)
+
+- **Header card:** Track name, artist(s) (linked to `/artists/{id}`), album name (linked to `/albums/{album_id}`), duration, Spotify external link
+- **Spotify enrichment (if available):** Album cover art, popularity bar, ISRC, preview player
+- **Personal Stats card:** Total plays, first/last played, total listening time
+- **Audio Features card (if data exists):** Radar chart (ECharts) of danceability, energy, valence, acousticness, instrumentalness, speechiness
+- **Recent Plays table:** Paginated play history for this track (HTMX)
+
+### 4a.3 Artist Detail Page (`/artists/{artist_id}`)
+
+- **Header card:** Artist name, Spotify external link
+- **Spotify enrichment (if available):** Artist image, genres (as badges), popularity, followers count
+- **Personal Stats card:** Total plays, unique tracks, total listening time, first/last played
+- **Top Tracks table:** Most-played tracks by this artist (linked to `/tracks/{id}`)
+
+### 4a.4 Album Detail Page (`/albums/{album_id}`)
+
+Album pages are a new concept — albums are identified by `spotify_album_id` stored on tracks. No separate album DB table exists.
+
+- **Header card:** Album name, artist(s), Spotify external link
+- **Spotify enrichment (if available):** Album cover art, release date, label, total tracks
+- **Personal Stats card:** Total plays across all album tracks, unique tracks played
+- **Track Listing table:** All user-played tracks from this album with play counts (linked to `/tracks/{id}`)
+
+Album detail uses `spotify_album_id` as the path parameter (not an integer DB ID, since there's no album table).
+
+### 4a.5 ECharts Integration
+
+- Apache ECharts via CDN (`<script src="cdn/echarts.min.js">`) — no build step
+- Used for audio features radar chart on track detail
+- Dark theme via ECharts theme JSON (matches Bootstrap dark)
+- Prepared for reuse in Phase 5 (Analytics)
+
+### 4a.6 New API Endpoints
+
+- `GET /api/me/tracks/{track_id}` — Track detail + personal stats + audio features
+- `GET /api/me/artists/{artist_id}` — Artist detail + personal stats + top tracks
+- `GET /api/me/albums/{album_id}` — Album detail (Spotify lookup) + user play stats
+
+### 4a.7 In-Memory Spotify Enrichment Cache
+
+Simple module-level TTL dict for Spotify API responses (track/artist/album metadata). 24-hour TTL, capped at 500 entries, LRU eviction. No external dependencies. Replaced by Valkey in Phase 4b.
+
+### 4a.8 Files
+
+**API layer (`services/api/`):**
+- `src/app/explorer/router.py` — 3 new detail endpoints
+- `src/app/explorer/service.py` — `get_track_detail()`, `get_artist_detail()`, `get_album_detail()` queries
+- `src/app/explorer/schemas.py` — `TrackDetail`, `ArtistDetail`, `AlbumDetail` response schemas
+
+**Explorer frontend (`services/explorer/`):**
+- `src/explorer/routes/tracks.py` — Replace placeholder with data fetch
+- `src/explorer/routes/artists.py` — Replace placeholder with data fetch
+- New: `src/explorer/routes/albums.py` — Album detail route
+- `src/explorer/api_client.py` — `get_track_detail()`, `get_artist_detail()`, `get_album_detail()` methods
+- New: `src/explorer/templates/track_detail.html`
+- New: `src/explorer/templates/artist_detail.html`
+- New: `src/explorer/templates/album_detail.html`
+
+**Tests:**
+- API: track detail, artist detail, album detail (found, not found, user isolation)
+- Explorer: detail route rendering, 404 handling, Spotify enrichment fallback
+
+**Estimated scope:** ~8-10 new files, 6-8 modified, no migrations, no new dependencies
+
+---
+
+## Phase 4b — External Enrichment + Valkey
+
+**Branch:** `feat/phase-4b-enrichment`
+**Version:** 0.5.0 → 0.6.0
+
+Adds external data sources (MusicBrainz, Soundcharts) and persistent caching infrastructure (Valkey). Enriches the detail pages built in Phase 4a with additional metadata.
+
+### 4b.1 CacheBackend Abstraction + Valkey
 
 MusicBrainz enforces a strict 1 req/sec rate limit. Soundcharts is a paid-per-call API. Without persistent caching, every service restart triggers a cold-cache burst of external calls that either costs money (Soundcharts) or risks throttling (MusicBrainz). In-memory caches are not sufficient.
 
@@ -335,74 +407,64 @@ Two implementations:
 - Production: provision DigitalOcean managed Valkey (smallest plan ~$15/month, fra1 region)
 - New env var: `VALKEY_URL` (e.g. `valkey://localhost:6379`) — optional; omit to fall back to PostgreSQL cache
 
-**Files (cache layer):**
-- New: `services/shared/src/shared/cache/backend.py` — `CacheBackend` Protocol
-- New: `services/shared/src/shared/cache/postgres_backend.py` — PostgreSQL implementation
-- New: `services/shared/src/shared/cache/valkey_backend.py` — Valkey/Redis implementation
-- `services/api/src/app/dependencies.py` — `CacheBackend` dependency injection (reads `VALKEY_URL`)
-- `docker-compose.yml` — add `valkey` service
-- `docker-compose.prod.yml` — `VALKEY_URL` from DigitalOcean managed Valkey
-
-### 4.3 Track Detail Page (`/tracks/{track_id}`)
-
-- **Spotify:** Name, artist(s), album (cover art), duration, popularity, ISRC, preview
-- **MusicBrainz:** Record label, producers/credits, original release date, recording relationships
-- **Audio Features** (Soundcharts/Spotify): Radar chart (ECharts) of danceability, energy, valence, tempo, acousticness, instrumentalness
-- **Personal Stats:** Total plays, first/last played, plays-over-time sparkline (ECharts)
-- **Playlists containing this track:** From `cached_playlist_tracks` + `memory_playlists`
-- **Links:** Album → `/albums/{album_id}`, Artists → `/artists/{artist_id}`
-
-### 4.4 Artist Detail Page (`/artists/{artist_id}`)
-
-- **Spotify:** Name, genres, popularity, followers, images
-- **MusicBrainz:** Country/area, begin/end dates, type (person/group), disambiguation, external links (Wikipedia, Wikidata)
-- **Personal Stats:** Total plays, unique tracks played, first/last played
-- **Top Tracks by User:** Most-played tracks by this artist
-- **Albums:** From user's play data + Spotify metadata
-
-### 4.5 Album Detail Page (`/albums/{album_id}`)
-
-- **Spotify:** Name, artists, release date, images, total tracks, label
-- **MusicBrainz:** Detailed credits, catalog number, barcode, country-specific releases
-- **Track Listing:** All tracks with user's play counts
-- **Personal Stats:** Total plays across all tracks, first/last played
-
-### 4.6 New API Endpoints
-
-- `GET /api/me/tracks/{track_id}` — Track detail + personal stats + MB + audio features
-- `GET /api/me/artists/{artist_id}` — Artist detail + personal stats + MB data
-- `GET /api/me/albums/{album_id}` — Album detail + personal stats + MB data
-
-### 4.7 MusicBrainz Client
+### 4b.2 MusicBrainz Client
 
 - New: `services/shared/src/shared/musicbrainz/client.py` — async httpx, 1 req/sec rate limit, polite User-Agent
 - New: `services/shared/src/shared/musicbrainz/models.py` — Pydantic models for Recording, Artist, Release, ReleaseGroup
 - ISRC lookup (preferred, exact match) with fallback to artist+title search
 - All responses cached via `CacheBackend` with 7-day TTL
 
-### 4.8 Soundcharts Client
+Enriches detail pages with: record label, producers/credits, original release date, country/area, relationships, external links.
+
+### 4b.3 Soundcharts Client + Audio Features Provider
 
 - New: `services/shared/src/shared/soundcharts/client.py` — async httpx, API key auth
 - New: `services/shared/src/shared/soundcharts/models.py` — Pydantic models
-- Lookup by Spotify ID or ISRC
-- All responses cached via `CacheBackend` with 30-day TTL
+- New: `services/shared/src/shared/audio/provider.py` — `AudioFeaturesProvider` interface
+  - `SpotifyAudioFeaturesProvider` — wraps existing client, 403 → disabled
+  - `SoundchartsAudioFeaturesProvider` — wraps Soundcharts client
+  - `ChainedAudioFeaturesProvider` — tries providers in order
 - New env var: `SOUNDCHARTS_API_KEY`
 
-### 4.9 Audio Features Provider Interface
+### 4b.4 Audio Features Enrichment Job
 
-- New: `services/shared/src/shared/audio/provider.py` — abstract `AudioFeaturesProvider`
-- `SpotifyAudioFeaturesProvider` — wraps existing client, 403 → disabled
-- `SoundchartsAudioFeaturesProvider` — wraps Soundcharts client
-- `ChainedAudioFeaturesProvider` — tries providers in order
+- Background collector job (lowest priority, after polling)
+- Uses `ChainedAudioFeaturesProvider` (Spotify → Soundcharts)
+- Batch: up to 100 tracks per request
+- Graceful degradation: 403 from Spotify → Soundcharts → disable enrichment
+- Populates existing `audio_features` table
 
-**Estimated scope:** ~20-25 new files, 6-8 modified, `docker-compose.yml` changes
+### 4b.5 Files
+
+**Cache layer:**
+- New: `services/shared/src/shared/cache/backend.py` — `CacheBackend` Protocol
+- New: `services/shared/src/shared/cache/postgres_backend.py` — PostgreSQL implementation
+- New: `services/shared/src/shared/cache/valkey_backend.py` — Valkey/Redis implementation
+- `services/api/src/app/dependencies.py` — `CacheBackend` dependency injection
+- `docker-compose.yml` — add `valkey` service
+- `docker-compose.prod.yml` — `VALKEY_URL`
+
+**External clients:**
+- New: `services/shared/src/shared/musicbrainz/client.py`
+- New: `services/shared/src/shared/musicbrainz/models.py`
+- New: `services/shared/src/shared/soundcharts/client.py`
+- New: `services/shared/src/shared/soundcharts/models.py`
+- New: `services/shared/src/shared/audio/provider.py`
+
+**Detail page enrichment:**
+- `services/api/src/app/explorer/service.py` — add MB + Soundcharts data to detail responses
+- `services/explorer/src/explorer/templates/track_detail.html` — MB credits section
+- `services/explorer/src/explorer/templates/artist_detail.html` — MB metadata section
+- `services/explorer/src/explorer/templates/album_detail.html` — MB credits section
+
+**Estimated scope:** ~15-20 new files, 8-10 modified, `docker-compose.yml` changes
 
 ---
 
 ## Phase 5 — Analytics & Visualization
 
 **Branch:** `feat/phase-5-analytics`
-**Version:** 0.5.0 → 0.6.0
+**Version:** 0.6.0 → 0.7.0
 
 ### 5.1 Charting Library: Apache ECharts via CDN
 
@@ -457,7 +519,7 @@ Two implementations:
 ## Phase 6 — Taste Page Redesign
 
 **Branch:** `feat/phase-6-taste-redesign`
-**Version:** 0.6.0 → 0.7.0
+**Version:** 0.7.0 → 0.8.0
 
 ### 6.1 Visual Taste Dashboard
 
@@ -574,23 +636,14 @@ Build on the Phase 7 auth infrastructure to add proper OAuth 2.0 for the MCP ser
 **Branch:** `feat/phase-8-deferred-polish`
 **Version:** 1.0.0 → 1.1.0
 
-### 8.1 Audio Features Enrichment Job
-
-- Background collector job (lowest priority, after polling)
-- Uses `ChainedAudioFeaturesProvider` (Spotify → Soundcharts)
-- Batch: up to 100 tracks per request
-- Graceful degradation: 403 from Spotify → Soundcharts → disable enrichment
-- Populates existing `audio_features` table
-- Cached results stored in Valkey (warm cache from Phase 4 detail views)
-
-### 8.2 Local Track Resolution
+### 8.1 Local Track Resolution
 
 - Resolve `local:<sha1>` IDs from ZIP imports via Spotify search
 - Match by artist + track name, confidence scoring
 - Batch processing in collector
 - Store resolution mapping for future imports
 
-### 8.3 Documentation Updates
+### 8.2 Documentation Updates
 
 - Update ChatGPT OpenAPI spec (`docs/chatgpt-openapi.json`)
 - Update tool catalog (`docs/chatgpt-tool-catalog.md`)
@@ -611,7 +664,9 @@ Phase 2 (Navigation & browsing)                <- Needs Phase 1 (playlists fix)
 Phase 3 (MCP protocol + Claude integration)    <- Needs Phase 1 (API token table)
   |                                               Can run in parallel with Phase 2
   |
-Phase 4 (Entity details + MB + SC + Valkey)    <- Needs Phase 2 (track/artist browsers)
+Phase 4a (Detail pages + Spotify enrichment)    <- Needs Phase 2 (track/artist browsers)
+  |
+Phase 4b (MB + Soundcharts + Valkey)            <- Needs Phase 4a (detail page templates)
   |
   +-- Phase 5 (Analytics + ECharts)            <- Can run in parallel with Phase 6
   |
@@ -631,7 +686,7 @@ Phase 8 (Deferred tasks & polish)              <- Final
 | **Charting library** | Apache ECharts via CDN | Built-in heatmaps, radar, data zoom, brush selection, dark theme. ~1MB. No architecture change needed — stays within Jinja2+HTMX. |
 | **Audio features source** | Soundcharts (primary) + Spotify (fallback) | Soundcharts provides same 0.0-1.0 features as deprecated Spotify endpoint, lookup by Spotify ID/ISRC. Abstract provider interface for swappability. |
 | **Metadata enrichment** | Spotify + MusicBrainz | Spotify for images/popularity. MusicBrainz for labels, credits, release dates, genre tags. ISRC-based lookup. Free, no API key. |
-| **Cache layer** | `CacheBackend` abstraction; Valkey in Phase 4 | MusicBrainz 1 req/sec + Soundcharts paid-per-call make persistent cache essential. Valkey provides TTL-native, restart-safe caching. PostgreSQL fallback keeps tests simple. |
+| **Cache layer** | In-memory TTL cache in Phase 4a; `CacheBackend` abstraction + Valkey in Phase 4b | Phase 4a uses simple in-memory cache (no infra). Phase 4b adds Valkey for MusicBrainz 1 req/sec + Soundcharts paid-per-call where persistent cache is essential. PostgreSQL fallback keeps tests simple. |
 | **Email service** | Resend | Simple REST API, free tier 100 emails/day, sufficient for invitation flow. |
 | **Stay on Jinja2+HTMX** | Yes | Switching to React/Svelte would mean rewriting all templates + adding build pipeline. ECharts provides the charting power we need client-side. |
 | **MCP protocol** | JSON-RPC 2.0 over streamable HTTP + SSE | Standard MCP spec. Unlocks Claude Desktop, Claude Code, and future claude.ai Integrations. Existing `/mcp/call` kept for ChatGPT. |
@@ -648,9 +703,10 @@ Phase 8 (Deferred tasks & polish)              <- Final
 | Phase 1: Bug fixes, versioning & admin | 0.2.0 | infra/patch |
 | Phase 2: Navigation & browsing | 0.3.0 | minor |
 | Phase 3: MCP protocol + Claude integration | 0.4.0 | minor |
-| Phase 4: Entity details + MB + Soundcharts + Valkey | 0.5.0 | minor |
-| Phase 5: Analytics + ECharts | 0.6.0 | minor |
-| Phase 6: Taste redesign | 0.7.0 | minor |
+| Phase 4a: Detail pages + Spotify enrichment | 0.5.0 | minor |
+| Phase 4b: MB + Soundcharts + Valkey | 0.6.0 | minor |
+| Phase 5: Analytics + ECharts | 0.7.0 | minor |
+| Phase 6: Taste redesign | 0.8.0 | minor |
 | Phase 7: BYOK auth + MCP OAuth | 1.0.0 | major (breaking) |
 | Phase 8: Deferred tasks & polish | 1.1.0 | minor |
 
@@ -675,7 +731,12 @@ Phase 8 (Deferred tasks & polish)              <- Final
 # No new external service keys — Bearer tokens managed via new /settings/tokens UI
 ```
 
-### Phase 4
+### Phase 4a
+```
+# No new env vars — uses existing Spotify credentials + in-memory cache
+```
+
+### Phase 4b
 ```
 SOUNDCHARTS_API_KEY=        # Soundcharts API key for audio features
 VALKEY_URL=                 # e.g. valkey://localhost:6379 (omit to use PostgreSQL cache)

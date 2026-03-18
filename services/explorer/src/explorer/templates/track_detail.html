@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ track.name }} — Track{% endblock %}
+{% block content %}
+<!-- Breadcrumb: Tracks > Track Name -->
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/tracks">Tracks</a></li>
+    <li class="breadcrumb-item active">{{ track.name }}</li>
+  </ol>
+</nav>
+
+<!-- Header row: cover art + track info -->
+<div class="row mb-4">
+  {% if track.spotify and track.spotify.images %}
+  <div class="col-auto">
+    <img src="{{ track.spotify.images[0].url }}" alt="Album art" class="rounded" style="width: 200px; height: 200px; object-fit: cover;">
+  </div>
+  {% endif %}
+  <div class="col">
+    <h2>{{ track.name }}</h2>
+    <p class="text-muted mb-1">
+      {% for a in track.artists %}
+        <a href="/artists/{{ a.artist_id }}">{{ a.name }}</a>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+    </p>
+    {% if track.album_name %}
+    <p class="text-muted mb-1">
+      {% if track.album_spotify_id %}
+        <a href="/albums/{{ track.album_spotify_id }}">{{ track.album_name }}</a>
+      {% else %}
+        {{ track.album_name }}
+      {% endif %}
+    </p>
+    {% endif %}
+    {% if track.duration_ms %}
+    <p class="text-muted mb-1">{{ (track.duration_ms / 60000) | round(1) }} min</p>
+    {% endif %}
+    {% if track.spotify and track.spotify.external_url %}
+    <a href="{{ track.spotify.external_url }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    {% elif track.spotify_track_id %}
+    <a href="https://open.spotify.com/track/{{ track.spotify_track_id }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Stats cards row -->
+<div class="row mb-4">
+  <div class="col-md-3">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ track.play_count }}</h5>
+      <p class="card-text text-muted">Total Plays</p>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ (track.total_ms_played / 3600000) | round(1) }}h</h5>
+      <p class="card-text text-muted">Listening Time</p>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ track.first_played[:10] if track.first_played else "—" }}</h5>
+      <p class="card-text text-muted">First Played</p>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ track.last_played[:10] if track.last_played else "—" }}</h5>
+      <p class="card-text text-muted">Last Played</p>
+    </div></div>
+  </div>
+</div>
+
+<!-- Spotify enrichment: popularity + ISRC -->
+{% if track.spotify %}
+<div class="row mb-4">
+  {% if track.spotify.popularity is not none %}
+  <div class="col-md-6">
+    <div class="card"><div class="card-body">
+      <h6 class="card-subtitle mb-2 text-muted">Spotify Popularity</h6>
+      <div class="progress" style="height: 20px;">
+        <div class="progress-bar bg-success" style="width: {{ track.spotify.popularity }}%">{{ track.spotify.popularity }}/100</div>
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+  {% if track.spotify.isrc %}
+  <div class="col-md-6">
+    <div class="card"><div class="card-body">
+      <h6 class="card-subtitle mb-2 text-muted">ISRC</h6>
+      <code>{{ track.spotify.isrc }}</code>
+    </div></div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Audio Features Radar Chart -->
+{% if track.audio_features %}
+<div class="card mb-4">
+  <div class="card-header"><strong>Audio Features</strong></div>
+  <div class="card-body">
+    <div id="audioFeaturesChart" style="width: 100%; height: 400px;"></div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Recent Plays -->
+{% if track.recent_plays %}
+<div class="card mb-4">
+  <div class="card-header"><strong>Recent Plays</strong></div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>Played At</th><th>Duration</th><th>Context</th></tr></thead>
+        <tbody>
+          {% for p in track.recent_plays %}
+          <tr>
+            <td>{{ p.played_at[:16].replace("T", " ") }}</td>
+            <td>{{ ((p.ms_played or 0) / 60000) | round(1) }} min</td>
+            <td>{{ p.context_type or "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if track.audio_features %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script>
+var chart = echarts.init(document.getElementById('audioFeaturesChart'), 'dark');
+chart.setOption({
+  radar: {
+    indicator: [
+      {name: 'Danceability', max: 1},
+      {name: 'Energy', max: 1},
+      {name: 'Valence', max: 1},
+      {name: 'Acousticness', max: 1},
+      {name: 'Instrumentalness', max: 1},
+      {name: 'Speechiness', max: 1}
+    ],
+    shape: 'circle'
+  },
+  series: [{
+    type: 'radar',
+    data: [{
+      value: [
+        {{ track.audio_features.danceability or 0 }},
+        {{ track.audio_features.energy or 0 }},
+        {{ track.audio_features.valence or 0 }},
+        {{ track.audio_features.acousticness or 0 }},
+        {{ track.audio_features.instrumentalness or 0 }},
+        {{ track.audio_features.speechiness or 0 }}
+      ],
+      name: '{{ track.name | replace("'", "\\'") }}',
+      areaStyle: {opacity: 0.3}
+    }]
+  }]
+});
+window.addEventListener('resize', function() { chart.resize(); });
+</script>
+{% endif %}
+{% endblock %}

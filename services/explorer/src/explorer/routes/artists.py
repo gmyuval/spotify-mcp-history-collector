@@ -112,14 +112,45 @@ class ArtistsRouter:
         )
 
     async def artist_detail(self, request: Request, artist_id: int) -> HTMLResponse:
-        """Placeholder for artist detail page (Phase 4)."""
+        """Artist detail page with stats and Spotify enrichment."""
         token = require_login(request)
         if isinstance(token, RedirectResponse):
             return token  # type: ignore[return-value]
 
+        api: ExplorerApiClient = request.app.state.api
+        try:
+            data = await api.get_artist_detail(token, artist_id)
+        except ApiError as e:
+            if e.status_code == 401:
+                return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
+            if e.status_code == 404:
+                return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                    "error.html",
+                    {
+                        "request": request,
+                        "active_page": "artists",
+                        "error_title": "Artist Not Found",
+                        "error_message": "This artist does not exist or you have no listening data for them.",
+                        "back_url": "/artists",
+                        "back_label": "Back to Artists",
+                    },
+                    status_code=404,
+                )
+            return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                "error.html",
+                {
+                    "request": request,
+                    "active_page": "artists",
+                    "error_title": "Error Loading Artist",
+                    "error_message": e.detail,
+                    "back_url": "/artists",
+                    "back_label": "Back to Artists",
+                },
+            )
+
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
-            "coming_soon.html",
-            {"request": request, "active_page": "artists", "entity_type": "Artist", "back_url": "/artists"},
+            "artist_detail.html",
+            {"request": request, "active_page": "artists", "artist": data},
         )
 
 

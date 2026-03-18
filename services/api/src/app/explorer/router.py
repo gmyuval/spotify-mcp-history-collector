@@ -11,6 +11,8 @@ from app.auth.api_tokens import ApiTokenService
 from app.auth.exceptions import TokenNotFoundError, TokenRefreshError
 from app.dependencies import db_manager
 from app.explorer.schemas import (
+    AlbumDetail,
+    ArtistDetail,
     CreatedTokenResponse,
     CreateTokenRequest,
     DashboardData,
@@ -28,6 +30,7 @@ from app.explorer.schemas import (
     TasteProfileWithEvents,
     TokenListItem,
     TokenListResponse,
+    TrackDetail,
     TrackSummary,
     UserProfile,
 )
@@ -70,7 +73,10 @@ class ExplorerRouter:
         r.add_api_route("/memory-playlists/{playlist_id}", self.memory_playlist_detail, methods=["GET"])
         r.add_api_route("/memory-playlists/{playlist_id}/events", self.memory_playlist_events, methods=["GET"])
         r.add_api_route("/tracks", self.tracks, methods=["GET"])
+        r.add_api_route("/tracks/{track_id}", self.track_detail, methods=["GET"])
         r.add_api_route("/artists", self.artists, methods=["GET"])
+        r.add_api_route("/artists/{artist_id}", self.artist_detail, methods=["GET"])
+        r.add_api_route("/albums/{album_spotify_id}", self.album_detail, methods=["GET"])
         r.add_api_route("/tokens", self.list_tokens, methods=["GET"])
         r.add_api_route("/tokens", self.create_token, methods=["POST"], status_code=201)
         r.add_api_route("/tokens/{token_id}", self.revoke_token, methods=["DELETE"], status_code=204)
@@ -264,6 +270,27 @@ class ExplorerRouter:
     ) -> PaginatedArtists:
         """Browse all artists with pagination, search, sort, and optional time window."""
         return await self._service.get_artists(user_id, session, limit=limit, offset=offset, sort=sort, q=q, days=days)
+
+    async def track_detail(self, track_id: int, user_id: RequireOwnDataView, session: DBSession) -> TrackDetail:
+        """Get detailed track information with play stats and enrichment."""
+        result = await self._service.get_track_detail(user_id, track_id, session)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Track not found")
+        return result
+
+    async def artist_detail(self, artist_id: int, user_id: RequireOwnDataView, session: DBSession) -> ArtistDetail:
+        """Get detailed artist information with play stats and enrichment."""
+        result = await self._service.get_artist_detail(user_id, artist_id, session)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Artist not found")
+        return result
+
+    async def album_detail(self, album_spotify_id: str, user_id: RequireOwnDataView, session: DBSession) -> AlbumDetail:
+        """Get album detail with per-track play stats and enrichment."""
+        result = await self._service.get_album_detail(user_id, album_spotify_id, session)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Album not found")
+        return result
 
     async def list_tokens(self, user_id: RequireOwnDataView, session: DBSession) -> TokenListResponse:
         """List all active API tokens for the user."""

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ album.name }} — Album{% endblock %}
+{% block content %}
+<!-- Breadcrumb: Tracks > Album Name -->
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/tracks">Tracks</a></li>
+    <li class="breadcrumb-item active">{{ album.name }}</li>
+  </ol>
+</nav>
+
+<!-- Header row: album art + name + artist(s) + Spotify link -->
+<div class="row mb-4">
+  {% if album.spotify and album.spotify.images %}
+  <div class="col-auto">
+    <img src="{{ album.spotify.images[0].url }}" alt="Album art" class="rounded" style="width: 200px; height: 200px; object-fit: cover;">
+  </div>
+  {% endif %}
+  <div class="col">
+    <h2>{{ album.name }}</h2>
+    {% if album.artists %}
+    <p class="text-muted mb-1">
+      {% for a in album.artists %}
+        <a href="/artists/{{ a.artist_id }}">{{ a.name }}</a>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+    </p>
+    {% endif %}
+    {% if album.spotify and album.spotify.external_url %}
+    <a href="{{ album.spotify.external_url }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    {% elif album.spotify_album_id %}
+    <a href="https://open.spotify.com/album/{{ album.spotify_album_id }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Spotify enrichment: release date, label, total tracks -->
+{% if album.spotify %}
+<div class="row mb-4">
+  {% if album.spotify.release_date %}
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <h6 class="card-subtitle mb-2 text-muted">Release Date</h6>
+      <h5>{{ album.spotify.release_date }}</h5>
+    </div></div>
+  </div>
+  {% endif %}
+  {% if album.spotify.label %}
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <h6 class="card-subtitle mb-2 text-muted">Label</h6>
+      <h5>{{ album.spotify.label }}</h5>
+    </div></div>
+  </div>
+  {% endif %}
+  {% if album.spotify.total_tracks is not none %}
+  <div class="col-md-4">
+    <div class="card"><div class="card-body">
+      <h6 class="card-subtitle mb-2 text-muted">Total Tracks</h6>
+      <h5>{{ album.spotify.total_tracks }}</h5>
+    </div></div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Stats cards row -->
+<div class="row mb-4">
+  <div class="col-md-6">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ album.play_count }}</h5>
+      <p class="card-text text-muted">Total Plays</p>
+    </div></div>
+  </div>
+  <div class="col-md-6">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ album.unique_tracks }}</h5>
+      <p class="card-text text-muted">Unique Tracks Played</p>
+    </div></div>
+  </div>
+</div>
+
+<!-- Track listing -->
+{% if album.tracks %}
+<div class="card mb-4">
+  <div class="card-header"><strong>Tracks</strong></div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>#</th><th>Track</th><th>Duration</th><th>Play Count</th></tr></thead>
+        <tbody>
+          {% for t in album.tracks %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>
+              {% if t.track_id %}
+                <a href="/tracks/{{ t.track_id }}">{{ t.name }}</a>
+              {% else %}
+                {{ t.name }}
+              {% endif %}
+            </td>
+            <td>{{ ((t.duration_ms or 0) / 60000) | round(1) }} min</td>
+            <td>{{ t.play_count or 0 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}{{ artist.name }} — Artist{% endblock %}
+{% block content %}
+<!-- Breadcrumb: Artists > Artist Name -->
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/artists">Artists</a></li>
+    <li class="breadcrumb-item active">{{ artist.name }}</li>
+  </ol>
+</nav>
+
+<!-- Header row: artist image + name + genres + Spotify link -->
+<div class="row mb-4">
+  {% if artist.spotify and artist.spotify.images %}
+  <div class="col-auto">
+    <img src="{{ artist.spotify.images[0].url }}" alt="Artist photo" class="rounded-circle" style="width: 200px; height: 200px; object-fit: cover;">
+  </div>
+  {% endif %}
+  <div class="col">
+    <h2>{{ artist.name }}</h2>
+    {% if artist.genres %}
+    <p class="mb-2">
+      {% for g in artist.genres %}
+        <span class="badge bg-secondary me-1">{{ g }}</span>
+      {% endfor %}
+    </p>
+    {% elif artist.spotify and artist.spotify.genres %}
+    <p class="mb-2">
+      {% for g in artist.spotify.genres %}
+        <span class="badge bg-secondary me-1">{{ g }}</span>
+      {% endfor %}
+    </p>
+    {% endif %}
+    {% if artist.spotify and artist.spotify.external_url %}
+    <a href="{{ artist.spotify.external_url }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    {% elif artist.spotify_artist_id %}
+    <a href="https://open.spotify.com/artist/{{ artist.spotify_artist_id }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Stats cards row -->
+<div class="row mb-4">
+  <div class="col-md-3">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ artist.play_count }}</h5>
+      <p class="card-text text-muted">Total Plays</p>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ artist.unique_tracks }}</h5>
+      <p class="card-text text-muted">Unique Tracks</p>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ (artist.total_ms_played / 3600000) | round(1) }}h</h5>
+      <p class="card-text text-muted">Listening Time</p>
+    </div></div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ artist.first_played[:10] if artist.first_played else "—" }}</h5>
+      <p class="card-text text-muted">First Played</p>
+    </div></div>
+  </div>
+</div>
+
+<!-- Spotify enrichment: popularity + followers -->
+{% if artist.spotify %}
+<div class="row mb-4">
+  {% if artist.spotify.popularity is not none %}
+  <div class="col-md-6">
+    <div class="card"><div class="card-body">
+      <h6 class="card-subtitle mb-2 text-muted">Spotify Popularity</h6>
+      <div class="progress" style="height: 20px;">
+        <div class="progress-bar bg-success" style="width: {{ artist.spotify.popularity }}%">{{ artist.spotify.popularity }}/100</div>
+      </div>
+    </div></div>
+  </div>
+  {% endif %}
+  {% if artist.spotify.followers is not none %}
+  <div class="col-md-6">
+    <div class="card"><div class="card-body">
+      <h6 class="card-subtitle mb-2 text-muted">Followers</h6>
+      <h5>{{ "{:,}".format(artist.spotify.followers) }}</h5>
+    </div></div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Top Tracks -->
+{% if artist.top_tracks %}
+<div class="card mb-4">
+  <div class="card-header"><strong>Top Tracks</strong></div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th>#</th><th>Track</th><th>Play Count</th></tr></thead>
+        <tbody>
+          {% for t in artist.top_tracks %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td><a href="/tracks/{{ t.track_id }}">{{ t.name }}</a></td>
+            <td>{{ t.play_count }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

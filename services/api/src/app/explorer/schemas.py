@@ -212,6 +212,118 @@ class PaginatedArtists(BaseModel):
     offset: int
 
 
+# ── Entity detail schemas ──────────────────────────────────────
+
+
+class TrackArtistRef(BaseModel):
+    artist_id: int
+    name: str
+
+
+class AudioFeaturesData(BaseModel):
+    danceability: float | None = None
+    energy: float | None = None
+    valence: float | None = None
+    acousticness: float | None = None
+    instrumentalness: float | None = None
+    speechiness: float | None = None
+    tempo: float | None = None
+    loudness: float | None = None
+    key: int | None = None
+    mode: int | None = None
+    time_signature: int | None = None
+    liveness: float | None = None
+
+
+class SpotifyImage(BaseModel):
+    url: str
+    height: int | None = None
+    width: int | None = None
+
+
+class SpotifyTrackEnrichment(BaseModel):
+    images: list[SpotifyImage] = []
+    popularity: int | None = None
+    isrc: str | None = None
+    preview_url: str | None = None
+    external_url: str | None = None
+
+
+class SpotifyArtistEnrichment(BaseModel):
+    images: list[SpotifyImage] = []
+    genres: list[str] = []
+    popularity: int | None = None
+    followers: int | None = None
+    external_url: str | None = None
+
+
+class SpotifyAlbumEnrichment(BaseModel):
+    images: list[SpotifyImage] = []
+    release_date: str | None = None
+    label: str | None = None
+    total_tracks: int | None = None
+    external_url: str | None = None
+
+
+class RecentPlayItem(BaseModel):
+    played_at: datetime
+    ms_played: int | None = None
+    context_type: str | None = None
+
+
+class TrackDetailArtist(BaseModel):
+    track_id: int
+    name: str
+    play_count: int
+
+
+class TrackDetail(BaseModel):
+    track_id: int
+    name: str
+    spotify_track_id: str | None = None
+    duration_ms: int | None = None
+    album_name: str | None = None
+    album_spotify_id: str | None = None
+    artists: list[TrackArtistRef] = []
+    play_count: int = 0
+    first_played: datetime | None = None
+    last_played: datetime | None = None
+    total_ms_played: int = 0
+    audio_features: AudioFeaturesData | None = None
+    recent_plays: list[RecentPlayItem] = []
+    spotify: SpotifyTrackEnrichment | None = None
+
+
+class ArtistDetail(BaseModel):
+    artist_id: int
+    name: str
+    spotify_artist_id: str | None = None
+    play_count: int = 0
+    unique_tracks: int = 0
+    total_ms_played: int = 0
+    first_played: datetime | None = None
+    last_played: datetime | None = None
+    top_tracks: list[TrackDetailArtist] = []
+    spotify: SpotifyArtistEnrichment | None = None
+
+
+class AlbumTrackItem(BaseModel):
+    track_id: int
+    name: str
+    play_count: int
+    duration_ms: int | None = None
+
+
+class AlbumDetail(BaseModel):
+    album_spotify_id: str
+    name: str
+    artist_names: list[str] = []
+    play_count: int = 0
+    unique_tracks: int = 0
+    tracks: list[AlbumTrackItem] = []
+    spotify: SpotifyAlbumEnrichment | None = None
+
+
 # ── API token schemas ──────────────────────────────────────────
 
 

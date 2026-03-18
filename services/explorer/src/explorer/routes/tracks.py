@@ -112,14 +112,45 @@ class TracksRouter:
         )
 
     async def track_detail(self, request: Request, track_id: int) -> HTMLResponse:
-        """Placeholder for track detail page (Phase 4)."""
+        """Track detail page with stats, audio features, and Spotify enrichment."""
         token = require_login(request)
         if isinstance(token, RedirectResponse):
             return token  # type: ignore[return-value]
 
+        api: ExplorerApiClient = request.app.state.api
+        try:
+            data = await api.get_track_detail(token, track_id)
+        except ApiError as e:
+            if e.status_code == 401:
+                return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
+            if e.status_code == 404:
+                return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                    "error.html",
+                    {
+                        "request": request,
+                        "active_page": "tracks",
+                        "error_title": "Track Not Found",
+                        "error_message": "This track does not exist or you have no listening data for it.",
+                        "back_url": "/tracks",
+                        "back_label": "Back to Tracks",
+                    },
+                    status_code=404,
+                )
+            return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                "error.html",
+                {
+                    "request": request,
+                    "active_page": "tracks",
+                    "error_title": "Error Loading Track",
+                    "error_message": e.detail,
+                    "back_url": "/tracks",
+                    "back_label": "Back to Tracks",
+                },
+            )
+
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
-            "coming_soon.html",
-            {"request": request, "active_page": "tracks", "entity_type": "Track", "back_url": "/tracks"},
+            "track_detail.html",
+            {"request": request, "active_page": "tracks", "track": data},
         )
 
 
