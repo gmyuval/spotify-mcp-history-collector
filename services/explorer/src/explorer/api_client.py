@@ -276,6 +276,21 @@ class ExplorerApiClient:
         """DELETE /api/me/tokens/{token_id} — revoke an API token."""
         await self._request("DELETE", f"/api/me/tokens/{token_id}", access_token)
 
+    async def get_track_detail(self, access_token: str, track_id: int) -> dict[str, Any]:
+        """GET /api/me/tracks/{track_id} — track detail with stats and enrichment."""
+        result: dict[str, Any] = await self._request("GET", f"/api/me/tracks/{track_id}", access_token)
+        return result
+
+    async def get_artist_detail(self, access_token: str, artist_id: int) -> dict[str, Any]:
+        """GET /api/me/artists/{artist_id} — artist detail with stats and enrichment."""
+        result: dict[str, Any] = await self._request("GET", f"/api/me/artists/{artist_id}", access_token)
+        return result
+
+    async def get_album_detail(self, access_token: str, album_spotify_id: str) -> dict[str, Any]:
+        """GET /api/me/albums/{album_spotify_id} — album detail with stats and enrichment."""
+        result: dict[str, Any] = await self._request("GET", f"/api/me/albums/{album_spotify_id}", access_token)
+        return result
+
     async def exchange_google_email(self, email: str, internal_api_key: str) -> dict[str, Any] | None:
         """POST /auth/exchange-google — exchange Google email for JWT tokens.
 

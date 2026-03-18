@@ -92,6 +92,7 @@ class SpotifyTrack(BaseModel):
     album: SpotifyAlbumSimplified | None = None
     external_ids: SpotifyExternalIds | None = None
     external_urls: dict[str, str] = Field(default_factory=dict)
+    preview_url: str | None = None
     href: str | None = None
 
 

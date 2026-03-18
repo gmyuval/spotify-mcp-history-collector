@@ -215,21 +215,58 @@ class TestDashboardClickableCards:
         client.cookies.clear()
 
 
-class TestDetailPlaceholders:
-    def test_track_detail_shows_coming_soon(self, client: TestClient, mock_api: AsyncMock) -> None:
+class TestDetailPages:
+    def test_track_detail_renders(self, client: TestClient, mock_api: AsyncMock) -> None:
         client.cookies.set("access_token", "test-jwt")
         resp = client.get("/tracks/123")
         assert resp.status_code == 200
-        assert "Under Construction" in resp.text
-        assert 'href="/tracks"' in resp.text
+        assert "Test Track" in resp.text
+        assert 'href="/tracks"' in resp.text  # breadcrumb
+        assert "Total Plays" in resp.text
+        assert "Test Artist" in resp.text
         client.cookies.clear()
 
-    def test_artist_detail_shows_coming_soon(self, client: TestClient, mock_api: AsyncMock) -> None:
+    def test_artist_detail_renders(self, client: TestClient, mock_api: AsyncMock) -> None:
         client.cookies.set("access_token", "test-jwt")
         resp = client.get("/artists/456")
         assert resp.status_code == 200
-        assert "Under Construction" in resp.text
-        assert 'href="/artists"' in resp.text
+        assert "Test Artist" in resp.text
+        assert 'href="/artists"' in resp.text  # breadcrumb
+        assert "Total Plays" in resp.text
+        assert "Unique Tracks" in resp.text
+        client.cookies.clear()
+
+    def test_album_detail_renders(self, client: TestClient, mock_api: AsyncMock) -> None:
+        client.cookies.set("access_token", "test-jwt")
+        resp = client.get("/albums/sp_album_123")
+        assert resp.status_code == 200
+        assert "Test Album" in resp.text
+        assert 'href="/tracks"' in resp.text  # breadcrumb
+        assert "Total Plays" in resp.text
+        assert "Test Track" in resp.text
+        client.cookies.clear()
+
+    def test_track_detail_404(self, client: TestClient, mock_api: AsyncMock) -> None:
+        mock_api.get_track_detail.side_effect = ApiError(404, "Not found")
+        client.cookies.set("access_token", "test-jwt")
+        resp = client.get("/tracks/999")
+        assert resp.status_code == 404
+        assert "Not Found" in resp.text
+        client.cookies.clear()
+
+    def test_artist_detail_404(self, client: TestClient, mock_api: AsyncMock) -> None:
+        mock_api.get_artist_detail.side_effect = ApiError(404, "Not found")
+        client.cookies.set("access_token", "test-jwt")
+        resp = client.get("/artists/999")
+        assert resp.status_code == 404
+        assert "Not Found" in resp.text
+        client.cookies.clear()
+
+    def test_album_detail_404(self, client: TestClient, mock_api: AsyncMock) -> None:
+        mock_api.get_album_detail.side_effect = ApiError(404, "Not found")
+        client.cookies.set("access_token", "test-jwt")
+        resp = client.get("/albums/nonexistent")
+        assert resp.status_code == 404
         client.cookies.clear()
 
     def test_track_detail_requires_login(self, client: TestClient) -> None:
@@ -239,6 +276,11 @@ class TestDetailPlaceholders:
 
     def test_artist_detail_requires_login(self, client: TestClient) -> None:
         resp = client.get("/artists/456", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/login"
+
+    def test_album_detail_requires_login(self, client: TestClient) -> None:
+        resp = client.get("/albums/sp_album_123", follow_redirects=False)
         assert resp.status_code == 303
         assert resp.headers["location"] == "/login"
 
