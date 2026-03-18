@@ -36,9 +36,9 @@
     <p class="text-muted mb-1">{{ (track.duration_ms / 60000) | round(1) }} min</p>
     {% endif %}
     {% if track.spotify and track.spotify.external_url %}
-    <a href="{{ track.spotify.external_url }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    <a href="{{ track.spotify.external_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
     {% elif track.spotify_track_id %}
-    <a href="https://open.spotify.com/track/{{ track.spotify_track_id }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    <a href="https://open.spotify.com/track/{{ track.spotify_track_id }}" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
     {% endif %}
   </div>
 </div>
@@ -53,7 +53,7 @@
   </div>
   <div class="col-md-3">
     <div class="card text-center"><div class="card-body">
-      <h5 class="card-title">{{ (track.total_ms_played / 3600000) | round(1) }}h</h5>
+      <h5 class="card-title">{{ ((track.total_ms_played or 0) / 3600000) | round(1) }}h</h5>
       <p class="card-text text-muted">Listening Time</p>
     </div></div>
   </div>
@@ -157,7 +157,7 @@ chart.setOption({
         {{ track.audio_features.instrumentalness or 0 }},
         {{ track.audio_features.speechiness or 0 }}
       ],
-      name: '{{ track.name | replace("'", "\\'") }}',
+      name: {{ track.name | tojson }},
       areaStyle: {opacity: 0.3}
     }]
   }]

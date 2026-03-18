@@ -732,12 +732,14 @@ Phase 8 (Deferred tasks & polish)              <- Final
 ```
 
 ### Phase 4a
-```
+
+```dotenv
 # No new env vars — uses existing Spotify credentials + in-memory cache
 ```
 
 ### Phase 4b
-```
+
+```dotenv
 SOUNDCHARTS_API_KEY=        # Soundcharts API key for audio features
 VALKEY_URL=                 # e.g. valkey://localhost:6379 (omit to use PostgreSQL cache)
 ```

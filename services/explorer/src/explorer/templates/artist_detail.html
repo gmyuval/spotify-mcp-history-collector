@@ -32,9 +32,9 @@
     </p>
     {% endif %}
     {% if artist.spotify and artist.spotify.external_url %}
-    <a href="{{ artist.spotify.external_url }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    <a href="{{ artist.spotify.external_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
     {% elif artist.spotify_artist_id %}
-    <a href="https://open.spotify.com/artist/{{ artist.spotify_artist_id }}" target="_blank" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
+    <a href="https://open.spotify.com/artist/{{ artist.spotify_artist_id }}" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm mt-1">Open in Spotify</a>
     {% endif %}
   </div>
 </div>
@@ -55,7 +55,7 @@
   </div>
   <div class="col-md-3">
     <div class="card text-center"><div class="card-body">
-      <h5 class="card-title">{{ (artist.total_ms_played / 3600000) | round(1) }}h</h5>
+      <h5 class="card-title">{{ ((artist.total_ms_played or 0) / 3600000) | round(1) }}h</h5>
       <p class="card-text text-muted">Listening Time</p>
     </div></div>
   </div>

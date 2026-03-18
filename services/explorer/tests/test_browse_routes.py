@@ -247,8 +247,6 @@ class TestDetailPages:
         client.cookies.clear()
 
     def test_track_detail_404(self, client: TestClient, mock_api: AsyncMock) -> None:
-        from explorer.api_client import ApiError
-
         mock_api.get_track_detail.side_effect = ApiError(404, "Not found")
         client.cookies.set("access_token", "test-jwt")
         resp = client.get("/tracks/999")
@@ -257,8 +255,6 @@ class TestDetailPages:
         client.cookies.clear()
 
     def test_artist_detail_404(self, client: TestClient, mock_api: AsyncMock) -> None:
-        from explorer.api_client import ApiError
-
         mock_api.get_artist_detail.side_effect = ApiError(404, "Not found")
         client.cookies.set("access_token", "test-jwt")
         resp = client.get("/artists/999")
@@ -267,8 +263,6 @@ class TestDetailPages:
         client.cookies.clear()
 
     def test_album_detail_404(self, client: TestClient, mock_api: AsyncMock) -> None:
-        from explorer.api_client import ApiError
-
         mock_api.get_album_detail.side_effect = ApiError(404, "Not found")
         client.cookies.set("access_token", "test-jwt")
         resp = client.get("/albums/nonexistent")

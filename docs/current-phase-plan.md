@@ -90,6 +90,7 @@ Album detail uses `album_spotify_id` as the path parameter (no separate album DB
 ### `GET /api/me/tracks/{track_id}` — Track Detail
 
 Response:
+
 ```json
 {
   "track_id": 42,
@@ -127,6 +128,7 @@ Response:
 ### `GET /api/me/artists/{artist_id}` — Artist Detail
 
 Response:
+
 ```json
 {
   "artist_id": 7,
@@ -153,6 +155,7 @@ Response:
 ### `GET /api/me/albums/{album_spotify_id}` — Album Detail
 
 Response:
+
 ```json
 {
   "album_spotify_id": "2Lq2qX3hYhiuPckC8Flj21",

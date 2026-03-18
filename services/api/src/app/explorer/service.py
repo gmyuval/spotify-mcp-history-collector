@@ -5,6 +5,7 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import httpx
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -163,16 +164,7 @@ class ExplorerService:
 
     async def get_track_detail(self, user_id: int, track_id: int, session: AsyncSession) -> TrackDetail | None:
         """Return detailed track info with play stats, audio features, and recent plays."""
-        result = await session.execute(
-            select(Track)
-            .where(Track.id == track_id)
-            .options(selectinload(Track.artists), selectinload(Track.audio_features))
-        )
-        track = result.scalar_one_or_none()
-        if track is None:
-            return None
-
-        # Play stats
+        # User-scoped: only return tracks that the user has actually played
         stats_result = await session.execute(
             select(
                 func.count(),
@@ -182,6 +174,18 @@ class ExplorerService:
             ).where(Play.user_id == user_id, Play.track_id == track_id)
         )
         play_count, first_played, last_played, total_ms = stats_result.one()
+
+        if play_count == 0:
+            return None
+
+        result = await session.execute(
+            select(Track)
+            .where(Track.id == track_id)
+            .options(selectinload(Track.artists), selectinload(Track.audio_features))
+        )
+        track = result.scalar_one_or_none()
+        if track is None:
+            return None
 
         # Recent plays (limit 20)
         recent_result = await session.execute(
@@ -241,12 +245,7 @@ class ExplorerService:
 
     async def get_artist_detail(self, user_id: int, artist_id: int, session: AsyncSession) -> ArtistDetail | None:
         """Return detailed artist info with play stats and top tracks."""
-        result = await session.execute(select(Artist).where(Artist.id == artist_id))
-        artist = result.scalar_one_or_none()
-        if artist is None:
-            return None
-
-        # Aggregate play stats across all of the artist's tracks for this user
+        # User-scoped: verify the user has plays for this artist before loading
         stats_result = await session.execute(
             select(
                 func.count(),
@@ -260,6 +259,14 @@ class ExplorerService:
             .where(Play.user_id == user_id, TrackArtist.artist_id == artist_id)
         )
         play_count, unique_tracks, total_ms, first_played, last_played = stats_result.one()
+
+        if play_count == 0:
+            return None
+
+        result = await session.execute(select(Artist).where(Artist.id == artist_id))
+        artist = result.scalar_one_or_none()
+        if artist is None:
+            return None
 
         # Top tracks by play count (limit 20)
         top_tracks_result = await session.execute(
@@ -301,13 +308,21 @@ class ExplorerService:
 
     async def get_album_detail(self, user_id: int, album_spotify_id: str, session: AsyncSession) -> AlbumDetail | None:
         """Return album detail with per-track play stats."""
+        # User-scoped: only return albums where the user has played at least one track
+        user_track_ids_result = await session.execute(
+            select(func.distinct(Play.track_id))
+            .join(Track, Track.id == Play.track_id)
+            .where(Play.user_id == user_id, Track.album_spotify_id == album_spotify_id)
+        )
+        user_played_track_ids = set(user_track_ids_result.scalars().all())
+        if not user_played_track_ids:
+            return None
+
         # Find all tracks with this album_spotify_id
         tracks_result = await session.execute(
             select(Track).where(Track.album_spotify_id == album_spotify_id).options(selectinload(Track.artists))
         )
         tracks = list(tracks_result.scalars().all())
-        if not tracks:
-            return None
 
         album_name = tracks[0].album_name or ""
         # Collect unique artist names from all tracks
@@ -386,12 +401,13 @@ class ExplorerService:
                 images=images,
                 popularity=sp_track.popularity,
                 isrc=sp_track.external_ids.isrc if sp_track.external_ids else None,
+                preview_url=sp_track.preview_url,
                 external_url=sp_track.external_urls.get("spotify") if sp_track.external_urls else None,
             )
             enrichment_cache.put(cache_key, result)
             return result
-        except Exception:
-            logger.debug("Spotify enrichment failed for track %s", spotify_track_id)
+        except (TokenNotFoundError, TokenRefreshError, httpx.HTTPError) as exc:
+            logger.debug("Spotify enrichment failed for track %s: %s", spotify_track_id, exc)
             return None
 
     async def _enrich_artist_spotify(
@@ -420,8 +436,8 @@ class ExplorerService:
             )
             enrichment_cache.put(cache_key, result)
             return result
-        except Exception:
-            logger.debug("Spotify enrichment failed for artist %s", spotify_artist_id)
+        except (TokenNotFoundError, TokenRefreshError, httpx.HTTPError) as exc:
+            logger.debug("Spotify enrichment failed for artist %s: %s", spotify_artist_id, exc)
             return None
 
     async def _enrich_album_spotify(
@@ -447,8 +463,8 @@ class ExplorerService:
             )
             enrichment_cache.put(cache_key, result)
             return result
-        except Exception:
-            logger.debug("Spotify enrichment failed for album %s", album_spotify_id)
+        except (TokenNotFoundError, TokenRefreshError, httpx.HTTPError) as exc:
+            logger.debug("Spotify enrichment failed for album %s: %s", album_spotify_id, exc)
             return None
 
     @staticmethod

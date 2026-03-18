@@ -1,5 +1,6 @@
 """Artists browser page — paginated artist listing with search and sort."""
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -7,6 +8,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from explorer.api_client import ApiError, ExplorerApiClient
 from explorer.routes._helpers import require_login, safe_int
+
+logger = logging.getLogger(__name__)
 
 
 class ArtistsRouter:
@@ -136,16 +139,18 @@ class ArtistsRouter:
                     },
                     status_code=404,
                 )
+            logger.warning("Error loading artist %d: %s (status %d)", artist_id, e.detail, e.status_code)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
                 "error.html",
                 {
                     "request": request,
                     "active_page": "artists",
                     "error_title": "Error Loading Artist",
-                    "error_message": e.detail,
+                    "error_message": "An unexpected error occurred. Please try again later.",
                     "back_url": "/artists",
                     "back_label": "Back to Artists",
                 },
+                status_code=e.status_code,
             )
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
