@@ -93,6 +93,18 @@
   </div>
   {% endif %}
 </div>
+{% if track.spotify.preview_url %}
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card"><div class="card-body">
+      <h6 class="card-subtitle mb-2 text-muted">Preview</h6>
+      <audio controls preload="none" class="w-100">
+        <source src="{{ track.spotify.preview_url }}" type="audio/mpeg">
+      </audio>
+    </div></div>
+  </div>
+</div>
+{% endif %}
 {% endif %}
 
 <!-- Audio Features Radar Chart -->

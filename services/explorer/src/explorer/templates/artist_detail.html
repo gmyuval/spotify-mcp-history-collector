@@ -40,29 +40,35 @@
 </div>
 
 <!-- Stats cards row -->
-<div class="row mb-4">
-  <div class="col-md-3">
+<div class="row mb-4 g-3">
+  <div class="col-6 col-md">
     <div class="card text-center"><div class="card-body">
       <h5 class="card-title">{{ artist.play_count }}</h5>
       <p class="card-text text-muted">Total Plays</p>
     </div></div>
   </div>
-  <div class="col-md-3">
+  <div class="col-6 col-md">
     <div class="card text-center"><div class="card-body">
       <h5 class="card-title">{{ artist.unique_tracks }}</h5>
       <p class="card-text text-muted">Unique Tracks</p>
     </div></div>
   </div>
-  <div class="col-md-3">
+  <div class="col-6 col-md">
     <div class="card text-center"><div class="card-body">
       <h5 class="card-title">{{ ((artist.total_ms_played or 0) / 3600000) | round(1) }}h</h5>
       <p class="card-text text-muted">Listening Time</p>
     </div></div>
   </div>
-  <div class="col-md-3">
+  <div class="col-6 col-md">
     <div class="card text-center"><div class="card-body">
       <h5 class="card-title">{{ artist.first_played[:10] if artist.first_played else "—" }}</h5>
       <p class="card-text text-muted">First Played</p>
+    </div></div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="card text-center"><div class="card-body">
+      <h5 class="card-title">{{ artist.last_played[:10] if artist.last_played else "—" }}</h5>
+      <p class="card-text text-muted">Last Played</p>
     </div></div>
   </div>
 </div>

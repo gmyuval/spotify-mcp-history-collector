@@ -318,9 +318,11 @@ class ExplorerService:
         if not user_played_track_ids:
             return None
 
-        # Find all tracks with this album_spotify_id
+        # Find tracks from this album that the user has played
         tracks_result = await session.execute(
-            select(Track).where(Track.album_spotify_id == album_spotify_id).options(selectinload(Track.artists))
+            select(Track)
+            .where(Track.album_spotify_id == album_spotify_id, Track.id.in_(user_played_track_ids))
+            .options(selectinload(Track.artists))
         )
         tracks = list(tracks_result.scalars().all())
 
@@ -406,7 +408,7 @@ class ExplorerService:
             )
             enrichment_cache.put(cache_key, result)
             return result
-        except (TokenNotFoundError, TokenRefreshError, httpx.HTTPError) as exc:
+        except (TokenNotFoundError, TokenRefreshError, SpotifyClientError, httpx.HTTPError) as exc:
             logger.debug("Spotify enrichment failed for track %s: %s", spotify_track_id, exc)
             return None
 
@@ -436,7 +438,7 @@ class ExplorerService:
             )
             enrichment_cache.put(cache_key, result)
             return result
-        except (TokenNotFoundError, TokenRefreshError, httpx.HTTPError) as exc:
+        except (TokenNotFoundError, TokenRefreshError, SpotifyClientError, httpx.HTTPError) as exc:
             logger.debug("Spotify enrichment failed for artist %s: %s", spotify_artist_id, exc)
             return None
 
@@ -463,7 +465,7 @@ class ExplorerService:
             )
             enrichment_cache.put(cache_key, result)
             return result
-        except (TokenNotFoundError, TokenRefreshError, httpx.HTTPError) as exc:
+        except (TokenNotFoundError, TokenRefreshError, SpotifyClientError, httpx.HTTPError) as exc:
             logger.debug("Spotify enrichment failed for album %s: %s", album_spotify_id, exc)
             return None
 
