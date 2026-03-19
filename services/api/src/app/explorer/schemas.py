@@ -265,6 +265,37 @@ class SpotifyAlbumEnrichment(BaseModel):
     external_url: str | None = None
 
 
+class MusicBrainzExternalUrls(BaseModel):
+    musicbrainz: str | None = None
+
+
+class MusicBrainzTrackEnrichment(BaseModel):
+    mbid: str | None = None
+    label: str | None = None
+    release_date: str | None = None
+    country: str | None = None
+    genres: list[str] = []
+    external_urls: MusicBrainzExternalUrls | None = None
+
+
+class MusicBrainzArtistEnrichment(BaseModel):
+    mbid: str | None = None
+    area: str | None = None
+    disambiguation: str | None = None
+    begin_date: str | None = None
+    genres: list[str] = []
+    external_urls: MusicBrainzExternalUrls | None = None
+
+
+class MusicBrainzAlbumEnrichment(BaseModel):
+    mbid: str | None = None
+    label: str | None = None
+    catalog_number: str | None = None
+    country: str | None = None
+    barcode: str | None = None
+    external_urls: MusicBrainzExternalUrls | None = None
+
+
 class RecentPlayItem(BaseModel):
     played_at: datetime
     ms_played: int | None = None
@@ -292,6 +323,7 @@ class TrackDetail(BaseModel):
     audio_features: AudioFeaturesData | None = None
     recent_plays: list[RecentPlayItem] = []
     spotify: SpotifyTrackEnrichment | None = None
+    musicbrainz: MusicBrainzTrackEnrichment | None = None
 
 
 class ArtistDetail(BaseModel):
@@ -305,6 +337,7 @@ class ArtistDetail(BaseModel):
     last_played: datetime | None = None
     top_tracks: list[TrackDetailArtist] = []
     spotify: SpotifyArtistEnrichment | None = None
+    musicbrainz: MusicBrainzArtistEnrichment | None = None
 
 
 class AlbumTrackItem(BaseModel):
@@ -322,6 +355,7 @@ class AlbumDetail(BaseModel):
     unique_tracks: int = 0
     tracks: list[AlbumTrackItem] = []
     spotify: SpotifyAlbumEnrichment | None = None
+    musicbrainz: MusicBrainzAlbumEnrichment | None = None
 
 
 # ── API token schemas ──────────────────────────────────────────

@@ -13,7 +13,7 @@ from app.admin import router as admin_router
 from app.auth import router as auth_router
 from app.auth.middleware import JWTAuthMiddleware
 from app.constants import APP_DESCRIPTION, APP_TITLE, Routes, ServiceName
-from app.dependencies import db_manager
+from app.dependencies import cache_backend, db_manager
 from app.explorer.router import router as explorer_router
 from app.history import router as history_router
 from app.logging import DBLogHandler, configure_logging
@@ -25,6 +25,7 @@ from app.middleware import (
     SecurityHeadersMiddleware,
 )
 from app.settings import get_settings
+from shared.musicbrainz.client import MusicBrainzClient
 from shared.version import __version__ as APP_VERSION
 
 
@@ -65,6 +66,16 @@ class SpotifyMCPApp:
         # Update the mounted ASGI app so it points to the fresh instance
         self._mcp_mount.app = mcp_asgi_app
 
+        # Initialize MusicBrainz client (shared across requests via app.state)
+        settings = get_settings()
+        mb_client = MusicBrainzClient(
+            cache=cache_backend,
+            contact_email=settings.MUSICBRAINZ_CONTACT_EMAIL,
+            app_version=APP_VERSION,
+        )
+        app.state.mb_client = mb_client
+        app.state.cache_backend = cache_backend
+
         db_log_handler = DBLogHandler(db_manager, service=ServiceName.API)
         await db_log_handler.start()
         logging.getLogger().addHandler(db_log_handler)
@@ -74,6 +85,8 @@ class SpotifyMCPApp:
         finally:
             logging.getLogger().removeHandler(db_log_handler)
             await db_log_handler.stop()
+            await mb_client.close()
+            await cache_backend.close()
             await db_manager.dispose()
 
     def _setup_middleware(self) -> None:

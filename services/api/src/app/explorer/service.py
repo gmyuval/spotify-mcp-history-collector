@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.auth.exceptions import TokenNotFoundError, TokenRefreshError
 from app.auth.tokens import TokenManager
 from app.cache.service import SpotifyCacheService
-from app.explorer.enrichment_cache import cache as enrichment_cache
+from app.dependencies import cache_backend
 from app.explorer.schemas import (
     AlbumDetail,
     AlbumTrackItem,
@@ -26,6 +26,10 @@ from app.explorer.schemas import (
     MemoryPlaylistEventItem,
     MemoryPlaylistSummary,
     MemoryPlaylistTrack,
+    MusicBrainzAlbumEnrichment,
+    MusicBrainzArtistEnrichment,
+    MusicBrainzExternalUrls,
+    MusicBrainzTrackEnrichment,
     PaginatedArtists,
     PaginatedHistory,
     PaginatedMemoryPlaylistEvents,
@@ -59,6 +63,7 @@ from shared.db.models.cache import CachedPlaylist, CachedPlaylistTrack
 from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnapshot, PreferenceEvent, TasteProfile
 from shared.db.models.music import Artist, Play, Track, TrackArtist
 from shared.db.models.user import SpotifyToken, User
+from shared.musicbrainz.client import MusicBrainzClient
 from shared.spotify.client import SpotifyClient
 from shared.spotify.embed import SpotifyEmbedClient
 from shared.spotify.exceptions import (
@@ -71,6 +76,8 @@ from shared.spotify.exceptions import (
 from shared.spotify.models import SpotifyPlaylistSimplified, SpotifyPlaylistTrackItem
 
 logger = logging.getLogger(__name__)
+
+SPOTIFY_ENRICHMENT_CACHE_TTL = 86400  # 24 hours
 
 
 class ExplorerService:
@@ -162,7 +169,9 @@ class ExplorerService:
 
     # ── Entity detail ────────────────────────────────────────────
 
-    async def get_track_detail(self, user_id: int, track_id: int, session: AsyncSession) -> TrackDetail | None:
+    async def get_track_detail(
+        self, user_id: int, track_id: int, session: AsyncSession, *, request: object | None = None
+    ) -> TrackDetail | None:
         """Return detailed track info with play stats, audio features, and recent plays."""
         # User-scoped: only return tracks that the user has actually played
         stats_result = await session.execute(
@@ -226,6 +235,11 @@ class ExplorerService:
         if track.spotify_track_id:
             spotify_enrichment = await self._enrich_track_spotify(track.spotify_track_id, user_id, session)
 
+        # MusicBrainz enrichment (optional, non-blocking)
+        isrc = spotify_enrichment.isrc if spotify_enrichment else None
+        artist_name = artists[0].name if artists else ""
+        mb_enrichment = await self._enrich_track_musicbrainz(isrc, artist_name, track.name, request=request)
+
         return TrackDetail(
             track_id=track.id,
             name=track.name,
@@ -241,9 +255,12 @@ class ExplorerService:
             audio_features=audio_features,
             recent_plays=recent_plays,
             spotify=spotify_enrichment,
+            musicbrainz=mb_enrichment,
         )
 
-    async def get_artist_detail(self, user_id: int, artist_id: int, session: AsyncSession) -> ArtistDetail | None:
+    async def get_artist_detail(
+        self, user_id: int, artist_id: int, session: AsyncSession, *, request: object | None = None
+    ) -> ArtistDetail | None:
         """Return detailed artist info with play stats and top tracks."""
         # User-scoped: verify the user has plays for this artist before loading
         stats_result = await session.execute(
@@ -293,6 +310,9 @@ class ExplorerService:
         if artist.spotify_artist_id:
             spotify_enrichment = await self._enrich_artist_spotify(artist.spotify_artist_id, user_id, session)
 
+        # MusicBrainz enrichment (optional, non-blocking)
+        mb_enrichment = await self._enrich_artist_musicbrainz(spotify_enrichment, artist.name, request=request)
+
         return ArtistDetail(
             artist_id=artist.id,
             name=artist.name,
@@ -304,9 +324,12 @@ class ExplorerService:
             last_played=last_played,
             top_tracks=top_tracks,
             spotify=spotify_enrichment,
+            musicbrainz=mb_enrichment,
         )
 
-    async def get_album_detail(self, user_id: int, album_spotify_id: str, session: AsyncSession) -> AlbumDetail | None:
+    async def get_album_detail(
+        self, user_id: int, album_spotify_id: str, session: AsyncSession, *, request: object | None = None
+    ) -> AlbumDetail | None:
         """Return album detail with per-track play stats."""
         # User-scoped: only return albums where the user has played at least one track
         user_track_ids_result = await session.execute(
@@ -360,6 +383,12 @@ class ExplorerService:
         spotify_enrichment: SpotifyAlbumEnrichment | None = None
         spotify_enrichment = await self._enrich_album_spotify(album_spotify_id, user_id, session)
 
+        # MusicBrainz enrichment (optional, non-blocking)
+        first_artist = sorted(artist_name_set)[0] if artist_name_set else ""
+        mb_enrichment = await self._enrich_album_musicbrainz(
+            album_spotify_id, album_name, first_artist, request=request
+        )
+
         return AlbumDetail(
             album_spotify_id=album_spotify_id,
             name=album_name,
@@ -368,6 +397,7 @@ class ExplorerService:
             unique_tracks=unique_track_count,
             tracks=album_tracks,
             spotify=spotify_enrichment,
+            musicbrainz=mb_enrichment,
         )
 
     # ── Spotify enrichment helpers ─────────────────────────────
@@ -387,10 +417,10 @@ class ExplorerService:
         self, spotify_track_id: str, user_id: int, session: AsyncSession
     ) -> SpotifyTrackEnrichment | None:
         """Fetch track enrichment from Spotify API with caching."""
-        cache_key = f"track:{spotify_track_id}"
-        cached: SpotifyTrackEnrichment | None = enrichment_cache.get(cache_key)
+        cache_key = f"sp:track:{spotify_track_id}"
+        cached = await cache_backend.get(cache_key)
         if cached is not None:
-            return cached
+            return SpotifyTrackEnrichment.model_validate(cached)
         try:
             client = await self._get_spotify_client(user_id, session)
             sp_track = await client.get_track(spotify_track_id)
@@ -406,7 +436,7 @@ class ExplorerService:
                 preview_url=sp_track.preview_url,
                 external_url=sp_track.external_urls.get("spotify") if sp_track.external_urls else None,
             )
-            enrichment_cache.put(cache_key, result)
+            await cache_backend.set(cache_key, result.model_dump(), SPOTIFY_ENRICHMENT_CACHE_TTL)
             return result
         except (TokenNotFoundError, TokenRefreshError, SpotifyClientError, httpx.HTTPError) as exc:
             logger.debug("Spotify enrichment failed for track %s: %s", spotify_track_id, exc)
@@ -416,10 +446,10 @@ class ExplorerService:
         self, spotify_artist_id: str, user_id: int, session: AsyncSession
     ) -> SpotifyArtistEnrichment | None:
         """Fetch artist enrichment from Spotify API with caching."""
-        cache_key = f"artist:{spotify_artist_id}"
-        cached: SpotifyArtistEnrichment | None = enrichment_cache.get(cache_key)
+        cache_key = f"sp:artist:{spotify_artist_id}"
+        cached = await cache_backend.get(cache_key)
         if cached is not None:
-            return cached
+            return SpotifyArtistEnrichment.model_validate(cached)
         try:
             client = await self._get_spotify_client(user_id, session)
             sp_artist = await client.get_artist(spotify_artist_id)
@@ -436,7 +466,7 @@ class ExplorerService:
                 followers=followers_total,
                 external_url=sp_artist.external_urls.get("spotify") if sp_artist.external_urls else None,
             )
-            enrichment_cache.put(cache_key, result)
+            await cache_backend.set(cache_key, result.model_dump(), SPOTIFY_ENRICHMENT_CACHE_TTL)
             return result
         except (TokenNotFoundError, TokenRefreshError, SpotifyClientError, httpx.HTTPError) as exc:
             logger.debug("Spotify enrichment failed for artist %s: %s", spotify_artist_id, exc)
@@ -446,10 +476,10 @@ class ExplorerService:
         self, album_spotify_id: str, user_id: int, session: AsyncSession
     ) -> SpotifyAlbumEnrichment | None:
         """Fetch album enrichment from Spotify API with caching."""
-        cache_key = f"album:{album_spotify_id}"
-        cached: SpotifyAlbumEnrichment | None = enrichment_cache.get(cache_key)
+        cache_key = f"sp:album:{album_spotify_id}"
+        cached = await cache_backend.get(cache_key)
         if cached is not None:
-            return cached
+            return SpotifyAlbumEnrichment.model_validate(cached)
         try:
             client = await self._get_spotify_client(user_id, session)
             sp_album = await client.get_album(album_spotify_id)
@@ -463,11 +493,120 @@ class ExplorerService:
                 total_tracks=sp_album.total_tracks,
                 external_url=sp_album.external_urls.get("spotify") if sp_album.external_urls else None,
             )
-            enrichment_cache.put(cache_key, result)
+            await cache_backend.set(cache_key, result.model_dump(), SPOTIFY_ENRICHMENT_CACHE_TTL)
             return result
         except (TokenNotFoundError, TokenRefreshError, SpotifyClientError, httpx.HTTPError) as exc:
             logger.debug("Spotify enrichment failed for album %s: %s", album_spotify_id, exc)
             return None
+
+    # ── MusicBrainz enrichment helpers ────────────────────────────
+
+    async def _enrich_track_musicbrainz(
+        self, isrc: str | None, artist_name: str, track_name: str, request: object | None = None
+    ) -> MusicBrainzTrackEnrichment | None:
+        """Fetch track metadata from MusicBrainz (ISRC lookup with fallback)."""
+        mb_client = self._get_mb_client(request)
+        if mb_client is None:
+            return None
+        try:
+            recording = None
+            if isrc:
+                recording = await mb_client.lookup_recording_by_isrc(isrc)
+            if recording is None and artist_name and track_name:
+                recording = await mb_client.search_recording(artist_name, track_name)
+            if recording is None:
+                return None
+
+            release = recording.first_release
+            genres = [g.name for g in recording.genres if g.name]
+
+            return MusicBrainzTrackEnrichment(
+                mbid=recording.mbid,
+                label=release.label if release else None,
+                release_date=release.date if release else None,
+                country=release.country if release else None,
+                genres=genres,
+                external_urls=MusicBrainzExternalUrls(
+                    musicbrainz=f"https://musicbrainz.org/recording/{recording.mbid}" if recording.mbid else None,
+                ),
+            )
+        except Exception as exc:
+            logger.debug("MusicBrainz enrichment failed: %s", exc)
+            return None
+
+    async def _enrich_artist_musicbrainz(
+        self, spotify_enrichment: SpotifyArtistEnrichment | None, artist_name: str, request: object | None = None
+    ) -> MusicBrainzArtistEnrichment | None:
+        """Fetch artist metadata from MusicBrainz via direct artist search."""
+        mb_client = self._get_mb_client(request)
+        if mb_client is None:
+            return None
+        try:
+            artist = await mb_client.search_artist(artist_name)
+            if artist is None:
+                return None
+            genres = [g.name for g in artist.genres if g.name]
+            return MusicBrainzArtistEnrichment(
+                mbid=artist.mbid,
+                area=artist.area or None,
+                disambiguation=artist.disambiguation or None,
+                begin_date=artist.begin_date or None,
+                genres=genres,
+                external_urls=MusicBrainzExternalUrls(
+                    musicbrainz=f"https://musicbrainz.org/artist/{artist.mbid}" if artist.mbid else None,
+                ),
+            )
+        except Exception as exc:
+            logger.debug("MusicBrainz artist enrichment failed: %s", exc)
+            return None
+
+    async def _enrich_album_musicbrainz(
+        self, album_spotify_id: str, album_name: str, artist_name: str, request: object | None = None
+    ) -> MusicBrainzAlbumEnrichment | None:
+        """Fetch album metadata from MusicBrainz via recording search."""
+        mb_client = self._get_mb_client(request)
+        if mb_client is None:
+            return None
+        try:
+            # Search for a recording from this album to get release info
+            recording = await mb_client.search_recording(artist_name, album_name)
+            if recording is None:
+                return None
+            release = recording.first_release
+            if release is None or not release.mbid:
+                return None
+            detailed = await mb_client.get_release(release.mbid)
+            if detailed is None:
+                return None
+            return MusicBrainzAlbumEnrichment(
+                mbid=detailed.mbid,
+                label=detailed.label or None,
+                catalog_number=detailed.catalog_number or None,
+                country=detailed.country or None,
+                barcode=detailed.barcode or None,
+                external_urls=MusicBrainzExternalUrls(
+                    musicbrainz=f"https://musicbrainz.org/release/{detailed.mbid}" if detailed.mbid else None,
+                ),
+            )
+        except Exception as exc:
+            logger.debug("MusicBrainz album enrichment failed: %s", exc)
+            return None
+
+    @staticmethod
+    def _get_mb_client(request: object | None) -> MusicBrainzClient | None:
+        """Extract MusicBrainzClient from the request's app state, if available."""
+        if request is None:
+            return None
+        app = getattr(request, "app", None)
+        if app is None:
+            return None
+        state = getattr(app, "state", None)
+        if state is None:
+            return None
+        client = getattr(state, "mb_client", None)
+        if isinstance(client, MusicBrainzClient):
+            return client
+        return None
 
     @staticmethod
     def _playlist_to_summary(p: CachedPlaylist) -> PlaylistSummary:
