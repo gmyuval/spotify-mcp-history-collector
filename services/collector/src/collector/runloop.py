@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from collector.enrichment import AudioFeaturesEnrichmentService
 from collector.initial_sync import InitialSyncService
 from collector.polling import PollingService
 from collector.settings import CollectorSettings
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class CollectorRunLoop:
-    """Priority-based collector: (ZIP imports) -> initial sync -> incremental polling."""
+    """Priority-based collector: ZIP imports -> initial sync -> incremental polling -> enrichment."""
 
     def __init__(self, settings: CollectorSettings, db_manager: DatabaseManager) -> None:
         self._settings = settings
@@ -28,6 +29,7 @@ class CollectorRunLoop:
         self._polling_service = PollingService(settings)
         self._initial_sync_service = InitialSyncService(settings)
         self._zip_import_service = ZipImportService(settings)
+        self._enrichment_service = AudioFeaturesEnrichmentService(settings)
         self._user_semaphore = asyncio.Semaphore(self._settings.INITIAL_SYNC_CONCURRENCY)
 
     async def run(self, shutdown_event: asyncio.Event) -> None:
@@ -80,6 +82,15 @@ class CollectorRunLoop:
         for user_id, result in zip(users, results, strict=True):
             if isinstance(result, Exception):
                 logger.error("Error processing user %d: %s", user_id, result)
+
+        # Phase 4: Audio features enrichment (lowest priority)
+        try:
+            async with self._db_manager.session() as session:
+                enriched = await self._enrichment_service.enrich(session)
+                if enriched:
+                    logger.info("Enriched %d tracks with audio features", enriched)
+        except Exception:
+            logger.exception("Error during audio features enrichment phase")
 
         logger.info("Collector cycle complete")
 

@@ -31,4 +31,19 @@ class CollectorSettings(BaseSettings):
     IMPORT_MAX_ZIP_SIZE_MB: int = 500
     IMPORT_MAX_RECORDS: int = 5_000_000
 
+    # Audio features enrichment
+    ENRICH_AUDIO_FEATURES_ENABLED: bool = True
+    ENRICH_BATCH_SIZE: int = 100
+    ENRICH_MAX_PER_CYCLE: int = 500
+
+    # Valkey cache
+    VALKEY_URL: str = ""
+
+    # Soundcharts
+    SOUNDCHARTZ_X_APP_ID: str = ""
+    SOUNDCHARTZ_X_API_KEY: str = ""
+
+    # MusicBrainz
+    MUSICBRAINZ_CONTACT_EMAIL: str = ""
+
     model_config = {"env_prefix": ""}

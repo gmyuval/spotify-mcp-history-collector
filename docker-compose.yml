@@ -1,4 +1,22 @@
 services:
+  valkey:
+    image: valkey/valkey:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    networks:
+      - spotify_mcp_network
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -37,12 +55,16 @@ services:
       - ADMIN_TOKEN=${ADMIN_TOKEN}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:8001,http://localhost:8002}
       - UPLOAD_DIR=/app/uploads
+      - VALKEY_URL=valkey://valkey:6379
+      - MUSICBRAINZ_CONTACT_EMAIL=${MUSICBRAINZ_CONTACT_EMAIL:-dev@localhost}
     volumes:
       - upload_data:/app/uploads
       - ./services/api/src:/app/src
       - ./services/shared/src:/app/shared_src
     depends_on:
       postgres:
+        condition: service_healthy
+      valkey:
         condition: service_healthy
     networks:
       - spotify_mcp_network
@@ -76,12 +98,21 @@ services:
       - IMPORT_MAX_ZIP_SIZE_MB=${IMPORT_MAX_ZIP_SIZE_MB:-500}
       - IMPORT_MAX_RECORDS=${IMPORT_MAX_RECORDS:-5000000}
       - UPLOAD_DIR=/app/uploads
+      - VALKEY_URL=valkey://valkey:6379
+      - SOUNDCHARTZ_X_APP_ID=${SOUNDCHARTZ_X_APP_ID:-}
+      - SOUNDCHARTZ_X_API_KEY=${SOUNDCHARTZ_X_API_KEY:-}
+      - MUSICBRAINZ_CONTACT_EMAIL=${MUSICBRAINZ_CONTACT_EMAIL:-dev@localhost}
+      - ENRICH_AUDIO_FEATURES_ENABLED=${ENRICH_AUDIO_FEATURES_ENABLED:-true}
+      - ENRICH_BATCH_SIZE=${ENRICH_BATCH_SIZE:-100}
+      - ENRICH_MAX_PER_CYCLE=${ENRICH_MAX_PER_CYCLE:-500}
     volumes:
       - upload_data:/app/uploads
       - ./services/collector/src:/app/src
       - ./services/shared/src:/app/shared_src
     depends_on:
       postgres:
+        condition: service_healthy
+      valkey:
         condition: service_healthy
       api:
         condition: service_healthy
@@ -159,6 +190,8 @@ networks:
     driver: bridge
 
 volumes:
+  valkey_data:
+    driver: local
   postgres_data:
     driver: local
   upload_data:
