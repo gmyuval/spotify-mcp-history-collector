@@ -44,6 +44,8 @@ pydantic-settings==2.12.0
     # via spotify-mcp-shared (services/shared/pyproject.toml)
 python-dotenv==1.2.1
     # via pydantic-settings
+redis==7.3.0
+    # via spotify-mcp-shared (services/shared/pyproject.toml)
 sqlalchemy==2.0.46
     # via spotify-mcp-shared (services/shared/pyproject.toml)
 typing-extensions==4.15.0

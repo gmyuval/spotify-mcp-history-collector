@@ -97,6 +97,8 @@ python-multipart==0.0.22
     # via
     #   mcp
     #   spotify-mcp-api (services/api/pyproject.toml)
+pywin32==311 ; sys_platform == "win32"
+    # via mcp
 pyyaml==6.0.3
     # via uvicorn
 referencing==0.37.0

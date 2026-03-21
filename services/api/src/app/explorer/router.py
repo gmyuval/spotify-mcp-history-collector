@@ -3,7 +3,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin.auth import require_permission
@@ -271,23 +271,29 @@ class ExplorerRouter:
         """Browse all artists with pagination, search, sort, and optional time window."""
         return await self._service.get_artists(user_id, session, limit=limit, offset=offset, sort=sort, q=q, days=days)
 
-    async def track_detail(self, track_id: int, user_id: RequireOwnDataView, session: DBSession) -> TrackDetail:
+    async def track_detail(
+        self, track_id: int, user_id: RequireOwnDataView, session: DBSession, request: Request
+    ) -> TrackDetail:
         """Get detailed track information with play stats and enrichment."""
-        result = await self._service.get_track_detail(user_id, track_id, session)
+        result = await self._service.get_track_detail(user_id, track_id, session, request=request)
         if result is None:
             raise HTTPException(status_code=404, detail="Track not found")
         return result
 
-    async def artist_detail(self, artist_id: int, user_id: RequireOwnDataView, session: DBSession) -> ArtistDetail:
+    async def artist_detail(
+        self, artist_id: int, user_id: RequireOwnDataView, session: DBSession, request: Request
+    ) -> ArtistDetail:
         """Get detailed artist information with play stats and enrichment."""
-        result = await self._service.get_artist_detail(user_id, artist_id, session)
+        result = await self._service.get_artist_detail(user_id, artist_id, session, request=request)
         if result is None:
             raise HTTPException(status_code=404, detail="Artist not found")
         return result
 
-    async def album_detail(self, album_spotify_id: str, user_id: RequireOwnDataView, session: DBSession) -> AlbumDetail:
+    async def album_detail(
+        self, album_spotify_id: str, user_id: RequireOwnDataView, session: DBSession, request: Request
+    ) -> AlbumDetail:
         """Get album detail with per-track play stats and enrichment."""
-        result = await self._service.get_album_detail(user_id, album_spotify_id, session)
+        result = await self._service.get_album_detail(user_id, album_spotify_id, session, request=request)
         if result is None:
             raise HTTPException(status_code=404, detail="Album not found")
         return result

@@ -97,6 +97,50 @@
 </div>
 {% endif %}
 
+<!-- MusicBrainz Artist Info -->
+{% if artist.musicbrainz %}
+<div class="card mb-4">
+  <div class="card-header"><strong>Artist Info</strong> <small class="text-muted">(MusicBrainz)</small></div>
+  <div class="card-body">
+    <div class="row">
+      {% if artist.musicbrainz.area %}
+      <div class="col-md-4 mb-2">
+        <small class="text-muted d-block">Origin</small>
+        <span>{{ artist.musicbrainz.area }}</span>
+      </div>
+      {% endif %}
+      {% if artist.musicbrainz.begin_date %}
+      <div class="col-md-4 mb-2">
+        <small class="text-muted d-block">Active Since</small>
+        <span>{{ artist.musicbrainz.begin_date }}</span>
+      </div>
+      {% endif %}
+      {% if artist.musicbrainz.disambiguation %}
+      <div class="col-md-4 mb-2">
+        <small class="text-muted d-block">Disambiguation</small>
+        <span>{{ artist.musicbrainz.disambiguation }}</span>
+      </div>
+      {% endif %}
+    </div>
+    {% if artist.musicbrainz.genres %}
+    <div class="mt-2">
+      <small class="text-muted d-block mb-1">MusicBrainz Genres</small>
+      {% for genre in artist.musicbrainz.genres %}
+      <span class="badge bg-secondary me-1">{{ genre }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if artist.musicbrainz.external_urls and artist.musicbrainz.external_urls.musicbrainz %}
+    <div class="mt-2">
+      <a href="{{ artist.musicbrainz.external_urls.musicbrainz }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-secondary">
+        View on MusicBrainz
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 <!-- Top Tracks -->
 {% if artist.top_tracks %}
 <div class="card mb-4">
