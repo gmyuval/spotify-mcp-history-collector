@@ -32,8 +32,12 @@ class ValkeyCacheBackend:
         if raw is None:
             return None
         try:
-            result: dict[str, Any] = json.loads(raw)
-            return result
+            parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                logger.warning("Cache entry for key %s is not a dict, deleting", key)
+                await self._client.delete(key)
+                return None
+            return parsed
         except json.JSONDecodeError, TypeError:
             logger.warning("Corrupt cache entry for key %s, deleting", key)
             await self._client.delete(key)

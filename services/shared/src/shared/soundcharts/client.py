@@ -128,7 +128,11 @@ class SoundchartsClient:
             logger.debug("Soundcharts song lookup returned %d", response.status_code)
             return None
 
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError:
+            logger.debug("Soundcharts song lookup returned invalid JSON")
+            return None
         obj = data.get("object", {})
         if not obj.get("uuid"):
             return None
@@ -143,7 +147,11 @@ class SoundchartsClient:
         if response.status_code != 200:
             return None
 
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError:
+            logger.debug("Soundcharts audio features returned invalid JSON")
+            return None
         obj = data.get("object", {})
         if not obj:
             return None

@@ -32,6 +32,7 @@ Add persistent caching infrastructure (Valkey), external metadata sources (Music
 | Firewall | Restricted to `spotify-mcp-prod` droplet (ID: 551762993) |
 
 **Production URI:**
+
 ```text
 rediss://default:<REDACTED>@spotify-mcp-valkey-do-user-840119-0.d.db.ondigitalocean.com:25061
 ```

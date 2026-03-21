@@ -49,31 +49,49 @@ class MusicBrainzClient:
     async def close(self) -> None:
         await self._client.aclose()
 
-    async def _rate_limited_get(self, path: str, params: dict[str, str] | None = None) -> dict[str, Any] | None:
-        """Make a rate-limited GET request (1 req/sec)."""
-        async with self._semaphore:
-            now = asyncio.get_running_loop().time()
-            wait = max(0, MB_RATE_LIMIT_INTERVAL - (now - self._last_request_time))
-            if wait > 0:
-                await asyncio.sleep(wait)
+    async def _rate_limited_get(
+        self, path: str, params: dict[str, str] | None = None, *, max_retries: int = 3
+    ) -> dict[str, Any] | None:
+        """Make a rate-limited GET request with retry on 503."""
+        for attempt in range(max_retries):
+            async with self._semaphore:
+                now = asyncio.get_running_loop().time()
+                wait = max(0, MB_RATE_LIMIT_INTERVAL - (now - self._last_request_time))
+                if wait > 0:
+                    await asyncio.sleep(wait)
 
-            try:
-                response = await self._client.get(path, params=params)
-                self._last_request_time = asyncio.get_running_loop().time()
+                try:
+                    response = await self._client.get(path, params=params)
+                    self._last_request_time = asyncio.get_running_loop().time()
 
-                if response.status_code == 503:
-                    logger.warning("MusicBrainz rate limited (503), backing off")
-                    await asyncio.sleep(MB_RATE_LIMIT_BACKOFF)
+                    if response.status_code == 503:
+                        if attempt < max_retries - 1:
+                            delay = MB_RATE_LIMIT_BACKOFF * (2**attempt)
+                            logger.debug("MusicBrainz 503, retrying in %.1fs (%d/%d)", delay, attempt + 1, max_retries)
+                            await asyncio.sleep(delay)
+                            continue
+                        logger.warning("MusicBrainz 503, exhausted retries")
+                        return None
+                    if response.status_code != 200:
+                        logger.debug("MusicBrainz %s returned %d", path, response.status_code)
+                        return None
+
+                    data: dict[str, Any] = response.json()
+                    return data
+                except httpx.HTTPError as e:
+                    if attempt < max_retries - 1:
+                        logger.debug("MusicBrainz request error: %s, retrying", e)
+                        await asyncio.sleep(MB_RATE_LIMIT_BACKOFF)
+                        continue
+                    logger.debug("MusicBrainz request error: %s, exhausted retries", e)
                     return None
-                if response.status_code != 200:
-                    logger.debug("MusicBrainz %s returned %d", path, response.status_code)
-                    return None
+        return None
 
-                data: dict[str, Any] = response.json()
-                return data
-            except httpx.HTTPError as e:
-                logger.debug("MusicBrainz request error: %s", e)
-                return None
+    @staticmethod
+    def _escape_lucene(value: str) -> str:
+        """Escape special Lucene query characters."""
+        special = r'+-&|!(){}[]^"~*?:\/'
+        return "".join(f"\\{c}" if c in special else c for c in value)
 
     async def lookup_recording_by_isrc(self, isrc: str) -> MBRecording | None:
         """Look up a recording by ISRC. Returns the best match or None."""
@@ -111,7 +129,7 @@ class MusicBrainzClient:
         if cached is not None:
             return MBRecording.model_validate(cached)
 
-        query = f'artist:"{artist}" AND recording:"{title}"'
+        query = f'artist:"{self._escape_lucene(artist)}" AND recording:"{self._escape_lucene(title)}"'
         data = await self._rate_limited_get(
             MB_RECORDING_PATH,
             params={
@@ -179,7 +197,7 @@ class MusicBrainzClient:
 
         data = await self._rate_limited_get(
             MB_ARTIST_SEARCH_PATH,
-            params={"query": f'artist:"{name}"', "fmt": "json", "limit": "1"},
+            params={"query": f'artist:"{self._escape_lucene(name)}"', "fmt": "json", "limit": "1"},
         )
         if not data:
             return None
@@ -193,7 +211,10 @@ class MusicBrainzClient:
             return None
 
         # Fetch full artist details (with genres) using the MBID
-        return await self.get_artist(mbid)
+        artist = await self.get_artist(mbid)
+        if artist is not None:
+            await self._cache.set(cache_key, artist.model_dump(by_alias=True), self._cache_ttl)
+        return artist
 
     async def get_release(self, mbid: str) -> MBRelease | None:
         """Look up a release by MBID."""

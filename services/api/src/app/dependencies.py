@@ -2,6 +2,7 @@
 
 import logging
 import os
+from urllib.parse import urlsplit
 
 from shared.cache.backend import CacheBackend
 from shared.cache.valkey_backend import ValkeyCacheBackend
@@ -19,7 +20,8 @@ def create_cache_backend() -> CacheBackend:
     """
     valkey_url = os.environ.get("VALKEY_URL", "")
     if valkey_url:
-        logger.info("Using Valkey cache backend at %s", valkey_url.split("@")[-1] if "@" in valkey_url else valkey_url)
+        parsed = urlsplit(valkey_url)
+        logger.info("Using Valkey cache backend at %s:%s", parsed.hostname, parsed.port)
         return ValkeyCacheBackend.from_url(valkey_url)
 
     # Lazy import to avoid circular dependency at module level

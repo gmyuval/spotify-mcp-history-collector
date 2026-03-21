@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from collector.settings import CollectorSettings
@@ -91,43 +92,62 @@ class AudioFeaturesEnrichmentService:
         total_enriched = 0
         batch_size = self._settings.ENRICH_BATCH_SIZE
 
-        for i in range(0, len(tracks_to_enrich), batch_size):
-            batch = tracks_to_enrich[i : i + batch_size]
-            track_id_map = {row.spotify_track_id: row.id for row in batch}
-            spotify_ids = list(track_id_map.keys())
+        try:
+            for i in range(0, len(tracks_to_enrich), batch_size):
+                batch = tracks_to_enrich[i : i + batch_size]
+                track_id_map = {row.spotify_track_id: row.id for row in batch}
+                spotify_ids = list(track_id_map.keys())
 
-            kwargs: dict[str, Any] = {"user_id": user_id, "session": session}
-            features = await chain.get_features(spotify_ids, **kwargs)
+                kwargs: dict[str, Any] = {"user_id": user_id, "session": session}
+                features = await chain.get_features(spotify_ids, **kwargs)
 
-            for spotify_id, data in features.items():
-                db_track_id = track_id_map.get(spotify_id)
-                if db_track_id is None:
-                    continue
-                af = AudioFeatures(
-                    track_id=db_track_id,
-                    danceability=data.danceability,
-                    energy=data.energy,
-                    key=data.key,
-                    loudness=data.loudness,
-                    mode=data.mode,
-                    speechiness=data.speechiness,
-                    acousticness=data.acousticness,
-                    instrumentalness=data.instrumentalness,
-                    liveness=data.liveness,
-                    valence=data.valence,
-                    tempo=data.tempo,
-                    time_signature=data.time_signature,
-                )
-                session.add(af)
-                total_enriched += 1
+                for spotify_id, data in features.items():
+                    db_track_id = track_id_map.get(spotify_id)
+                    if db_track_id is None:
+                        continue
+                    af = AudioFeatures(
+                        track_id=db_track_id,
+                        danceability=data.danceability,
+                        energy=data.energy,
+                        key=data.key,
+                        loudness=data.loudness,
+                        mode=data.mode,
+                        speechiness=data.speechiness,
+                        acousticness=data.acousticness,
+                        instrumentalness=data.instrumentalness,
+                        liveness=data.liveness,
+                        valence=data.valence,
+                        tempo=data.tempo,
+                        time_signature=data.time_signature,
+                    )
+                    session.add(af)
+                    total_enriched += 1
 
-            await session.flush()
+                try:
+                    await session.flush()
+                except IntegrityError:
+                    # Another worker may have inserted the same track_id — rollback batch and continue
+                    logger.debug("IntegrityError during enrichment batch flush, rolling back batch")
+                    await session.rollback()
+                    # Re-add the job_run since rollback removed it
+                    session.add(job_run)
+                    await session.flush()
 
-        # Finalize job
-        job_run.completed_at = datetime.now(UTC)
-        job_run.status = JobStatus.SUCCESS
-        job_run.records_inserted = total_enriched
-        await session.commit()
+            # Finalize job — success
+            job_run.completed_at = datetime.now(UTC)
+            job_run.status = JobStatus.SUCCESS
+            job_run.records_inserted = total_enriched
+            await session.commit()
+        except Exception:
+            # Finalize job — error
+            logger.exception("Error during audio features enrichment")
+            await session.rollback()
+            job_run.completed_at = datetime.now(UTC)
+            job_run.status = JobStatus.ERROR
+            job_run.error_message = "Enrichment failed — see logs"
+            session.add(job_run)
+            await session.commit()
+            raise
 
         logger.info("Enriched %d tracks with audio features", total_enriched)
         return total_enriched

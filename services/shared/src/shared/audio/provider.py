@@ -93,24 +93,21 @@ class SpotifyAudioFeaturesProvider:
 
             result: dict[str, AudioFeaturesData] = {}
             for item in response.audio_features or []:
-                if item is None:
+                if item is None or not item.id:
                     continue
-                track_id = item.get("id") or item.get("track_id")
-                if not track_id:
-                    continue
-                result[track_id] = AudioFeaturesData(
-                    danceability=item.get("danceability"),
-                    energy=item.get("energy"),
-                    key=item.get("key"),
-                    loudness=item.get("loudness"),
-                    mode=item.get("mode"),
-                    speechiness=item.get("speechiness"),
-                    acousticness=item.get("acousticness"),
-                    instrumentalness=item.get("instrumentalness"),
-                    liveness=item.get("liveness"),
-                    valence=item.get("valence"),
-                    tempo=item.get("tempo"),
-                    time_signature=item.get("time_signature"),
+                result[item.id] = AudioFeaturesData(
+                    danceability=item.danceability,
+                    energy=item.energy,
+                    key=item.key,
+                    loudness=item.loudness,
+                    mode=item.mode,
+                    speechiness=item.speechiness,
+                    acousticness=item.acousticness,
+                    instrumentalness=item.instrumentalness,
+                    liveness=item.liveness,
+                    valence=item.valence,
+                    tempo=item.tempo,
+                    time_signature=item.time_signature,
                 )
             return result
         except httpx.HTTPStatusError as e:

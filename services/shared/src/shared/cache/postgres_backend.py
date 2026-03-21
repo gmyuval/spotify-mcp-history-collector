@@ -46,9 +46,12 @@ class PostgresCacheBackend:
             if row is None:
                 return None
             try:
-                data: dict[str, Any] = json.loads(row.data_json)
+                parsed = json.loads(row.data_json)
             except json.JSONDecodeError, TypeError:
                 return None
+            if not isinstance(parsed, dict):
+                return None
+            data: dict[str, Any] = parsed
             ttl = data.pop("__ttl__", None)
             if ttl is not None:
                 expires_at = row.fetched_at + timedelta(seconds=ttl)
