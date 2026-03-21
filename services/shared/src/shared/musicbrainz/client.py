@@ -66,7 +66,11 @@ class MusicBrainzClient:
 
                     if response.status_code == 429 or response.status_code >= 500:
                         if attempt < max_retries - 1:
-                            delay = MB_RATE_LIMIT_BACKOFF * (2**attempt)
+                            retry_after = response.headers.get("Retry-After")
+                            if retry_after and retry_after.isdigit():
+                                delay = float(retry_after)
+                            else:
+                                delay = MB_RATE_LIMIT_BACKOFF * (2**attempt)
                             logger.debug(
                                 "MusicBrainz %d on %s, retrying in %.1fs (%d/%d)",
                                 response.status_code,
@@ -193,7 +197,7 @@ class MusicBrainzClient:
         artist = MBArtist(
             id=data.get("id", ""),
             name=data.get("name", ""),
-            **{"sort-name": data.get("sort-name", "")},
+            sort_name=data.get("sort-name", ""),
             disambiguation=data.get("disambiguation", ""),
             area=area_name,
             begin_date=begin_date,
