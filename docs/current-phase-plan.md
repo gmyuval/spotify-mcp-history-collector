@@ -46,7 +46,7 @@ rediss://default:<REDACTED>@spotify-mcp-valkey-do-user-840119-0.d.db.ondigitaloc
 | Source | Provides | Status |
 |--------|----------|--------|
 | **Spotify `get_audio_features()`** | danceability, energy, valence, tempo, etc. | Method exists — deprecated endpoint, may 403 |
-| **Soundcharts API** | Same audio features (0.0–1.0 scale) — paid alternative | New client needed, `SOUNDCHARTS_API_KEY` required |
+| **Soundcharts API** | Same audio features (0.0–1.0 scale) — paid alternative | New client needed, `SOUNDCHARTZ_X_APP_ID` / `SOUNDCHARTZ_X_API_KEY` required |
 | **MusicBrainz API** | Record label, release date, country, genre tags, MBIDs, external links | Free, 1 req/sec, ISRC lookup |
 | **Existing DB** | Track/artist/play data, empty `audio_features` table | Ready |
 | **Valkey** | Persistent TTL cache for all external API responses | Provisioned (see above) |
@@ -91,7 +91,7 @@ class SpotifyAudioFeaturesProvider:
     """Wraps SpotifyClient.get_audio_features(). On 403 → marks self disabled."""
 
 class SoundchartsAudioFeaturesProvider:
-    """Wraps SoundchartsClient. Requires SOUNDCHARTS_API_KEY."""
+    """Wraps SoundchartsClient. Requires SOUNDCHARTZ_X_APP_ID + SOUNDCHARTZ_X_API_KEY."""
 
 class ChainedAudioFeaturesProvider:
     """Tries providers in order. Spotify first (free), Soundcharts fallback (paid)."""
@@ -140,7 +140,8 @@ services/collector/src/collector/
 VALKEY_URL=rediss://default:<REDACTED>@spotify-mcp-valkey-do-user-840119-0.d.db.ondigitalocean.com:25061
 
 # Soundcharts — paid API for audio features
-SOUNDCHARTS_API_KEY=          # Obtain from developers.soundcharts.com
+SOUNDCHARTZ_X_APP_ID=          # Obtain from developers.soundcharts.com
+SOUNDCHARTZ_X_API_KEY=          # Obtain from developers.soundcharts.com
 
 # MusicBrainz — polite User-Agent contact email
 MUSICBRAINZ_CONTACT_EMAIL=admin@music.praxiscode.dev
@@ -155,7 +156,8 @@ ENRICH_MAX_PER_CYCLE=500
 
 ```dotenv
 VALKEY_URL=valkey://valkey:6379
-SOUNDCHARTS_API_KEY=          # Optional — leave empty to skip Soundcharts
+SOUNDCHARTZ_X_APP_ID=          # Optional — leave empty to skip Soundcharts
+SOUNDCHARTZ_X_API_KEY=          # Optional — leave empty to skip Soundcharts
 MUSICBRAINZ_CONTACT_EMAIL=dev@localhost
 ENRICH_AUDIO_FEATURES_ENABLED=true
 ENRICH_BATCH_SIZE=100
@@ -167,7 +169,7 @@ ENRICH_MAX_PER_CYCLE=500
 | Variable | If unset |
 |----------|----------|
 | `VALKEY_URL` | Falls back to `PostgresCacheBackend` |
-| `SOUNDCHARTS_API_KEY` | Soundcharts provider skipped in chain |
+| `SOUNDCHARTZ_X_APP_ID` / `SOUNDCHARTZ_X_API_KEY` | Soundcharts provider skipped in chain |
 | `MUSICBRAINZ_CONTACT_EMAIL` | MusicBrainz client uses generic User-Agent |
 | `ENRICH_AUDIO_FEATURES_ENABLED` | Defaults to `true` |
 
@@ -214,7 +216,7 @@ No new migrations required — `SpotifyEntityCache` table already exists for the
 
 - [ ] **NEW** `src/collector/enrichment.py` — `AudioFeaturesEnrichmentService`: uses `ChainedAudioFeaturesProvider`, batch fetch + upsert to `audio_features` table
 - [ ] `src/collector/runloop.py` — Add Phase 4 (enrichment) after polling
-- [ ] `src/collector/settings.py` — Add `ENRICH_*`, `VALKEY_URL`, `SOUNDCHARTS_API_KEY` settings
+- [ ] `src/collector/settings.py` — Add `ENRICH_*`, `VALKEY_URL`, `SOUNDCHARTZ_X_APP_ID` / `SOUNDCHARTZ_X_API_KEY` settings
 
 ### Explorer frontend (`services/explorer/`)
 
@@ -245,7 +247,7 @@ No new migrations required — `SpotifyEntityCache` table already exists for the
 
 ### Deploy
 
-- [ ] `.github/workflows/deploy.yml` — Add `VALKEY_URL`, `SOUNDCHARTS_API_KEY`, `MUSICBRAINZ_CONTACT_EMAIL`, `ENRICH_*` to env
+- [ ] `.github/workflows/deploy.yml` — Add `VALKEY_URL`, `SOUNDCHARTZ_X_APP_ID` / `SOUNDCHARTZ_X_API_KEY`, `MUSICBRAINZ_CONTACT_EMAIL`, `ENRICH_*` to env
 - [ ] Verify Valkey firewall allows `spotify-mcp-prod` droplet
 
 ### Version bump
@@ -383,7 +385,7 @@ Phase 4: Audio features enrichment  <-- NEW
 3. Call `ChainedAudioFeaturesProvider.get_features(track_ids)`:
    - Try `SpotifyAudioFeaturesProvider` first (free, uses any active user's token)
    - On 403 (deprecated endpoint) → fall through to `SoundchartsAudioFeaturesProvider`
-   - On no `SOUNDCHARTS_API_KEY` → skip, log warning
+   - On no `SOUNDCHARTZ_X_APP_ID` / `SOUNDCHARTZ_X_API_KEY` → skip, log warning
 4. Upsert results into `audio_features` table
 5. Stop after `ENRICH_MAX_PER_CYCLE` tracks (default 500) to avoid hogging the cycle
 6. Record job in `job_runs` table with `job_type=enrich`

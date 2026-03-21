@@ -52,7 +52,7 @@ class MusicBrainzClient:
     async def _rate_limited_get(
         self, path: str, params: dict[str, str] | None = None, *, max_retries: int = 3
     ) -> dict[str, Any] | None:
-        """Make a rate-limited GET request with retry on 503."""
+        """Make a rate-limited GET request with retry on 429/503/5xx."""
         for attempt in range(max_retries):
             async with self._semaphore:
                 now = asyncio.get_running_loop().time()
@@ -64,20 +64,34 @@ class MusicBrainzClient:
                     response = await self._client.get(path, params=params)
                     self._last_request_time = asyncio.get_running_loop().time()
 
-                    if response.status_code == 503:
+                    if response.status_code == 429 or response.status_code >= 500:
                         if attempt < max_retries - 1:
                             delay = MB_RATE_LIMIT_BACKOFF * (2**attempt)
-                            logger.debug("MusicBrainz 503, retrying in %.1fs (%d/%d)", delay, attempt + 1, max_retries)
+                            logger.debug(
+                                "MusicBrainz %d on %s, retrying in %.1fs (%d/%d)",
+                                response.status_code,
+                                path,
+                                delay,
+                                attempt + 1,
+                                max_retries,
+                            )
                             await asyncio.sleep(delay)
                             continue
-                        logger.warning("MusicBrainz 503, exhausted retries")
+                        logger.warning("MusicBrainz %d on %s, exhausted retries", response.status_code, path)
                         return None
                     if response.status_code != 200:
                         logger.debug("MusicBrainz %s returned %d", path, response.status_code)
                         return None
 
-                    data: dict[str, Any] = response.json()
-                    return data
+                    try:
+                        parsed = response.json()
+                    except ValueError:
+                        logger.warning("MusicBrainz %s returned invalid JSON", path)
+                        return None
+                    if not isinstance(parsed, dict):
+                        logger.warning("MusicBrainz %s returned non-object JSON", path)
+                        return None
+                    return parsed
                 except httpx.HTTPError as e:
                     if attempt < max_retries - 1:
                         logger.debug("MusicBrainz request error: %s, retrying", e)

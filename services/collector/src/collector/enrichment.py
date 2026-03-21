@@ -101,6 +101,7 @@ class AudioFeaturesEnrichmentService:
                 kwargs: dict[str, Any] = {"user_id": user_id, "session": session}
                 features = await chain.get_features(spotify_ids, **kwargs)
 
+                batch_count = 0
                 for spotify_id, data in features.items():
                     db_track_id = track_id_map.get(spotify_id)
                     if db_track_id is None:
@@ -121,10 +122,11 @@ class AudioFeaturesEnrichmentService:
                         time_signature=data.time_signature,
                     )
                     session.add(af)
-                    total_enriched += 1
+                    batch_count += 1
 
                 try:
                     await session.flush()
+                    total_enriched += batch_count
                 except IntegrityError:
                     # Another worker may have inserted the same track_id — rollback batch and continue
                     logger.debug("IntegrityError during enrichment batch flush, rolling back batch")
