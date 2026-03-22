@@ -34,9 +34,9 @@ class ProfileRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "profile.html",
             {
-                "request": request,
                 "active_page": "profile",
                 "profile": profile_data,
                 "api_public_url": settings.API_PUBLIC_URL,

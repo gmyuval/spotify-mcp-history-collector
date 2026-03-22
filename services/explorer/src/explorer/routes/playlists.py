@@ -40,9 +40,9 @@ class PlaylistsRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "playlists.html",
             {
-                "request": request,
                 "active_page": "playlists",
                 "playlists": playlists,
                 "error": error,
@@ -73,9 +73,9 @@ class PlaylistsRouter:
         fetch_error = request.query_params.get("fetch_error")
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "playlist_detail.html",
             {
-                "request": request,
                 "active_page": "playlists",
                 "playlist": playlist,
                 "error": error,

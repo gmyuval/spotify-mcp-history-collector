@@ -52,9 +52,9 @@ class DashboardRouter:
         active_imports, active_jobs = await self._fetch_active_operations(api)
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "dashboard.html",
             {
-                "request": request,
                 "active_page": "dashboard",
                 "sync_status": sync_status,
                 "recent_jobs": recent_jobs,
@@ -74,8 +74,9 @@ class DashboardRouter:
             sync_status = {}
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_sync_status.html",
-            {"request": request, "sync_status": sync_status},
+            {"sync_status": sync_status},
         )
 
     async def active_operations_partial(self, request: Request) -> HTMLResponse:
@@ -84,9 +85,9 @@ class DashboardRouter:
         active_imports, active_jobs = await self._fetch_active_operations(api)
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_active_operations.html",
             {
-                "request": request,
                 "active_imports": active_imports,
                 "active_jobs": active_jobs,
             },

@@ -189,8 +189,8 @@
 {% if track.audio_features %}
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 <script>
-var chart = echarts.init(document.getElementById('audioFeaturesChart'), 'dark');
-chart.setOption({
+var chartEl = document.getElementById('audioFeaturesChart');
+var chartOpts = {
   radar: {
     indicator: [
       {name: 'Danceability', max: 1},
@@ -217,8 +217,15 @@ chart.setOption({
       areaStyle: {opacity: 0.3}
     }]
   }]
-});
+};
+var chart = echarts.init(chartEl, SpotifyMCP.getEchartsTheme());
+chart.setOption(chartOpts);
 window.addEventListener('resize', function() { chart.resize(); });
+SpotifyMCP.onThemeChange(function() {
+  chart.dispose();
+  chart = echarts.init(chartEl, SpotifyMCP.getEchartsTheme());
+  chart.setOption(chartOpts);
+});
 </script>
 {% endif %}
 {% endblock %}

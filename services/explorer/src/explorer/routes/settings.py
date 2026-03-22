@@ -78,9 +78,9 @@ class SettingsRouter:
             error = request.query_params.get("error")
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "settings/tokens.html",
             {
-                "request": request,
                 "active_page": "settings",
                 "tokens": tokens_data.get("items", []),
                 "error": error,
