@@ -97,7 +97,7 @@ class ExplorerRouter:
         self,
         user_id: RequireOwnDataView,
         session: DBSession,
-        days: int = Query(default=90, ge=1),
+        days: int = Query(default=90, ge=1, le=3650),
     ) -> HeatmapData:
         return await self._service.get_heatmap(user_id, session, days=days)
 
@@ -105,7 +105,7 @@ class ExplorerRouter:
         self,
         user_id: RequireOwnDataView,
         session: DBSession,
-        days: int = Query(default=90, ge=1),
+        days: int = Query(default=90, ge=1, le=3650),
         bucket: str = Query(default="week", pattern="^(day|week|month)$"),
     ) -> TimelineData:
         return await self._service.get_timeline(user_id, session, days=days, bucket=bucket)

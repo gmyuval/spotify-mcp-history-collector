@@ -17,8 +17,7 @@
   }
 
   var el = document.getElementById('heatmapChart');
-  var chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
-  chart.setOption({
+  var opts = {
     tooltip: {
       position: 'top',
       formatter: function(p) {
@@ -55,12 +54,14 @@
         itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' }
       }
     }]
-  });
+  };
+  var chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
+  chart.setOption(opts);
   window.addEventListener('resize', function() { chart.resize(); });
   SpotifyMCP.onThemeChange(function() {
     chart.dispose();
     chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
-    chart.setOption(chart.getOption ? chart.getOption() : {});
+    chart.setOption(opts);
   });
 })();
 </script>

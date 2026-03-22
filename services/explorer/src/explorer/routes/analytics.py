@@ -46,7 +46,7 @@ class AnalyticsRouter:
             return token  # type: ignore[return-value]
 
         api: ExplorerApiClient = request.app.state.api
-        days = safe_int(request.query_params.get("days"), 90)
+        days = max(1, safe_int(request.query_params.get("days"), 90))
         data: dict[str, object] = {}
 
         try:
@@ -69,7 +69,7 @@ class AnalyticsRouter:
             return token  # type: ignore[return-value]
 
         api: ExplorerApiClient = request.app.state.api
-        days = safe_int(request.query_params.get("days"), 90)
+        days = max(1, safe_int(request.query_params.get("days"), 90))
         bucket = request.query_params.get("bucket", "week")
         if bucket not in ("day", "week", "month"):
             bucket = "week"

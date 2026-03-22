@@ -163,14 +163,22 @@ class TestHeatmap:
         resp = client.get("/api/me/analytics/heatmap")
         assert resp.status_code == 401
 
-    def test_heatmap_empty_for_short_window(
+    def test_heatmap_short_window(
         self, client: TestClient, seeded_data: dict[str, object], jwt_service: JWTService
     ) -> None:
-        """With plays spread over 10 days, a 0-day window should be empty."""
+        """With plays spread over 10 days, a 1-day window should return only recent plays."""
         user_id: int = seeded_data["user_id"]  # type: ignore[assignment]
-        # Plays are up to 9 days ago, so days=0 won't match any (cutoff=now)
-        # But days must be >= 1, so use days=1 — should still find recent plays
-        resp = client.get("/api/me/analytics/heatmap?days=99999", cookies=_auth_cookies(jwt_service, user_id))
+        resp = client.get("/api/me/analytics/heatmap?days=1", cookies=_auth_cookies(jwt_service, user_id))
+        assert resp.status_code == 200
+        total = sum(c["play_count"] for c in resp.json()["cells"])
+        assert total < 10  # not all plays — only those within 1 day
+
+    def test_heatmap_all_time(
+        self, client: TestClient, seeded_data: dict[str, object], jwt_service: JWTService
+    ) -> None:
+        """All-time window should return all 10 plays."""
+        user_id: int = seeded_data["user_id"]  # type: ignore[assignment]
+        resp = client.get("/api/me/analytics/heatmap?days=3650", cookies=_auth_cookies(jwt_service, user_id))
         assert resp.status_code == 200
         total = sum(c["play_count"] for c in resp.json()["cells"])
         assert total == 10
@@ -232,7 +240,7 @@ class TestTimeline:
     ) -> None:
         user_id: int = seeded_data["user_id"]  # type: ignore[assignment]
         resp = client.get(
-            "/api/me/analytics/timeline?days=99999&bucket=day", cookies=_auth_cookies(jwt_service, user_id)
+            "/api/me/analytics/timeline?days=3650&bucket=day", cookies=_auth_cookies(jwt_service, user_id)
         )
         assert resp.status_code == 200
         total = sum(b["play_count"] for b in resp.json()["buckets"])
