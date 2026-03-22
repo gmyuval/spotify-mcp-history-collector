@@ -13,6 +13,7 @@ from app.auth.jwt import JWTService
 from app.main import app
 from app.settings import AppSettings, get_settings
 from shared.db.base import Base
+from shared.db.enums import TrackSource
 from shared.db.models.music import Artist, Play, Track, TrackArtist
 from shared.db.models.rbac import Permission, Role, RolePermission, UserRole
 from shared.db.models.user import User
@@ -81,7 +82,7 @@ async def seeded_data(async_engine: AsyncEngine) -> dict[str, object]:
                     track_id=track.id,
                     played_at=now - timedelta(days=i, hours=i % 6),
                     ms_played=200000,
-                    source="spotify_api",
+                    source=TrackSource.SPOTIFY_API,
                 )
             )
 
