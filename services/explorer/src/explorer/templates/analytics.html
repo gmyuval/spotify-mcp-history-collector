@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Analytics{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2 class="mb-0">Analytics</h2>
+  <ul class="nav nav-pills nav-pills-sm" id="time-window-pills">
+    {% set windows = [("7", "7d"), ("30", "30d"), ("90", "90d"), ("365", "1y"), ("99999", "All")] %}
+    {% for value, label in windows %}
+    <li class="nav-item">
+      <a class="nav-link {% if (days | string) == value %}active{% endif %}"
+         href="#"
+         data-days="{{ value }}"
+         onclick="setAnalyticsWindow(this, '{{ value }}'); return false;">{{ label }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+
+<!-- Chart placeholders — populated via HTMX in subsequent PRs -->
+<div class="row g-4">
+  <div class="col-12" id="heatmap-container">
+    <div class="card">
+      <div class="card-header"><strong>Listening Heatmap</strong></div>
+      <div class="card-body text-center text-muted py-5">
+        <p class="mb-0">Weekday x Hour heatmap — coming soon</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12" id="timeline-container">
+    <div class="card">
+      <div class="card-header"><strong>Listening Timeline</strong></div>
+      <div class="card-body text-center text-muted py-5">
+        <p class="mb-0">Plays over time — coming soon</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6" id="genres-container">
+    <div class="card">
+      <div class="card-header"><strong>Genre Distribution</strong></div>
+      <div class="card-body text-center text-muted py-5">
+        <p class="mb-0">Genre breakdown — coming soon</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6" id="discovery-container">
+    <div class="card">
+      <div class="card-header"><strong>Discovery Rate</strong></div>
+      <div class="card-body text-center text-muted py-5">
+        <p class="mb-0">New vs. repeat tracks — coming soon</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function setAnalyticsWindow(el, days) {
+  // Toggle active pill
+  document.querySelectorAll('#time-window-pills .nav-link').forEach(function(e) {
+    e.classList.remove('active');
+  });
+  el.classList.add('active');
+  // Future: HTMX-trigger chart partial reloads using the selected days value
+}
+</script>
+{% endblock %}

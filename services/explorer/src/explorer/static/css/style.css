@@ -1,5 +1,8 @@
-/* Spotify-inspired dark theme */
-:root {
+/* Spotify-inspired adaptive theme */
+
+/* Dark theme (default) */
+:root,
+[data-bs-theme="dark"] {
   --bg-primary: #121212;
   --bg-card: #1e1e1e;
   --bg-card-hover: #282828;
@@ -10,6 +13,44 @@
   --text-secondary: #b3b3b3;
   --text-muted: #727272;
   --border: #333333;
+  --table-striped-bg: rgba(255, 255, 255, 0.03);
+  --table-hover-bg: rgba(255, 255, 255, 0.06);
+  --green-bg-subtle: rgba(29, 185, 84, 0.1);
+  --green-border-subtle: rgba(29, 185, 84, 0.3);
+  --red-accent: #ff6b6b;
+  --red-bg-subtle: rgba(255, 107, 107, 0.1);
+  --red-border-subtle: rgba(255, 107, 107, 0.3);
+  --blue-accent: #6495ed;
+  --blue-bg-subtle: rgba(100, 149, 237, 0.2);
+  --yellow-accent: #ffc107;
+  --yellow-bg-subtle: rgba(255, 193, 7, 0.2);
+  --focus-shadow: rgba(29, 185, 84, 0.25);
+}
+
+/* Light theme */
+[data-bs-theme="light"] {
+  --bg-primary: #f8f9fa;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f0f0f0;
+  --bg-nav: #ffffff;
+  --green: #1DB954;
+  --green-hover: #1aa34a;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --text-muted: #adb5bd;
+  --border: #dee2e6;
+  --table-striped-bg: rgba(0, 0, 0, 0.02);
+  --table-hover-bg: rgba(0, 0, 0, 0.04);
+  --green-bg-subtle: rgba(29, 185, 84, 0.08);
+  --green-border-subtle: rgba(29, 185, 84, 0.25);
+  --red-accent: #dc3545;
+  --red-bg-subtle: rgba(220, 53, 69, 0.08);
+  --red-border-subtle: rgba(220, 53, 69, 0.25);
+  --blue-accent: #0d6efd;
+  --blue-bg-subtle: rgba(13, 110, 253, 0.08);
+  --yellow-accent: #ffc107;
+  --yellow-bg-subtle: rgba(255, 193, 7, 0.1);
+  --focus-shadow: rgba(29, 185, 84, 0.25);
 }
 
 body {
@@ -42,6 +83,29 @@ body {
 
 .nav-link.active {
   border-bottom: 2px solid var(--green);
+}
+
+/* Theme toggle */
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.theme-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* Cards */
@@ -84,8 +148,8 @@ body {
 .table {
   color: var(--text-primary);
   --bs-table-bg: transparent;
-  --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
-  --bs-table-hover-bg: rgba(255, 255, 255, 0.06);
+  --bs-table-striped-bg: var(--table-striped-bg);
+  --bs-table-hover-bg: var(--table-hover-bg);
 }
 
 .table th {
@@ -220,7 +284,7 @@ a:hover {
   background-color: var(--bg-card-hover);
   border-color: var(--green);
   color: var(--text-primary);
-  box-shadow: 0 0 0 0.2rem rgba(29, 185, 84, 0.25);
+  box-shadow: 0 0 0 0.2rem var(--focus-shadow);
 }
 
 .form-control::placeholder {
@@ -266,26 +330,26 @@ a:hover {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--green);
-  background-color: rgba(29, 185, 84, 0.1);
-  border: 1px solid rgba(29, 185, 84, 0.3);
+  background-color: var(--green-bg-subtle);
+  border: 1px solid var(--green-border-subtle);
   border-radius: 500px;
   transition: all 0.15s;
 }
 
 .taste-tag:hover {
-  background-color: rgba(29, 185, 84, 0.2);
+  background-color: var(--green-border-subtle);
   border-color: var(--green);
 }
 
 .taste-tag-avoid {
-  color: #ff6b6b;
-  background-color: rgba(255, 107, 107, 0.1);
-  border-color: rgba(255, 107, 107, 0.3);
+  color: var(--red-accent);
+  background-color: var(--red-bg-subtle);
+  border-color: var(--red-border-subtle);
 }
 
 .taste-tag-avoid:hover {
-  background-color: rgba(255, 107, 107, 0.2);
-  border-color: #ff6b6b;
+  background-color: var(--red-border-subtle);
+  border-color: var(--red-accent);
 }
 
 .taste-tag-remove {
@@ -305,27 +369,27 @@ a:hover {
 
 /* Event type badges */
 .event-badge-like {
-  background-color: rgba(29, 185, 84, 0.2) !important;
+  background-color: var(--green-bg-subtle) !important;
   color: var(--green) !important;
 }
 
 .event-badge-dislike {
-  background-color: rgba(255, 107, 107, 0.2) !important;
-  color: #ff6b6b !important;
+  background-color: var(--red-bg-subtle) !important;
+  color: var(--red-accent) !important;
 }
 
 .event-badge-rule {
-  background-color: rgba(100, 149, 237, 0.2) !important;
-  color: #6495ed !important;
+  background-color: var(--blue-bg-subtle) !important;
+  color: var(--blue-accent) !important;
 }
 
 .event-badge-feedback {
-  background-color: rgba(255, 193, 7, 0.2) !important;
-  color: #ffc107 !important;
+  background-color: var(--yellow-bg-subtle) !important;
+  color: var(--yellow-accent) !important;
 }
 
 .event-badge-note {
-  background-color: rgba(108, 117, 125, 0.2) !important;
+  background-color: var(--table-striped-bg) !important;
   color: var(--text-secondary) !important;
 }
 

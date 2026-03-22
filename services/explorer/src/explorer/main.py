@@ -68,6 +68,7 @@ class ExplorerApp:
     def _setup_routers(self) -> None:
         from explorer.routes import (
             albums_router,
+            analytics_router,
             artists_router,
             auth_router,
             dashboard_router,
@@ -91,6 +92,7 @@ class ExplorerApp:
         # memory_playlists must come before playlists to avoid /{spotify_playlist_id} match
         self.app.include_router(memory_playlists_router, prefix="/playlists/memory", tags=["memory-playlists"])
         self.app.include_router(playlists_router, prefix="/playlists", tags=["playlists"])
+        self.app.include_router(analytics_router, tags=["analytics"])
         self.app.include_router(profile_router)
         self.app.include_router(taste_router)
         self.app.include_router(settings_router)
