@@ -3,8 +3,9 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Integer, case, cast, distinct, extract, func, literal, or_, select
+from sqlalchemy import Integer, String, case, cast, distinct, extract, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.expression import ColumnElement
 
 from shared.db.enums import TrackSource
 from shared.db.models.music import Artist, Play, Track, TrackArtist
@@ -151,6 +152,44 @@ class HistoryQueries:
             .where(Play.user_id == user_id, Play.played_at >= cutoff)
             .group_by(weekday_expr, hour_expr)
             .order_by(weekday_expr, hour_expr)
+        )
+        result = await session.execute(stmt)
+        return [dict(row._mapping) for row in result.all()]
+
+    @staticmethod
+    async def timeline(
+        user_id: int,
+        session: AsyncSession,
+        days: int = 90,
+        bucket: str = "week",
+    ) -> list[dict[str, object]]:
+        """Plays aggregated by time bucket (day/week/month)."""
+        cutoff = HistoryQueries._cutoff(days)
+        dialect = session.bind.dialect.name if session.bind else "postgresql"
+
+        period_expr: ColumnElement[Any]
+        if dialect == "sqlite":
+            if bucket == "month":
+                period_expr = func.strftime("%Y-%m-01", Play.played_at)
+            elif bucket == "week":
+                # SQLite: Monday-based week start via strftime('%W') + year
+                period_expr = func.strftime("%Y-W%W", Play.played_at)
+            else:  # day
+                period_expr = func.strftime("%Y-%m-%d", Play.played_at)
+        else:
+            period_expr = cast(func.date_trunc(bucket, Play.played_at), String)
+
+        stmt = (
+            select(
+                period_expr.label("period"),
+                func.count(Play.id).label("play_count"),
+                func.coalesce(func.sum(func.coalesce(Play.ms_played, Track.duration_ms)), 0).label("ms_played"),
+            )
+            .select_from(Play)
+            .join(Track, Play.track_id == Track.id)
+            .where(Play.user_id == user_id, Play.played_at >= cutoff)
+            .group_by(period_expr)
+            .order_by(period_expr)
         )
         result = await session.execute(stmt)
         return [dict(row._mapping) for row in result.all()]
