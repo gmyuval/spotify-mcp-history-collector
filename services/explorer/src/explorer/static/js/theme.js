@@ -16,10 +16,10 @@
 
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-bs-theme', theme);
-    localStorage.setItem('theme', theme);
+    try { localStorage.setItem('theme', theme); } catch (e) { /* non-fatal */ }
     syncIcons(theme);
     for (var i = 0; i < listeners.length; i++) {
-      listeners[i](theme);
+      try { listeners[i](theme); } catch (e) { /* isolate listener failures */ }
     }
   }
 
@@ -55,6 +55,6 @@
     return currentTheme() === 'dark' ? 'dark' : null;
   };
   window.SpotifyMCP.onThemeChange = function (fn) {
-    listeners.push(fn);
+    if (typeof fn === 'function') listeners.push(fn);
   };
 })();

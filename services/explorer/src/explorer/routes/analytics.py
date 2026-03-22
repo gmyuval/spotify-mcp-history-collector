@@ -20,9 +20,9 @@ class AnalyticsRouter:
             return token  # type: ignore[return-value]
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "analytics.html",
             {
-                "request": request,
                 "active_page": "analytics",
                 "days": 90,
             },

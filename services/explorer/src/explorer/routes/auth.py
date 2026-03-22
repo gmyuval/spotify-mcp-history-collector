@@ -23,7 +23,7 @@ class AuthRouter:
         if request.cookies.get("access_token"):
             return RedirectResponse(url="/dashboard", status_code=303)  # type: ignore[return-value]
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
-            "login.html", {"request": request}
+            request, "login.html", {}
         )
 
     async def logout(self, request: Request) -> Response:  # noqa: ARG002

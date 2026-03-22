@@ -39,9 +39,9 @@ class HistoryRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "history.html",
             {
-                "request": request,
                 "active_page": "history",
                 "items": data.get("items", []),
                 "total": data.get("total", 0),
@@ -71,9 +71,9 @@ class HistoryRouter:
             data = {"items": [], "total": 0}
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_history_table.html",
             {
-                "request": request,
                 "items": data.get("items", []),
                 "total": data.get("total", 0),
                 "limit": limit,

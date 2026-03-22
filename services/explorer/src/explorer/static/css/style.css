@@ -103,6 +103,11 @@ body {
   border-color: var(--text-muted);
 }
 
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
 .theme-toggle svg {
   width: 18px;
   height: 18px;

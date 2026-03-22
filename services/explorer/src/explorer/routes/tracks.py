@@ -61,9 +61,9 @@ class TracksRouter:
 
         data = context["data"]
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "tracks.html",
             {
-                "request": request,
                 "active_page": "tracks",
                 "items": data.get("items", []),
                 "total": data.get("total", 0),
@@ -100,9 +100,9 @@ class TracksRouter:
 
         data = context["data"]
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_tracks_table.html",
             {
-                "request": request,
                 "items": data.get("items", []),
                 "total": data.get("total", 0),
                 "limit": context["limit"],
@@ -128,9 +128,9 @@ class TracksRouter:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
             if e.status_code == 404:
                 return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                    request,
                     "error.html",
                     {
-                        "request": request,
                         "active_page": "tracks",
                         "error_title": "Track Not Found",
                         "error_message": "This track does not exist or you have no listening data for it.",
@@ -141,9 +141,9 @@ class TracksRouter:
                 )
             logger.warning("Error loading track %d: %s (status %d)", track_id, e.detail, e.status_code)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "error.html",
                 {
-                    "request": request,
                     "active_page": "tracks",
                     "error_title": "Error Loading Track",
                     "error_message": "An unexpected error occurred. Please try again later.",
@@ -154,8 +154,9 @@ class TracksRouter:
             )
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "track_detail.html",
-            {"request": request, "active_page": "tracks", "track": data},
+            {"active_page": "tracks", "track": data},
         )
 
 

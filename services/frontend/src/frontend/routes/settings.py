@@ -33,9 +33,9 @@ class SettingsRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "settings.html",
             {
-                "request": request,
                 "active_page": "settings",
                 "by_category": by_category,
                 "error": error,
@@ -57,14 +57,15 @@ class SettingsRouter:
         try:
             updated = await api.update_setting(key, value)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_setting_row.html",
-                {"request": request, "setting": updated, "flash": "Saved"},
+                {"setting": updated, "flash": "Saved"},
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_setting_row.html",
                 {
-                    "request": request,
                     "setting": {"key": key, "value_json": raw_value, "description": "", "category": ""},
                     "flash_error": e.detail,
                 },
@@ -89,13 +90,15 @@ class SettingsRouter:
             if setting is None:
                 setting = {"key": key, "value_json": None, "description": "", "category": ""}
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_setting_row.html",
-                {"request": request, "setting": setting, "flash": "Reset to default"},
+                {"setting": setting, "flash": "Reset to default"},
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": e.detail},
+                {"alert_type": "danger", "message": e.detail},
             )
 
 

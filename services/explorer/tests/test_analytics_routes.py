@@ -1,7 +1,5 @@
 """Tests for analytics page routes."""
 
-from unittest.mock import AsyncMock
-
 from fastapi.testclient import TestClient
 
 # --- Analytics page ---
@@ -13,7 +11,7 @@ def test_analytics_requires_login(client: TestClient) -> None:
     assert response.headers["location"] == "/login"
 
 
-def test_analytics_page(client: TestClient, mock_api: AsyncMock) -> None:
+def test_analytics_page(client: TestClient) -> None:
     client.cookies.set("access_token", "test-jwt")
     response = client.get("/analytics")
     assert response.status_code == 200

@@ -9,9 +9,9 @@
     {% for value, label in windows %}
     <li class="nav-item">
       <a class="nav-link {% if (days | string) == value %}active{% endif %}"
+         {% if (days | string) == value %}aria-current="page"{% endif %}
          href="#"
-         data-days="{{ value }}"
-         onclick="setAnalyticsWindow(this, '{{ value }}'); return false;">{{ label }}</a>
+         data-days="{{ value }}">{{ label }}</a>
     </li>
     {% endfor %}
   </ul>
@@ -59,13 +59,21 @@
 
 {% block scripts %}
 <script>
-function setAnalyticsWindow(el, days) {
-  // Toggle active pill
-  document.querySelectorAll('#time-window-pills .nav-link').forEach(function(e) {
-    e.classList.remove('active');
+(function() {
+  var pills = document.getElementById('time-window-pills');
+  if (!pills) return;
+  pills.addEventListener('click', function(event) {
+    var link = event.target.closest('.nav-link[data-days]');
+    if (!link) return;
+    event.preventDefault();
+    pills.querySelectorAll('.nav-link').forEach(function(e) {
+      e.classList.remove('active');
+      e.removeAttribute('aria-current');
+    });
+    link.classList.add('active');
+    link.setAttribute('aria-current', 'page');
+    // Future: HTMX-trigger chart partial reloads using link.dataset.days
   });
-  el.classList.add('active');
-  // Future: HTMX-trigger chart partial reloads using the selected days value
-}
+})();
 </script>
 {% endblock %}

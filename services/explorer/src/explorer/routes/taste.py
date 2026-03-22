@@ -39,9 +39,9 @@ class TasteRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "taste.html",
             {
-                "request": request,
                 "active_page": "taste",
                 "data": taste_data,
                 "error": error,
@@ -133,9 +133,9 @@ class TasteRouter:
             pass
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_taste_events.html",
             {
-                "request": request,
                 "events": events_data,
             },
         )
