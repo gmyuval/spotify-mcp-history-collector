@@ -57,9 +57,9 @@ class DashboardRouter:
             logger.warning("dashboard memory playlists fetch failed", extra={"status_code": e.status_code})
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "dashboard.html",
             {
-                "request": request,
                 "active_page": "dashboard",
                 "data": dashboard_data,
                 "days": 30,
@@ -86,9 +86,9 @@ class DashboardRouter:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_top_content.html",
             {
-                "request": request,
                 "data": dashboard_data,
                 "days": days,
             },

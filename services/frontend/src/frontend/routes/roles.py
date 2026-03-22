@@ -35,9 +35,9 @@ class RolesRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "roles.html",
             {
-                "request": request,
                 "active_page": "roles",
                 "roles": roles,
                 "permissions": permissions,
@@ -55,20 +55,23 @@ class RolesRouter:
 
         if not name:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": "Role name is required"},
+                {"alert_type": "danger", "message": "Role name is required"},
             )
 
         try:
             await api.create_role(name=name, description=description, permission_codenames=perm_codenames)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "success", "message": f"Role '{name}' created"},
+                {"alert_type": "success", "message": f"Role '{name}' created"},
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": e.detail},
+                {"alert_type": "danger", "message": e.detail},
             )
 
     async def update_role(self, request: Request, role_id: int) -> HTMLResponse:
@@ -87,13 +90,15 @@ class RolesRouter:
                 permission_codenames=perm_codenames,
             )
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "success", "message": "Role updated"},
+                {"alert_type": "success", "message": "Role updated"},
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": e.detail},
+                {"alert_type": "danger", "message": e.detail},
             )
 
     async def delete_role(self, request: Request, role_id: int) -> HTMLResponse:
@@ -102,13 +107,15 @@ class RolesRouter:
         try:
             result = await api.delete_role(role_id)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "success", "message": result.get("message", "Role deleted")},
+                {"alert_type": "success", "message": result.get("message", "Role deleted")},
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": e.detail},
+                {"alert_type": "danger", "message": e.detail},
             )
 
 

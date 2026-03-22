@@ -47,9 +47,9 @@ class MemoryPlaylistsRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "memory_playlists.html",
             {
-                "request": request,
                 "active_page": "playlists",
                 "data": playlists_data,
                 "error": error,
@@ -74,9 +74,9 @@ class MemoryPlaylistsRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "memory_playlist_detail.html",
             {
-                "request": request,
                 "active_page": "playlists",
                 "playlist": playlist,
                 "error": error,
@@ -101,9 +101,9 @@ class MemoryPlaylistsRouter:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_memory_playlist_events.html",
             {
-                "request": request,
                 "events": events_data,
                 "playlist_id": playlist_id,
             },

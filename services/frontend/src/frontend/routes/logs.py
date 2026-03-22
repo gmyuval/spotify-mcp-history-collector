@@ -34,9 +34,9 @@ class LogsRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "logs.html",
             {
-                "request": request,
                 "active_page": "logs",
                 "logs": data.get("items", []),
                 "total": data.get("total", 0),
@@ -56,9 +56,9 @@ class LogsRouter:
             data = {"items": [], "total": 0}
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_logs_table.html",
             {
-                "request": request,
                 "logs": data.get("items", []),
                 "total": data.get("total", 0),
                 **params,
@@ -78,26 +78,27 @@ class LogsRouter:
                 raise ValueError("days must be positive")
             result = await api.purge_logs(older_than_days=days)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
                 {
-                    "request": request,
                     "alert_type": "success",
                     "message": result.get("message", "Logs purged"),
                 },
             )
         except ValueError:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
                 {
-                    "request": request,
                     "alert_type": "danger",
                     "message": "Invalid number of days.",
                 },
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": e.detail},
+                {"alert_type": "danger", "message": e.detail},
             )
 
     @staticmethod

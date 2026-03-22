@@ -34,9 +34,9 @@ class AlbumsRouter:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
             if e.status_code == 404:
                 return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                    request,
                     "error.html",
                     {
-                        "request": request,
                         "active_page": "tracks",
                         "error_title": "Album Not Found",
                         "error_message": "This album does not exist or you have no listening data for it.",
@@ -47,9 +47,9 @@ class AlbumsRouter:
                 )
             logger.warning("Error loading album %s: %s (status %d)", album_spotify_id, e.detail, e.status_code)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "error.html",
                 {
-                    "request": request,
                     "active_page": "tracks",
                     "error_title": "Error Loading Album",
                     "error_message": "An unexpected error occurred. Please try again later.",
@@ -60,8 +60,9 @@ class AlbumsRouter:
             )
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "album_detail.html",
-            {"request": request, "active_page": "tracks", "album": data},
+            {"active_page": "tracks", "album": data},
         )
 
 

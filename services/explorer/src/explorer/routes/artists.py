@@ -61,9 +61,9 @@ class ArtistsRouter:
 
         data = context["data"]
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "artists.html",
             {
-                "request": request,
                 "active_page": "artists",
                 "items": data.get("items", []),
                 "total": data.get("total", 0),
@@ -100,9 +100,9 @@ class ArtistsRouter:
 
         data = context["data"]
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_artists_table.html",
             {
-                "request": request,
                 "items": data.get("items", []),
                 "total": data.get("total", 0),
                 "limit": context["limit"],
@@ -128,9 +128,9 @@ class ArtistsRouter:
                 return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
             if e.status_code == 404:
                 return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                    request,
                     "error.html",
                     {
-                        "request": request,
                         "active_page": "artists",
                         "error_title": "Artist Not Found",
                         "error_message": "This artist does not exist or you have no listening data for them.",
@@ -141,9 +141,9 @@ class ArtistsRouter:
                 )
             logger.warning("Error loading artist %d: %s (status %d)", artist_id, e.detail, e.status_code)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "error.html",
                 {
-                    "request": request,
                     "active_page": "artists",
                     "error_title": "Error Loading Artist",
                     "error_message": "An unexpected error occurred. Please try again later.",
@@ -154,8 +154,9 @@ class ArtistsRouter:
             )
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "artist_detail.html",
-            {"request": request, "active_page": "artists", "artist": data},
+            {"active_page": "artists", "artist": data},
         )
 
 

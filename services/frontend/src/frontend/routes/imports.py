@@ -37,9 +37,9 @@ class ImportsRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "imports.html",
             {
-                "request": request,
                 "active_page": "imports",
                 "imports": data.get("items", []),
                 "total": data.get("total", 0),
@@ -60,9 +60,9 @@ class ImportsRouter:
             data = {"items": [], "total": 0}
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_imports_table.html",
             {
-                "request": request,
                 "imports": data.get("items", []),
                 "total": data.get("total", 0),
                 **params,
@@ -79,9 +79,9 @@ class ImportsRouter:
 
         if not user_id_str or not file or not file.filename:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
                 {
-                    "request": request,
                     "alert_type": "danger",
                     "message": "User ID and ZIP file are required.",
                 },
@@ -92,26 +92,27 @@ class ImportsRouter:
             content = await file.read()
             result = await api.upload_import(user_id, content, file.filename)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
                 {
-                    "request": request,
                     "alert_type": "success",
                     "message": f"Import job #{result.get('id')} created successfully.",
                 },
             )
         except ValueError:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
                 {
-                    "request": request,
                     "alert_type": "danger",
                     "message": "Invalid user ID.",
                 },
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": e.detail},
+                {"alert_type": "danger", "message": e.detail},
             )
 
     @staticmethod

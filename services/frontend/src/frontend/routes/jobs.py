@@ -36,9 +36,9 @@ class JobsRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "jobs.html",
             {
-                "request": request,
                 "active_page": "jobs",
                 "jobs": data.get("items", []),
                 "total": data.get("total", 0),
@@ -58,9 +58,9 @@ class JobsRouter:
             data = {"items": [], "total": 0}
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_jobs_table.html",
             {
-                "request": request,
                 "jobs": data.get("items", []),
                 "total": data.get("total", 0),
                 **params,
@@ -78,8 +78,9 @@ class JobsRouter:
             alert_type = "danger"
             message = e.detail
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_alert.html",
-            {"request": request, "alert_type": alert_type, "message": message},
+            {"alert_type": alert_type, "message": message},
         )
 
     @staticmethod

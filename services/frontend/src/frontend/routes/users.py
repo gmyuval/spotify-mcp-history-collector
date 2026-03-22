@@ -44,9 +44,9 @@ class UsersRouter:
             error = e.detail
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "users.html",
             {
-                "request": request,
                 "active_page": "users",
                 "users": data.get("items", []),
                 "total": data.get("total", 0),
@@ -68,9 +68,9 @@ class UsersRouter:
             data = {"items": [], "total": 0}
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "partials/_users_table.html",
             {
-                "request": request,
                 "users": data.get("items", []),
                 "total": data.get("total", 0),
                 "limit": limit,
@@ -112,9 +112,9 @@ class UsersRouter:
             pass
 
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
             "user_detail.html",
             {
-                "request": request,
                 "active_page": "users",
                 "user": user,
                 "recent_jobs": recent_jobs,
@@ -143,17 +143,18 @@ class UsersRouter:
         try:
             result = await api.delete_user(user_id)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
                 {
-                    "request": request,
                     "alert_type": "success",
                     "message": result.get("message", "User deleted"),
                 },
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": e.detail},
+                {"alert_type": "danger", "message": e.detail},
             )
 
     async def set_user_roles(self, request: Request, user_id: int) -> HTMLResponse:
@@ -164,19 +165,22 @@ class UsersRouter:
             role_ids = [int(str(v)) for v in form.getlist("role_ids")]
         except TypeError, ValueError:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": "Invalid role ID values"},
+                {"alert_type": "danger", "message": "Invalid role ID values"},
             )
         try:
             await api.set_user_roles(user_id, role_ids)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "success", "message": "Roles updated successfully"},
+                {"alert_type": "success", "message": "Roles updated successfully"},
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_alert.html",
-                {"request": request, "alert_type": "danger", "message": e.detail},
+                {"alert_type": "danger", "message": e.detail},
             )
 
     async def _user_action(self, request: Request, user_id: int, action: str) -> HTMLResponse:
@@ -186,9 +190,9 @@ class UsersRouter:
             method = getattr(api, f"{action}_user" if action != "trigger_sync" else "trigger_sync")
             result = await method(user_id)
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_user_actions.html",
                 {
-                    "request": request,
                     "alert_type": "success",
                     "message": result.get("message", f"Action '{action}' succeeded"),
                     "user_id": user_id,
@@ -196,9 +200,9 @@ class UsersRouter:
             )
         except ApiError as e:
             return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+                request,
                 "partials/_user_actions.html",
                 {
-                    "request": request,
                     "alert_type": "danger",
                     "message": e.detail,
                     "user_id": user_id,

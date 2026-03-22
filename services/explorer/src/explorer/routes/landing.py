@@ -15,7 +15,7 @@ class LandingRouter:
         """Render the public landing page."""
         authenticated = request.cookies.get("access_token") is not None
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
-            "landing.html", {"request": request, "authenticated": authenticated}
+            request, "landing.html", {"authenticated": authenticated}
         )
 
 
