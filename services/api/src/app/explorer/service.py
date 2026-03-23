@@ -22,6 +22,8 @@ from app.explorer.schemas import (
     ArtistSummary,
     AudioFeaturesData,
     DashboardData,
+    HeatmapCell,
+    HeatmapData,
     MemoryPlaylistDetail,
     MemoryPlaylistEventItem,
     MemoryPlaylistSummary,
@@ -49,6 +51,8 @@ from app.explorer.schemas import (
     SpotifyTrackEnrichment,
     TasteProfileResponse,
     TasteProfileWithEvents,
+    TimelineBucket,
+    TimelineData,
     TrackArtistRef,
     TrackBrowserItem,
     TrackDetail,
@@ -106,6 +110,21 @@ class ExplorerService:
             unique_artists=stats["unique_artists"],
             top_artists=[ArtistSummary(**r) for r in top_artists_raw],
             top_tracks=[TrackSummary(**r) for r in top_tracks_raw],
+        )
+
+    async def get_heatmap(self, user_id: int, session: AsyncSession, days: int = 90) -> HeatmapData:
+        """Return weekday x hour heatmap data."""
+        rows = await HistoryQueries.heatmap(user_id, session, days=days)
+        return HeatmapData(cells=[HeatmapCell(**r) for r in rows])
+
+    async def get_timeline(
+        self, user_id: int, session: AsyncSession, days: int = 90, bucket: str = "week"
+    ) -> TimelineData:
+        """Return plays aggregated by time bucket."""
+        rows = await HistoryQueries.timeline(user_id, session, days=days, bucket=bucket)
+        return TimelineData(
+            buckets=[TimelineBucket(**r) for r in rows],
+            bucket_size=bucket,
         )
 
     async def get_history(

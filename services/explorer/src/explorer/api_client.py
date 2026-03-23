@@ -276,6 +276,20 @@ class ExplorerApiClient:
         """DELETE /api/me/tokens/{token_id} — revoke an API token."""
         await self._request("DELETE", f"/api/me/tokens/{token_id}", access_token)
 
+    async def get_heatmap(self, access_token: str, days: int = 90) -> dict[str, Any]:
+        """GET /api/me/analytics/heatmap — weekday x hour heatmap."""
+        result: dict[str, Any] = await self._request(
+            "GET", "/api/me/analytics/heatmap", access_token, params={"days": days}
+        )
+        return result
+
+    async def get_timeline(self, access_token: str, days: int = 90, bucket: str = "week") -> dict[str, Any]:
+        """GET /api/me/analytics/timeline — plays over time."""
+        result: dict[str, Any] = await self._request(
+            "GET", "/api/me/analytics/timeline", access_token, params={"days": days, "bucket": bucket}
+        )
+        return result
+
     async def get_track_detail(self, access_token: str, track_id: int) -> dict[str, Any]:
         """GET /api/me/tracks/{track_id} — track detail with stats and enrichment."""
         result: dict[str, Any] = await self._request("GET", f"/api/me/tracks/{track_id}", access_token)
