@@ -1,0 +1,83 @@
+{% if data and data.cells %}
+<div id="heatmapChart" style="width:100%; height:320px;"></div>
+<script>
+(function() {
+  if (window.__heatmapCleanup) window.__heatmapCleanup();
+
+  var raw = {{ data.cells | tojson }};
+  var hours = [];
+  for (var i = 0; i < 24; i++) hours.push(i + ':00');
+  var weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  var chartData = [];
+  var maxVal = 0;
+  for (var i = 0; i < raw.length; i++) {
+    var v = raw[i].play_count;
+    if (v > maxVal) maxVal = v;
+    chartData.push([raw[i].hour, raw[i].weekday, v]);
+  }
+
+  var el = document.getElementById('heatmapChart');
+  var opts = {
+    tooltip: {
+      position: 'top',
+      formatter: function(p) {
+        return weekdays[p.value[1]] + ' ' + hours[p.value[0]] + ': ' + p.value[2] + ' plays';
+      }
+    },
+    grid: { left: 60, right: 20, top: 10, bottom: 40 },
+    xAxis: {
+      type: 'category',
+      data: hours,
+      splitArea: { show: true },
+      axisLabel: { interval: 1, fontSize: 11 }
+    },
+    yAxis: {
+      type: 'category',
+      data: weekdays,
+      splitArea: { show: true }
+    },
+    visualMap: {
+      min: 0,
+      max: maxVal || 1,
+      calculable: true,
+      orient: 'horizontal',
+      left: 'center',
+      bottom: 0,
+      inRange: { color: ['#1a1a2e', '#1DB954'] },
+      textStyle: { fontSize: 11 }
+    },
+    series: [{
+      type: 'heatmap',
+      data: chartData,
+      label: { show: false },
+      emphasis: {
+        itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' }
+      }
+    }]
+  };
+  var chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
+  chart.setOption(opts);
+  var active = true;
+  var onResize = function() { if (active && chart) chart.resize(); };
+  window.addEventListener('resize', onResize);
+
+  window.__heatmapCleanup = function() {
+    active = false;
+    window.removeEventListener('resize', onResize);
+    if (chart) { chart.dispose(); chart = null; }
+    window.__heatmapCleanup = null;
+  };
+
+  SpotifyMCP.onThemeChange(function() {
+    if (!active || !chart) return;
+    chart.dispose();
+    chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
+    chart.setOption(opts);
+  });
+})();
+</script>
+{% else %}
+<script>if (window.__heatmapCleanup) window.__heatmapCleanup();</script>
+<p class="text-muted text-center py-4 mb-0">No listening data for this period</p>
+{% endif %}

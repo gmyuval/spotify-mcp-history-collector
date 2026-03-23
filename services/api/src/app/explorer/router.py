@@ -16,6 +16,7 @@ from app.explorer.schemas import (
     CreatedTokenResponse,
     CreateTokenRequest,
     DashboardData,
+    HeatmapData,
     MemoryPlaylistDetail,
     PaginatedArtists,
     PaginatedHistory,
@@ -28,6 +29,7 @@ from app.explorer.schemas import (
     TasteProfilePatch,
     TasteProfileResponse,
     TasteProfileWithEvents,
+    TimelineData,
     TokenListItem,
     TokenListResponse,
     TrackDetail,
@@ -80,6 +82,8 @@ class ExplorerRouter:
         r.add_api_route("/tokens", self.list_tokens, methods=["GET"])
         r.add_api_route("/tokens", self.create_token, methods=["POST"], status_code=201)
         r.add_api_route("/tokens/{token_id}", self.revoke_token, methods=["DELETE"], status_code=204)
+        r.add_api_route("/analytics/heatmap", self.analytics_heatmap, methods=["GET"])
+        r.add_api_route("/analytics/timeline", self.analytics_timeline, methods=["GET"])
 
     async def dashboard(
         self,
@@ -88,6 +92,23 @@ class ExplorerRouter:
         days: int = Query(default=30, ge=1),
     ) -> DashboardData:
         return await self._service.get_dashboard(user_id, session, days=days)
+
+    async def analytics_heatmap(
+        self,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        days: int = Query(default=90, ge=1, le=3650),
+    ) -> HeatmapData:
+        return await self._service.get_heatmap(user_id, session, days=days)
+
+    async def analytics_timeline(
+        self,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        days: int = Query(default=90, ge=1, le=3650),
+        bucket: str = Query(default="week", pattern="^(day|week|month)$"),
+    ) -> TimelineData:
+        return await self._service.get_timeline(user_id, session, days=days, bucket=bucket)
 
     async def history(
         self,

@@ -358,6 +358,30 @@ class AlbumDetail(BaseModel):
     musicbrainz: MusicBrainzAlbumEnrichment | None = None
 
 
+# ── Analytics schemas ──────────────────────────────────────────
+
+
+class HeatmapCell(BaseModel):
+    weekday: int
+    hour: int
+    play_count: int
+
+
+class HeatmapData(BaseModel):
+    cells: list[HeatmapCell]
+
+
+class TimelineBucket(BaseModel):
+    period: str
+    play_count: int
+    ms_played: int
+
+
+class TimelineData(BaseModel):
+    buckets: list[TimelineBucket]
+    bucket_size: str
+
+
 # ── API token schemas ──────────────────────────────────────────
 
 

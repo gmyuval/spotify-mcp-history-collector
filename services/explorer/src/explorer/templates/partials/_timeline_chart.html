@@ -1,0 +1,98 @@
+{% if data and data.buckets %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <div class="btn-group btn-group-sm" id="timeline-bucket-toggle">
+    {% for b in ["day", "week", "month"] %}
+    <a class="btn btn-outline-secondary {% if bucket == b %}active{% endif %}"
+       hx-get="/analytics/partials/timeline?days={{ days }}&bucket={{ b }}"
+       hx-target="#timeline-chart-area"
+       hx-swap="innerHTML"
+       href="#">{{ b | capitalize }}</a>
+    {% endfor %}
+  </div>
+  <div class="btn-group btn-group-sm" id="timeline-metric-toggle">
+    <button type="button" class="btn btn-outline-secondary active" onclick="setTimelineMetric('plays', this)">Plays</button>
+    <button type="button" class="btn btn-outline-secondary" onclick="setTimelineMetric('minutes', this)">Minutes</button>
+  </div>
+</div>
+<div id="timelineChart" style="width:100%; height:320px;"></div>
+<script>
+(function() {
+  if (window.__timelineCleanup) window.__timelineCleanup();
+
+  var raw = {{ data.buckets | tojson }};
+  var periods = [], plays = [], minutes = [];
+  for (var i = 0; i < raw.length; i++) {
+    periods.push(raw[i].period.substring(0, 10));
+    plays.push(raw[i].play_count);
+    minutes.push(Math.round(raw[i].ms_played / 60000));
+  }
+
+  var el = document.getElementById('timelineChart');
+  var chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
+  var opts = {
+    tooltip: {
+      trigger: 'axis',
+      formatter: function(p) {
+        var d = p[0];
+        return d.name + '<br/>' + d.seriesName + ': ' + d.value.toLocaleString();
+      }
+    },
+    grid: { left: 60, right: 20, top: 20, bottom: 60 },
+    xAxis: {
+      type: 'category',
+      data: periods,
+      axisLabel: { rotate: 45, fontSize: 10 }
+    },
+    yAxis: { type: 'value' },
+    dataZoom: [
+      { type: 'inside', start: 0, end: 100 },
+      { type: 'slider', start: 0, end: 100, height: 20, bottom: 5 }
+    ],
+    series: [{
+      name: 'Plays',
+      type: 'bar',
+      data: plays,
+      itemStyle: { color: '#1DB954' },
+      emphasis: { itemStyle: { color: '#1ed760' } }
+    }]
+  };
+  chart.setOption(opts);
+  var active = true;
+  var onResize = function() { if (active && chart) chart.resize(); };
+  window.addEventListener('resize', onResize);
+
+  window._timelineData = { plays: plays, minutes: minutes, chart: chart, opts: opts };
+
+  window.__timelineCleanup = function() {
+    active = false;
+    window.removeEventListener('resize', onResize);
+    if (chart) { chart.dispose(); chart = null; }
+    window._timelineData = null;
+    window.__timelineCleanup = null;
+  };
+
+  SpotifyMCP.onThemeChange(function() {
+    if (!active || !chart) return;
+    chart.dispose();
+    chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
+    chart.setOption(opts);
+    if (window._timelineData) window._timelineData.chart = chart;
+  });
+})();
+
+function setTimelineMetric(metric, btn) {
+  var td = window._timelineData;
+  if (!td) return;
+  var btns = document.querySelectorAll('#timeline-metric-toggle .btn');
+  btns.forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var opts = td.opts;
+  opts.series[0].data = metric === 'minutes' ? td.minutes : td.plays;
+  opts.series[0].name = metric === 'minutes' ? 'Minutes' : 'Plays';
+  td.chart.setOption(opts);
+}
+</script>
+{% else %}
+<script>if (window.__timelineCleanup) window.__timelineCleanup();</script>
+<p class="text-muted text-center py-4 mb-0">No listening data for this period</p>
+{% endif %}
