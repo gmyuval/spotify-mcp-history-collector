@@ -72,7 +72,7 @@
     var link = event.target.closest('.nav-link[data-days]');
     if (!link) return;
     event.preventDefault();
-    var days = link.dataset.days;
+    var days = Math.min(parseInt(link.dataset.days || '1', 10) || 1, 3650);
 
     pills.querySelectorAll('.nav-link').forEach(function(e) {
       e.classList.remove('active');

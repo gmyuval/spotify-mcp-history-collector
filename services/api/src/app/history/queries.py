@@ -172,8 +172,9 @@ class HistoryQueries:
             if bucket == "month":
                 period_expr = func.strftime("%Y-%m-01", Play.played_at)
             elif bucket == "week":
-                # SQLite: Monday-based week start via strftime('%W') + year
-                period_expr = func.strftime("%Y-W%W", Play.played_at)
+                # SQLite: compute Monday-start date to avoid year-boundary splits
+                weekday_offset = (cast(func.strftime("%w", Play.played_at), Integer) + 6) % 7
+                period_expr = func.date(Play.played_at, func.printf("-%d days", weekday_offset))
             else:  # day
                 period_expr = func.strftime("%Y-%m-%d", Play.played_at)
         else:
