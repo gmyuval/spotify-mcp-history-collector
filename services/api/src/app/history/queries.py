@@ -1,5 +1,6 @@
 """SQLAlchemy query builders for history analysis — class-based."""
 
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -194,6 +195,77 @@ class HistoryQueries:
         )
         result = await session.execute(stmt)
         return [dict(row._mapping) for row in result.all()]
+
+    @staticmethod
+    async def genre_distribution(
+        user_id: int,
+        session: AsyncSession,
+        days: int = 90,
+    ) -> list[dict[str, object]]:
+        """Genre breakdown by play count.
+
+        Joins Play → Track → TrackArtist → Artist and splits the
+        comma-separated ``Artist.genres`` column.
+
+        PostgreSQL: ``unnest(string_to_array())`` in SQL.
+        SQLite: fetch raw genre strings and split in Python.
+
+        Returns ``[{genre, play_count, artist_count}, ...]`` ordered by play_count desc.
+        """
+        cutoff = HistoryQueries._cutoff(days)
+        dialect = session.bind.dialect.name if session.bind else "postgresql"
+
+        if dialect == "sqlite":
+            # SQLite: fetch (genres_csv, play_count) per artist, split in Python
+            stmt = (
+                select(
+                    Artist.genres,
+                    func.count(Play.id).label("play_count"),
+                )
+                .select_from(Play)
+                .join(Track, Play.track_id == Track.id)
+                .join(TrackArtist, TrackArtist.track_id == Track.id)
+                .join(Artist, TrackArtist.artist_id == Artist.id)
+                .where(Play.user_id == user_id, Play.played_at >= cutoff, Artist.genres.isnot(None))
+                .group_by(Artist.id)
+            )
+            result = await session.execute(stmt)
+            rows = result.all()
+
+            genre_plays: Counter[str] = Counter()
+            genre_artists: Counter[str] = Counter()
+            for row in rows:
+                genres_csv: str = row.genres
+                play_count: int = row.play_count
+                for g in genres_csv.split(","):
+                    g = g.strip()
+                    if g:
+                        genre_plays[g] += play_count
+                        genre_artists[g] += 1
+
+            return [
+                {"genre": g, "play_count": genre_plays[g], "artist_count": genre_artists[g]}
+                for g in sorted(genre_plays, key=lambda x: genre_plays[x], reverse=True)
+            ]
+        else:
+            # PostgreSQL: unnest in SQL
+            genre_col = func.trim(func.unnest(func.string_to_array(Artist.genres, ",")))
+            stmt = (
+                select(
+                    genre_col.label("genre"),
+                    func.count(Play.id).label("play_count"),
+                    func.count(distinct(Artist.id)).label("artist_count"),
+                )
+                .select_from(Play)
+                .join(Track, Play.track_id == Track.id)
+                .join(TrackArtist, TrackArtist.track_id == Track.id)
+                .join(Artist, TrackArtist.artist_id == Artist.id)
+                .where(Play.user_id == user_id, Play.played_at >= cutoff, Artist.genres.isnot(None))
+                .group_by(genre_col)
+                .order_by(func.count(Play.id).desc())
+            )
+            result = await session.execute(stmt)
+            return [dict(row._mapping) for row in result.all()]
 
     @staticmethod
     async def coverage(
