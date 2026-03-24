@@ -45,8 +45,11 @@
   <div class="col-md-6" id="genres-container">
     <div class="card">
       <div class="card-header"><strong>Genre Distribution</strong></div>
-      <div class="card-body text-center text-muted py-5">
-        <p class="mb-0">Genre breakdown — coming soon</p>
+      <div class="card-body" id="genres-chart-area"
+           hx-get="/analytics/partials/genres?days={{ days }}"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <p class="text-muted text-center py-4 mb-0">Loading genres...</p>
       </div>
     </div>
   </div>
@@ -87,6 +90,9 @@
 
     var timeline = document.getElementById('timeline-chart-area');
     if (timeline) htmx.ajax('GET', '/analytics/partials/timeline?days=' + days + '&bucket=week', {target: timeline, swap: 'innerHTML'});
+
+    var genres = document.getElementById('genres-chart-area');
+    if (genres) htmx.ajax('GET', '/analytics/partials/genres?days=' + days, {target: genres, swap: 'innerHTML'});
   });
 })();
 </script>

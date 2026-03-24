@@ -382,6 +382,16 @@ class TimelineData(BaseModel):
     bucket_size: str
 
 
+class GenreItem(BaseModel):
+    genre: str
+    play_count: int
+    artist_count: int
+
+
+class GenreData(BaseModel):
+    genres: list[GenreItem]
+
+
 # ── API token schemas ──────────────────────────────────────────
 
 

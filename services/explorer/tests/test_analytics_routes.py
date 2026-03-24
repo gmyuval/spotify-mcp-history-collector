@@ -20,7 +20,9 @@ def test_analytics_page(client: TestClient) -> None:
     assert "Analytics" in response.text
     assert "Listening Heatmap" in response.text
     assert "Listening Timeline" in response.text
+    assert "Genre Distribution" in response.text
     assert "hx-get" in response.text  # HTMX triggers present
+    assert "partials/genres" in response.text
     assert "7d" in response.text
     assert "90d" in response.text
     client.cookies.clear()
@@ -88,4 +90,36 @@ def test_timeline_partial_empty(client: TestClient, mock_api: AsyncMock) -> None
     response = client.get("/analytics/partials/timeline?days=7")
     assert response.status_code == 200
     assert "No listening data" in response.text
+    client.cookies.clear()
+
+
+# --- Genres partial ---
+
+
+def test_genres_partial_requires_login(client: TestClient) -> None:
+    response = client.get("/analytics/partials/genres", follow_redirects=False)
+    assert response.status_code == 303
+
+
+def test_genres_partial(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.get_genres.return_value = {
+        "genres": [
+            {"genre": "rock", "play_count": 50, "artist_count": 3},
+            {"genre": "indie", "play_count": 30, "artist_count": 2},
+        ]
+    }
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/analytics/partials/genres?days=90")
+    assert response.status_code == 200
+    assert "genresChart" in response.text
+    mock_api.get_genres.assert_called_once_with("test-jwt", days=90)
+    client.cookies.clear()
+
+
+def test_genres_partial_empty(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.get_genres.return_value = {"genres": []}
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/analytics/partials/genres?days=7")
+    assert response.status_code == 200
+    assert "No genre data" in response.text
     client.cookies.clear()

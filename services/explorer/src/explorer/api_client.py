@@ -290,6 +290,13 @@ class ExplorerApiClient:
         )
         return result
 
+    async def get_genres(self, access_token: str, days: int = 90) -> dict[str, Any]:
+        """GET /api/me/analytics/genres — genre distribution."""
+        result: dict[str, Any] = await self._request(
+            "GET", "/api/me/analytics/genres", access_token, params={"days": days}
+        )
+        return result
+
     async def get_track_detail(self, access_token: str, track_id: int) -> dict[str, Any]:
         """GET /api/me/tracks/{track_id} — track detail with stats and enrichment."""
         result: dict[str, Any] = await self._request("GET", f"/api/me/tracks/{track_id}", access_token)
