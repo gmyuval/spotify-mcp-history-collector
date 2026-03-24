@@ -261,7 +261,7 @@ class HistoryQueries:
                 .join(TrackArtist, TrackArtist.track_id == Track.id)
                 .join(Artist, TrackArtist.artist_id == Artist.id)
                 .where(Play.user_id == user_id, Play.played_at >= cutoff, Artist.genres.isnot(None))
-                .group_by(literal("genre"))
+                .group_by(genre_col)
                 .order_by(func.count(Play.id).desc())
             )
             result = await session.execute(stmt)
