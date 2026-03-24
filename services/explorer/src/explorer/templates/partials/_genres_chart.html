@@ -1,0 +1,135 @@
+{% if data and data.genres %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <div class="btn-group btn-group-sm" id="genre-metric-toggle">
+    <button type="button" class="btn btn-outline-secondary active" onclick="setGenreMetric('plays', this)">By Plays</button>
+    <button type="button" class="btn btn-outline-secondary" onclick="setGenreMetric('artists', this)">By Artists</button>
+  </div>
+</div>
+<div id="genresChart" style="width:100%; height:360px;"></div>
+<div id="genreDrilldown" class="mt-3" style="display:none;">
+  <h6 class="text-secondary mb-2" id="genreDrilldownTitle"></h6>
+</div>
+<script>
+(function() {
+  if (window.__genresCleanup) window.__genresCleanup();
+
+  var raw = {{ data.genres | tojson }};
+  var TOP_N = 15;
+
+  // Build top-N + "Other" for plays and artists
+  function buildSeries(key) {
+    var sorted = raw.slice().sort(function(a, b) { return b[key] - a[key]; });
+    var top = sorted.slice(0, TOP_N);
+    var rest = sorted.slice(TOP_N);
+    var items = top.map(function(g) { return { name: g.genre, value: g[key] }; });
+    if (rest.length > 0) {
+      var sum = 0;
+      for (var i = 0; i < rest.length; i++) sum += rest[i][key];
+      items.push({ name: 'Other (' + rest.length + ')', value: sum });
+    }
+    return items;
+  }
+
+  var playsSeries = buildSeries('play_count');
+  var artistsSeries = buildSeries('artist_count');
+
+  // Spotify-inspired color palette
+  var colors = [
+    '#1DB954', '#1ed760', '#2ebd59', '#57b660', '#169c46',
+    '#1a9a4a', '#15803d', '#4ade80', '#86efac', '#bbf7d0',
+    '#0d9488', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4'
+  ];
+
+  var el = document.getElementById('genresChart');
+  var opts = {
+    tooltip: {
+      trigger: 'item',
+      formatter: function(p) {
+        return p.name + ': ' + p.value.toLocaleString() + ' (' + p.percent.toFixed(1) + '%)';
+      }
+    },
+    color: colors,
+    series: [{
+      type: 'pie',
+      radius: ['35%', '70%'],
+      center: ['50%', '50%'],
+      data: playsSeries,
+      label: {
+        formatter: '{b}',
+        fontSize: 11
+      },
+      emphasis: {
+        itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.5)' }
+      },
+      itemStyle: { borderRadius: 4, borderColor: 'transparent', borderWidth: 2 }
+    }]
+  };
+
+  var chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
+  chart.setOption(opts);
+  var active = true;
+  var onResize = function() { if (active && chart) chart.resize(); };
+  window.addEventListener('resize', onResize);
+
+  // Click handler — show genre stats on click
+  var genreIndex = {};
+  for (var i = 0; i < raw.length; i++) {
+    genreIndex[raw[i].genre] = raw[i];
+  }
+
+  function registerClickHandler(c) {
+    c.on('click', function(params) {
+      var drilldown = document.getElementById('genreDrilldown');
+      var title = document.getElementById('genreDrilldownTitle');
+      if (!drilldown || !title) return;
+
+      var genre = params.name;
+      if (genre.startsWith('Other (')) {
+        drilldown.style.display = 'none';
+        return;
+      }
+
+      var item = genreIndex[genre];
+      if (!item) return;
+
+      title.textContent = genre + ' — ' + item.play_count + ' plays, ' + item.artist_count + ' artist' + (item.artist_count !== 1 ? 's' : '');
+      drilldown.style.display = 'block';
+    });
+  }
+
+  registerClickHandler(chart);
+
+  window._genresData = { plays: playsSeries, artists: artistsSeries, chart: chart, opts: opts };
+
+  window.__genresCleanup = function() {
+    active = false;
+    window.removeEventListener('resize', onResize);
+    if (chart) { chart.dispose(); chart = null; }
+    window._genresData = null;
+    window.__genresCleanup = null;
+  };
+
+  SpotifyMCP.onThemeChange(function() {
+    if (!active || !chart) return;
+    chart.dispose();
+    chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
+    chart.setOption(opts);
+    registerClickHandler(chart);
+    if (window._genresData) window._genresData.chart = chart;
+  });
+})();
+
+function setGenreMetric(metric, btn) {
+  var gd = window._genresData;
+  if (!gd) return;
+  var btns = document.querySelectorAll('#genre-metric-toggle .btn');
+  btns.forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  gd.opts.series[0].data = metric === 'artists' ? gd.artists : gd.plays;
+  gd.chart.setOption(gd.opts);
+}
+</script>
+{% else %}
+<script>if (window.__genresCleanup) window.__genresCleanup();</script>
+<p class="text-muted text-center py-4 mb-0">No genre data for this period</p>
+{% endif %}

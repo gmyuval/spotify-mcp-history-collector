@@ -22,6 +22,8 @@ from app.explorer.schemas import (
     ArtistSummary,
     AudioFeaturesData,
     DashboardData,
+    GenreData,
+    GenreItem,
     HeatmapCell,
     HeatmapData,
     MemoryPlaylistDetail,
@@ -126,6 +128,11 @@ class ExplorerService:
             buckets=[TimelineBucket(**r) for r in rows],
             bucket_size=bucket,
         )
+
+    async def get_genres(self, user_id: int, session: AsyncSession, days: int = 90) -> GenreData:
+        """Return genre distribution by play count."""
+        rows = await HistoryQueries.genre_distribution(user_id, session, days=days)
+        return GenreData(genres=[GenreItem(**r) for r in rows])
 
     async def get_history(
         self,

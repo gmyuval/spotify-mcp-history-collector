@@ -63,7 +63,7 @@ async def seeded_data(async_engine: AsyncEngine) -> dict[str, object]:
         session.add(RolePermission(role_id=role.id, permission_id=perm.id))
         session.add(UserRole(user_id=user.id, role_id=role.id))
 
-        artist = Artist(name="Analytics Artist", spotify_artist_id="artist_a")
+        artist = Artist(name="Analytics Artist", spotify_artist_id="artist_a", genres="rock, indie")
         session.add(artist)
         await session.flush()
 
@@ -246,3 +246,156 @@ class TestTimeline:
         assert resp.status_code == 200
         total = sum(b["play_count"] for b in resp.json()["buckets"])
         assert total == 10
+
+
+# --- Genre Distribution ---
+
+
+@pytest.fixture
+async def genre_seeded_data(async_engine: AsyncEngine) -> dict[str, object]:
+    """Seed a user with two artists having overlapping genres."""
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        user = User(spotify_user_id="genre_user", display_name="Genre Tester")
+        session.add(user)
+        await session.flush()
+
+        perm = Permission(codename="own_data.view", description="View own data")
+        session.add(perm)
+        await session.flush()
+
+        role = Role(name="user", description="Standard user", is_system=True)
+        session.add(role)
+        await session.flush()
+
+        session.add(RolePermission(role_id=role.id, permission_id=perm.id))
+        session.add(UserRole(user_id=user.id, role_id=role.id))
+
+        # Artist A: rock, indie (10 plays)
+        artist_a = Artist(name="Artist A", spotify_artist_id="ga_1", genres="rock, indie")
+        session.add(artist_a)
+        await session.flush()
+
+        track_a = Track(name="Track A", spotify_track_id="gt_1", duration_ms=200000)
+        session.add(track_a)
+        await session.flush()
+        session.add(TrackArtist(track_id=track_a.id, artist_id=artist_a.id, position=0))
+
+        # Artist B: rock, metal (5 plays)
+        artist_b = Artist(name="Artist B", spotify_artist_id="ga_2", genres="rock, metal")
+        session.add(artist_b)
+        await session.flush()
+
+        track_b = Track(name="Track B", spotify_track_id="gt_2", duration_ms=180000)
+        session.add(track_b)
+        await session.flush()
+        session.add(TrackArtist(track_id=track_b.id, artist_id=artist_b.id, position=0))
+
+        # Artist C: no genres (3 plays — should be excluded)
+        artist_c = Artist(name="Artist C", spotify_artist_id="ga_3", genres=None)
+        session.add(artist_c)
+        await session.flush()
+
+        track_c = Track(name="Track C", spotify_track_id="gt_3", duration_ms=150000)
+        session.add(track_c)
+        await session.flush()
+        session.add(TrackArtist(track_id=track_c.id, artist_id=artist_c.id, position=0))
+
+        now = datetime.now(UTC)
+        for i in range(10):
+            session.add(
+                Play(
+                    user_id=user.id,
+                    track_id=track_a.id,
+                    played_at=now - timedelta(days=i),
+                    ms_played=200000,
+                    source=TrackSource.SPOTIFY_API,
+                )
+            )
+        for i in range(5):
+            session.add(
+                Play(
+                    user_id=user.id,
+                    track_id=track_b.id,
+                    played_at=now - timedelta(days=i, hours=2),
+                    ms_played=180000,
+                    source=TrackSource.SPOTIFY_API,
+                )
+            )
+        for i in range(3):
+            session.add(
+                Play(
+                    user_id=user.id,
+                    track_id=track_c.id,
+                    played_at=now - timedelta(days=i, hours=4),
+                    ms_played=150000,
+                    source=TrackSource.SPOTIFY_API,
+                )
+            )
+
+        await session.commit()
+        return {"user_id": user.id}
+
+
+class TestGenres:
+    def test_genres_returns_items(
+        self, client: TestClient, genre_seeded_data: dict[str, object], jwt_service: JWTService
+    ) -> None:
+        user_id: int = genre_seeded_data["user_id"]  # type: ignore[assignment]
+        resp = client.get("/api/me/analytics/genres?days=3650", cookies=_auth_cookies(jwt_service, user_id))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "genres" in data
+        assert len(data["genres"]) > 0
+        item = data["genres"][0]
+        assert "genre" in item
+        assert "play_count" in item
+        assert "artist_count" in item
+
+    def test_genres_rock_is_top(
+        self, client: TestClient, genre_seeded_data: dict[str, object], jwt_service: JWTService
+    ) -> None:
+        """Rock should be top genre — 10 plays (A) + 5 plays (B) = 15."""
+        user_id: int = genre_seeded_data["user_id"]  # type: ignore[assignment]
+        resp = client.get("/api/me/analytics/genres?days=3650", cookies=_auth_cookies(jwt_service, user_id))
+        assert resp.status_code == 200
+        genres = resp.json()["genres"]
+        rock = next(g for g in genres if g["genre"] == "rock")
+        assert rock["play_count"] == 15
+        assert rock["artist_count"] == 2
+
+    def test_genres_indie_and_metal(
+        self, client: TestClient, genre_seeded_data: dict[str, object], jwt_service: JWTService
+    ) -> None:
+        """indie = 10 plays (A only), metal = 5 plays (B only)."""
+        user_id: int = genre_seeded_data["user_id"]  # type: ignore[assignment]
+        resp = client.get("/api/me/analytics/genres?days=3650", cookies=_auth_cookies(jwt_service, user_id))
+        genres = {g["genre"]: g for g in resp.json()["genres"]}
+        assert genres["indie"]["play_count"] == 10
+        assert genres["indie"]["artist_count"] == 1
+        assert genres["metal"]["play_count"] == 5
+        assert genres["metal"]["artist_count"] == 1
+
+    def test_genres_excludes_null_genres(
+        self, client: TestClient, genre_seeded_data: dict[str, object], jwt_service: JWTService
+    ) -> None:
+        """Artist C has no genres — its 3 plays should not appear."""
+        user_id: int = genre_seeded_data["user_id"]  # type: ignore[assignment]
+        resp = client.get("/api/me/analytics/genres?days=3650", cookies=_auth_cookies(jwt_service, user_id))
+        total = sum(g["play_count"] for g in resp.json()["genres"])
+        # 10 (A: rock) + 10 (A: indie) + 5 (B: rock) + 5 (B: metal) = 30
+        assert total == 30
+
+    def test_genres_time_window(
+        self, client: TestClient, genre_seeded_data: dict[str, object], jwt_service: JWTService
+    ) -> None:
+        """Short window should return fewer plays."""
+        user_id: int = genre_seeded_data["user_id"]  # type: ignore[assignment]
+        resp = client.get("/api/me/analytics/genres?days=1", cookies=_auth_cookies(jwt_service, user_id))
+        assert resp.status_code == 200
+        total = sum(g["play_count"] for g in resp.json()["genres"])
+        assert total < 30
+
+    def test_genres_requires_auth(self, client: TestClient) -> None:
+        resp = client.get("/api/me/analytics/genres")
+        assert resp.status_code == 401

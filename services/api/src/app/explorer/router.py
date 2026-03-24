@@ -16,6 +16,7 @@ from app.explorer.schemas import (
     CreatedTokenResponse,
     CreateTokenRequest,
     DashboardData,
+    GenreData,
     HeatmapData,
     MemoryPlaylistDetail,
     PaginatedArtists,
@@ -84,6 +85,7 @@ class ExplorerRouter:
         r.add_api_route("/tokens/{token_id}", self.revoke_token, methods=["DELETE"], status_code=204)
         r.add_api_route("/analytics/heatmap", self.analytics_heatmap, methods=["GET"])
         r.add_api_route("/analytics/timeline", self.analytics_timeline, methods=["GET"])
+        r.add_api_route("/analytics/genres", self.analytics_genres, methods=["GET"])
 
     async def dashboard(
         self,
@@ -109,6 +111,14 @@ class ExplorerRouter:
         bucket: str = Query(default="week", pattern="^(day|week|month)$"),
     ) -> TimelineData:
         return await self._service.get_timeline(user_id, session, days=days, bucket=bucket)
+
+    async def analytics_genres(
+        self,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        days: int = Query(default=90, ge=1, le=3650),
+    ) -> GenreData:
+        return await self._service.get_genres(user_id, session, days=days)
 
     async def history(
         self,
