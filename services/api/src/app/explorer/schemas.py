@@ -392,6 +392,16 @@ class GenreData(BaseModel):
     genres: list[GenreItem]
 
 
+class DiscoveryDay(BaseModel):
+    date: str
+    new_tracks: int
+    repeat_tracks: int
+
+
+class DiscoveryData(BaseModel):
+    days: list[DiscoveryDay]
+
+
 # ── API token schemas ──────────────────────────────────────────
 
 

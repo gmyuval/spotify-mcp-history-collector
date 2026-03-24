@@ -399,3 +399,139 @@ class TestGenres:
     def test_genres_requires_auth(self, client: TestClient) -> None:
         resp = client.get("/api/me/analytics/genres")
         assert resp.status_code == 401
+
+
+# --- Discovery Rate ---
+
+
+@pytest.fixture
+async def discovery_seeded_data(async_engine: AsyncEngine) -> dict[str, object]:
+    """Seed plays with tracks first played on different days."""
+    factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        user = User(spotify_user_id="discovery_user", display_name="Discovery Tester")
+        session.add(user)
+        await session.flush()
+
+        perm = Permission(codename="own_data.view", description="View own data")
+        session.add(perm)
+        await session.flush()
+
+        role = Role(name="user", description="Standard user", is_system=True)
+        session.add(role)
+        await session.flush()
+
+        session.add(RolePermission(role_id=role.id, permission_id=perm.id))
+        session.add(UserRole(user_id=user.id, role_id=role.id))
+
+        artist = Artist(name="Discovery Artist", spotify_artist_id="da_1")
+        session.add(artist)
+        await session.flush()
+
+        # Track A: first played 5 days ago, replayed 3 days ago and today
+        track_a = Track(name="Track A", spotify_track_id="dt_1", duration_ms=200000)
+        session.add(track_a)
+        await session.flush()
+        session.add(TrackArtist(track_id=track_a.id, artist_id=artist.id, position=0))
+
+        # Track B: first played 3 days ago only
+        track_b = Track(name="Track B", spotify_track_id="dt_2", duration_ms=180000)
+        session.add(track_b)
+        await session.flush()
+        session.add(TrackArtist(track_id=track_b.id, artist_id=artist.id, position=0))
+
+        # Track C: first played today only
+        track_c = Track(name="Track C", spotify_track_id="dt_3", duration_ms=150000)
+        session.add(track_c)
+        await session.flush()
+        session.add(TrackArtist(track_id=track_c.id, artist_id=artist.id, position=0))
+
+        now = datetime.now(UTC)
+        plays = [
+            # Track A: first play 5 days ago (new), replay 3 days ago (repeat), replay today (repeat)
+            Play(
+                user_id=user.id,
+                track_id=track_a.id,
+                played_at=now - timedelta(days=5),
+                ms_played=200000,
+                source=TrackSource.SPOTIFY_API,
+            ),
+            Play(
+                user_id=user.id,
+                track_id=track_a.id,
+                played_at=now - timedelta(days=3),
+                ms_played=200000,
+                source=TrackSource.SPOTIFY_API,
+            ),
+            Play(
+                user_id=user.id,
+                track_id=track_a.id,
+                played_at=now - timedelta(hours=1),
+                ms_played=200000,
+                source=TrackSource.SPOTIFY_API,
+            ),
+            # Track B: first play 3 days ago (new)
+            Play(
+                user_id=user.id,
+                track_id=track_b.id,
+                played_at=now - timedelta(days=3, hours=1),
+                ms_played=180000,
+                source=TrackSource.SPOTIFY_API,
+            ),
+            # Track C: first play today (new)
+            Play(
+                user_id=user.id,
+                track_id=track_c.id,
+                played_at=now - timedelta(hours=2),
+                ms_played=150000,
+                source=TrackSource.SPOTIFY_API,
+            ),
+        ]
+        session.add_all(plays)
+        await session.commit()
+        return {"user_id": user.id}
+
+
+class TestDiscovery:
+    def test_discovery_returns_items(
+        self, client: TestClient, discovery_seeded_data: dict[str, object], jwt_service: JWTService
+    ) -> None:
+        user_id: int = discovery_seeded_data["user_id"]  # type: ignore[assignment]
+        resp = client.get("/api/me/analytics/discovery?days=3650", cookies=_auth_cookies(jwt_service, user_id))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "days" in data
+        assert len(data["days"]) > 0
+        item = data["days"][0]
+        assert "date" in item
+        assert "new_tracks" in item
+        assert "repeat_tracks" in item
+
+    def test_discovery_new_vs_repeat(
+        self, client: TestClient, discovery_seeded_data: dict[str, object], jwt_service: JWTService
+    ) -> None:
+        """5 days ago: 1 new (A). 3 days ago: 1 new (B) + 1 repeat (A). Today: 1 new (C) + 1 repeat (A)."""
+        user_id: int = discovery_seeded_data["user_id"]  # type: ignore[assignment]
+        resp = client.get("/api/me/analytics/discovery?days=3650", cookies=_auth_cookies(jwt_service, user_id))
+        days_data = {d["date"]: d for d in resp.json()["days"]}
+
+        total_new = sum(d["new_tracks"] for d in days_data.values())
+        total_repeat = sum(d["repeat_tracks"] for d in days_data.values())
+        assert total_new == 3  # A first, B first, C first
+        assert total_repeat == 2  # A replay x2
+
+    def test_discovery_time_window(
+        self, client: TestClient, discovery_seeded_data: dict[str, object], jwt_service: JWTService
+    ) -> None:
+        """1-day window should only show today's plays."""
+        user_id: int = discovery_seeded_data["user_id"]  # type: ignore[assignment]
+        resp = client.get("/api/me/analytics/discovery?days=1", cookies=_auth_cookies(jwt_service, user_id))
+        assert resp.status_code == 200
+        days_data = resp.json()["days"]
+        # Only today's plays: Track A replay (repeat) + Track C first play (new)
+        total = sum(d["new_tracks"] + d["repeat_tracks"] for d in days_data)
+        assert total <= 3  # At most today's plays
+
+    def test_discovery_requires_auth(self, client: TestClient) -> None:
+        resp = client.get("/api/me/analytics/discovery")
+        assert resp.status_code == 401
