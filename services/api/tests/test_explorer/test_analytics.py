@@ -446,7 +446,8 @@ async def discovery_seeded_data(async_engine: AsyncEngine) -> dict[str, object]:
         await session.flush()
         session.add(TrackArtist(track_id=track_c.id, artist_id=artist.id, position=0))
 
-        now = datetime.now(UTC)
+        # Anchor to midday so hour offsets never cross date boundaries
+        now = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
         plays = [
             # Track A: first play 5 days ago (new), replay 3 days ago (repeat), replay today (repeat)
             Play(
@@ -513,6 +514,7 @@ class TestDiscovery:
         """5 days ago: 1 new (A). 3 days ago: 1 new (B) + 1 repeat (A). Today: 1 new (C) + 1 repeat (A)."""
         user_id: int = discovery_seeded_data["user_id"]  # type: ignore[assignment]
         resp = client.get("/api/me/analytics/discovery?days=3650", cookies=_auth_cookies(jwt_service, user_id))
+        assert resp.status_code == 200
         days_data = {d["date"]: d for d in resp.json()["days"]}
 
         total_new = sum(d["new_tracks"] for d in days_data.values())
