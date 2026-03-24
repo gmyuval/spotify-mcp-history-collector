@@ -66,19 +66,20 @@
   var onResize = function() { if (active && chart) chart.resize(); };
   window.addEventListener('resize', onResize);
 
-  window.__discoveryCleanup = function() {
-    active = false;
-    window.removeEventListener('resize', onResize);
-    if (chart) { chart.dispose(); chart = null; }
-    window.__discoveryCleanup = null;
-  };
-
-  SpotifyMCP.onThemeChange(function() {
+  var unsubTheme = SpotifyMCP.onThemeChange(function() {
     if (!active || !chart) return;
     chart.dispose();
     chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
     chart.setOption(opts);
   });
+
+  window.__discoveryCleanup = function() {
+    active = false;
+    window.removeEventListener('resize', onResize);
+    unsubTheme();
+    if (chart) { chart.dispose(); chart = null; }
+    window.__discoveryCleanup = null;
+  };
 })();
 </script>
 {% else %}

@@ -530,7 +530,7 @@ class TestDiscovery:
         days_data = resp.json()["days"]
         # Only today's plays: Track A replay (repeat) + Track C first play (new)
         total = sum(d["new_tracks"] + d["repeat_tracks"] for d in days_data)
-        assert total <= 3  # At most today's plays
+        assert total == 2  # Track A replay (repeat) + Track C first play (new)
 
     def test_discovery_requires_auth(self, client: TestClient) -> None:
         resp = client.get("/api/me/analytics/discovery")
