@@ -1,0 +1,88 @@
+{% if data and data.days %}
+<div id="discoveryChart" style="width:100%; height:360px;"></div>
+<script>
+(function() {
+  if (window.__discoveryCleanup) window.__discoveryCleanup();
+
+  var raw = {{ data.days | tojson }};
+  var dates = [], newTracks = [], repeatTracks = [];
+  for (var i = 0; i < raw.length; i++) {
+    dates.push(raw[i].date.substring(0, 10));
+    newTracks.push(raw[i].new_tracks);
+    repeatTracks.push(raw[i].repeat_tracks);
+  }
+
+  var el = document.getElementById('discoveryChart');
+  var opts = {
+    tooltip: {
+      trigger: 'axis',
+      formatter: function(params) {
+        var d = params[0].name;
+        var lines = [d];
+        for (var i = 0; i < params.length; i++) {
+          lines.push(params[i].marker + ' ' + params[i].seriesName + ': ' + params[i].value);
+        }
+        return lines.join('<br/>');
+      }
+    },
+    legend: { data: ['New tracks', 'Repeat tracks'], bottom: 0, textStyle: { fontSize: 11 } },
+    grid: { left: 50, right: 20, top: 20, bottom: 50 },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      boundaryGap: false,
+      axisLabel: { rotate: 45, fontSize: 10 }
+    },
+    yAxis: { type: 'value' },
+    series: [
+      {
+        name: 'New tracks',
+        type: 'line',
+        stack: 'total',
+        areaStyle: { opacity: 0.7 },
+        data: newTracks,
+        itemStyle: { color: '#1DB954' },
+        emphasis: { focus: 'series' },
+        symbol: 'none',
+        smooth: true
+      },
+      {
+        name: 'Repeat tracks',
+        type: 'line',
+        stack: 'total',
+        areaStyle: { opacity: 0.5 },
+        data: repeatTracks,
+        itemStyle: { color: '#727272' },
+        emphasis: { focus: 'series' },
+        symbol: 'none',
+        smooth: true
+      }
+    ]
+  };
+
+  var chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
+  chart.setOption(opts);
+  var active = true;
+  var onResize = function() { if (active && chart) chart.resize(); };
+  window.addEventListener('resize', onResize);
+
+  var unsubTheme = SpotifyMCP.onThemeChange(function() {
+    if (!active || !chart) return;
+    chart.dispose();
+    chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
+    chart.setOption(opts);
+  });
+
+  window.__discoveryCleanup = function() {
+    active = false;
+    window.removeEventListener('resize', onResize);
+    unsubTheme();
+    if (chart) { chart.dispose(); chart = null; }
+    window.__discoveryCleanup = null;
+  };
+})();
+</script>
+{% else %}
+<script>if (window.__discoveryCleanup) window.__discoveryCleanup();</script>
+<p class="text-muted text-center py-4 mb-0">No listening data for this period</p>
+{% endif %}

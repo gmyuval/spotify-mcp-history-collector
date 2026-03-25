@@ -55,6 +55,11 @@
     return currentTheme() === 'dark' ? 'dark' : null;
   };
   window.SpotifyMCP.onThemeChange = function (fn) {
-    if (typeof fn === 'function') listeners.push(fn);
+    if (typeof fn !== 'function') return function () {};
+    listeners.push(fn);
+    return function () {
+      var idx = listeners.indexOf(fn);
+      if (idx !== -1) listeners.splice(idx, 1);
+    };
   };
 })();

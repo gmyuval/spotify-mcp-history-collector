@@ -16,6 +16,7 @@ from app.explorer.schemas import (
     CreatedTokenResponse,
     CreateTokenRequest,
     DashboardData,
+    DiscoveryData,
     GenreData,
     HeatmapData,
     MemoryPlaylistDetail,
@@ -86,6 +87,7 @@ class ExplorerRouter:
         r.add_api_route("/analytics/heatmap", self.analytics_heatmap, methods=["GET"])
         r.add_api_route("/analytics/timeline", self.analytics_timeline, methods=["GET"])
         r.add_api_route("/analytics/genres", self.analytics_genres, methods=["GET"])
+        r.add_api_route("/analytics/discovery", self.analytics_discovery, methods=["GET"])
 
     async def dashboard(
         self,
@@ -119,6 +121,14 @@ class ExplorerRouter:
         days: int = Query(default=90, ge=1, le=3650),
     ) -> GenreData:
         return await self._service.get_genres(user_id, session, days=days)
+
+    async def analytics_discovery(
+        self,
+        user_id: RequireOwnDataView,
+        session: DBSession,
+        days: int = Query(default=90, ge=1, le=3650),
+    ) -> DiscoveryData:
+        return await self._service.get_discovery(user_id, session, days=days)
 
     async def history(
         self,

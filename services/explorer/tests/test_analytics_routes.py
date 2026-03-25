@@ -21,8 +21,10 @@ def test_analytics_page(client: TestClient) -> None:
     assert "Listening Heatmap" in response.text
     assert "Listening Timeline" in response.text
     assert "Genre Distribution" in response.text
+    assert "Discovery Rate" in response.text
     assert "hx-get" in response.text  # HTMX triggers present
     assert "partials/genres" in response.text
+    assert "partials/discovery" in response.text
     assert "7d" in response.text
     assert "90d" in response.text
     client.cookies.clear()
@@ -122,4 +124,36 @@ def test_genres_partial_empty(client: TestClient, mock_api: AsyncMock) -> None:
     response = client.get("/analytics/partials/genres?days=7")
     assert response.status_code == 200
     assert "No genre data" in response.text
+    client.cookies.clear()
+
+
+# --- Discovery partial ---
+
+
+def test_discovery_partial_requires_login(client: TestClient) -> None:
+    response = client.get("/analytics/partials/discovery", follow_redirects=False)
+    assert response.status_code == 303
+
+
+def test_discovery_partial(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.get_discovery.return_value = {
+        "days": [
+            {"date": "2026-03-20", "new_tracks": 5, "repeat_tracks": 10},
+            {"date": "2026-03-21", "new_tracks": 3, "repeat_tracks": 12},
+        ]
+    }
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/analytics/partials/discovery?days=90")
+    assert response.status_code == 200
+    assert "discoveryChart" in response.text
+    mock_api.get_discovery.assert_called_once_with("test-jwt", days=90)
+    client.cookies.clear()
+
+
+def test_discovery_partial_empty(client: TestClient, mock_api: AsyncMock) -> None:
+    mock_api.get_discovery.return_value = {"days": []}
+    client.cookies.set("access_token", "test-jwt")
+    response = client.get("/analytics/partials/discovery?days=7")
+    assert response.status_code == 200
+    assert "No listening data" in response.text
     client.cookies.clear()
