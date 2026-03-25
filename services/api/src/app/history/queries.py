@@ -268,6 +268,59 @@ class HistoryQueries:
             return [dict(row._mapping) for row in result.all()]
 
     @staticmethod
+    async def discovery_rate(
+        user_id: int,
+        session: AsyncSession,
+        days: int = 90,
+    ) -> list[dict[str, object]]:
+        """Daily new-track vs repeat-track play counts.
+
+        Uses a CTE to find the first play date of each track, then classifies
+        each play as "new" (played on the track's first-ever play date) or
+        "repeat" (played on a later date).
+
+        Returns ``[{date, new_tracks, repeat_tracks}, ...]`` ordered by date.
+        """
+        cutoff = HistoryQueries._cutoff(days)
+        dialect = session.bind.dialect.name if session.bind else "postgresql"
+
+        if dialect == "sqlite":
+            first_date = func.strftime("%Y-%m-%d", func.min(Play.played_at))
+        else:
+            first_date = func.date(func.min(Play.played_at))
+
+        # CTE: first play date per track (global, not windowed by days)
+        first_play = (
+            select(
+                Play.track_id,
+                first_date.label("first_play_date"),
+            )
+            .where(Play.user_id == user_id)
+            .group_by(Play.track_id)
+            .cte("first_play")
+        )
+
+        if dialect == "sqlite":
+            current_date_expr = func.strftime("%Y-%m-%d", Play.played_at)
+        else:
+            current_date_expr = func.date(Play.played_at)
+
+        stmt = (
+            select(
+                current_date_expr.label("date"),
+                func.sum(case((current_date_expr == first_play.c.first_play_date, 1), else_=0)).label("new_tracks"),
+                func.sum(case((current_date_expr != first_play.c.first_play_date, 1), else_=0)).label("repeat_tracks"),
+            )
+            .select_from(Play)
+            .join(first_play, Play.track_id == first_play.c.track_id)
+            .where(Play.user_id == user_id, Play.played_at >= cutoff)
+            .group_by(current_date_expr)
+            .order_by(current_date_expr)
+        )
+        result = await session.execute(stmt)
+        return [dict(row._mapping) for row in result.all()]
+
+    @staticmethod
     async def coverage(
         user_id: int,
         session: AsyncSession,

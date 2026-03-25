@@ -63,21 +63,22 @@
 
   window._timelineData = { plays: plays, minutes: minutes, chart: chart, opts: opts };
 
-  window.__timelineCleanup = function() {
-    active = false;
-    window.removeEventListener('resize', onResize);
-    if (chart) { chart.dispose(); chart = null; }
-    window._timelineData = null;
-    window.__timelineCleanup = null;
-  };
-
-  SpotifyMCP.onThemeChange(function() {
+  var unsubTheme = SpotifyMCP.onThemeChange(function() {
     if (!active || !chart) return;
     chart.dispose();
     chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
     chart.setOption(opts);
     if (window._timelineData) window._timelineData.chart = chart;
   });
+
+  window.__timelineCleanup = function() {
+    active = false;
+    window.removeEventListener('resize', onResize);
+    unsubTheme();
+    if (chart) { chart.dispose(); chart = null; }
+    window._timelineData = null;
+    window.__timelineCleanup = null;
+  };
 })();
 
 function setTimelineMetric(metric, btn) {

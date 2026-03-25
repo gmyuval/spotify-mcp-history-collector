@@ -22,6 +22,8 @@ from app.explorer.schemas import (
     ArtistSummary,
     AudioFeaturesData,
     DashboardData,
+    DiscoveryData,
+    DiscoveryDay,
     GenreData,
     GenreItem,
     HeatmapCell,
@@ -133,6 +135,11 @@ class ExplorerService:
         """Return genre distribution by play count."""
         rows = await HistoryQueries.genre_distribution(user_id, session, days=days)
         return GenreData(genres=[GenreItem(**r) for r in rows])
+
+    async def get_discovery(self, user_id: int, session: AsyncSession, days: int = 90) -> DiscoveryData:
+        """Return daily new vs repeat track play counts."""
+        rows = await HistoryQueries.discovery_rate(user_id, session, days=days)
+        return DiscoveryData(days=[DiscoveryDay(**r) for r in rows])
 
     async def get_history(
         self,

@@ -101,15 +101,7 @@
 
   window._genresData = { plays: playsSeries, artists: artistsSeries, chart: chart, opts: opts };
 
-  window.__genresCleanup = function() {
-    active = false;
-    window.removeEventListener('resize', onResize);
-    if (chart) { chart.dispose(); chart = null; }
-    window._genresData = null;
-    window.__genresCleanup = null;
-  };
-
-  SpotifyMCP.onThemeChange(function() {
+  var unsubTheme = SpotifyMCP.onThemeChange(function() {
     if (!active || !chart) return;
     chart.dispose();
     chart = echarts.init(el, SpotifyMCP.getEchartsTheme());
@@ -117,6 +109,15 @@
     registerClickHandler(chart);
     if (window._genresData) window._genresData.chart = chart;
   });
+
+  window.__genresCleanup = function() {
+    active = false;
+    window.removeEventListener('resize', onResize);
+    unsubTheme();
+    if (chart) { chart.dispose(); chart = null; }
+    window._genresData = null;
+    window.__genresCleanup = null;
+  };
 })();
 
 function setGenreMetric(metric, btn) {

@@ -26,6 +26,9 @@ class AnalyticsRouter:
         self.router.add_api_route(
             "/analytics/partials/genres", self.genres_partial, methods=["GET"], response_class=HTMLResponse
         )
+        self.router.add_api_route(
+            "/analytics/partials/discovery", self.discovery_partial, methods=["GET"], response_class=HTMLResponse
+        )
 
     async def analytics(self, request: Request) -> HTMLResponse:
         """Render the analytics page — charts load via HTMX partials."""
@@ -111,6 +114,29 @@ class AnalyticsRouter:
         return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
             request,
             "partials/_genres_chart.html",
+            {"data": data, "days": days},
+        )
+
+    async def discovery_partial(self, request: Request) -> HTMLResponse:
+        """HTMX partial — discovery rate stacked area chart."""
+        token = require_login(request)
+        if isinstance(token, RedirectResponse):
+            return token  # type: ignore[return-value]
+
+        api: ExplorerApiClient = request.app.state.api
+        days = max(1, safe_int(request.query_params.get("days"), 90))
+        data: dict[str, object] = {}
+
+        try:
+            data = await api.get_discovery(token, days=days)
+        except ApiError as e:
+            if e.status_code == 401:
+                return RedirectResponse(url="/login", status_code=303)  # type: ignore[return-value]
+            logger.warning("discovery fetch failed: %s", e.detail)
+
+        return request.app.state.templates.TemplateResponse(  # type: ignore[no-any-return]
+            request,
+            "partials/_discovery_chart.html",
             {"data": data, "days": days},
         )
 

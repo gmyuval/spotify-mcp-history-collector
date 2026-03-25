@@ -57,8 +57,11 @@
   <div class="col-md-6" id="discovery-container">
     <div class="card">
       <div class="card-header"><strong>Discovery Rate</strong></div>
-      <div class="card-body text-center text-muted py-5">
-        <p class="mb-0">New vs. repeat tracks — coming soon</p>
+      <div class="card-body" id="discovery-chart-area"
+           hx-get="/analytics/partials/discovery?days={{ days }}"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <p class="text-muted text-center py-4 mb-0">Loading discovery...</p>
       </div>
     </div>
   </div>
@@ -93,6 +96,9 @@
 
     var genres = document.getElementById('genres-chart-area');
     if (genres) htmx.ajax('GET', '/analytics/partials/genres?days=' + days, {target: genres, swap: 'innerHTML'});
+
+    var discovery = document.getElementById('discovery-chart-area');
+    if (discovery) htmx.ajax('GET', '/analytics/partials/discovery?days=' + days, {target: discovery, swap: 'innerHTML'});
   });
 })();
 </script>
