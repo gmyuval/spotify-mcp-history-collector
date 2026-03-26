@@ -39,6 +39,9 @@ class SyncCheckpoint(Base):
     last_poll_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_poll_latest_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Playlist cache tracking
+    playlist_cache_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
