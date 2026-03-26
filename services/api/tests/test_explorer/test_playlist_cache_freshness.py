@@ -4,7 +4,7 @@ Verifies that staleness is determined by sync_checkpoints.playlist_cache_synced_
 rather than max(CachedPlaylist.fetched_at).
 """
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
@@ -141,7 +141,7 @@ async def no_checkpoint(async_engine: AsyncEngine) -> dict[str, object]:
 def client(
     async_engine: AsyncEngine,
     monkeypatch: pytest.MonkeyPatch,
-) -> TestClient:
+) -> Generator[TestClient]:
     """TestClient with DB + auth overrides — matches test_endpoints.py pattern."""
     from app.dependencies import db_manager
 
