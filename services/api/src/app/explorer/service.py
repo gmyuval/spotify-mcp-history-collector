@@ -777,7 +777,10 @@ class ExplorerService:
             # Update collection-level freshness timestamp
             cp_result = await session.execute(select(SyncCheckpoint).where(SyncCheckpoint.user_id == user_id))
             checkpoint = cp_result.scalar_one_or_none()
-            if checkpoint is not None:
+            if checkpoint is None:
+                checkpoint = SyncCheckpoint(user_id=user_id, playlist_cache_synced_at=now)
+                session.add(checkpoint)
+            else:
                 checkpoint.playlist_cache_synced_at = now
 
             await session.flush()

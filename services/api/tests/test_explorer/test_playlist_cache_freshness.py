@@ -74,7 +74,7 @@ def _auth_cookies(jwt_service: JWTService, user_id: int) -> dict[str, str]:
 @pytest.fixture
 async def fresh_cache(async_engine: AsyncEngine) -> dict[str, object]:
     """User + recent checkpoint + 1 playlist."""
-    now = datetime.now(UTC)  # actual now — must be genuinely recent for freshness check
+    now = datetime.now(UTC)
     factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
         user_id = await _seed_user_with_rbac(session)
@@ -98,11 +98,12 @@ async def stale_cache(async_engine: AsyncEngine) -> dict[str, object]:
 
     Key scenario from #50: individual row looks fresh but collection is stale.
     """
-    now = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    now = datetime.now(UTC)
     factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
         user_id = await _seed_user_with_rbac(session)
         session.add(SyncCheckpoint(user_id=user_id, playlist_cache_synced_at=now - timedelta(hours=2)))
+        # Individual playlist was fetched recently — old code would consider this fresh
         session.add(
             CachedPlaylist(
                 spotify_playlist_id="pl_recent",
@@ -119,7 +120,7 @@ async def stale_cache(async_engine: AsyncEngine) -> dict[str, object]:
 @pytest.fixture
 async def no_checkpoint(async_engine: AsyncEngine) -> dict[str, object]:
     """User + playlist but NO checkpoint (pre-migration data)."""
-    now = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    now = datetime.now(UTC)
     factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
         user_id = await _seed_user_with_rbac(session)
@@ -189,13 +190,22 @@ def jwt_service() -> JWTService:
 class TestPlaylistCacheFreshness:
     """Verify collection-level freshness via playlist_cache_synced_at."""
 
-    def test_fresh_cache_returns_playlists(
+    def test_fresh_cache_skips_refresh(
         self,
         client: TestClient,
         fresh_cache: dict[str, object],
         jwt_service: JWTService,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When playlist_cache_synced_at is recent, cached playlists are returned."""
+        """When playlist_cache_synced_at is recent, refresh is NOT called."""
+
+        async def _unexpected_refresh(*args: object, **kwargs: object) -> None:
+            raise AssertionError("_fetch_playlists_from_spotify should not run for fresh cache")
+
+        monkeypatch.setattr(
+            "app.explorer.service.ExplorerService._fetch_playlists_from_spotify",
+            _unexpected_refresh,
+        )
         user_id: int = fresh_cache["user_id"]  # type: ignore[assignment]
         resp = client.get("/api/me/playlists", cookies=_auth_cookies(jwt_service, user_id))
         assert resp.status_code == 200
@@ -203,33 +213,62 @@ class TestPlaylistCacheFreshness:
         assert len(data) == 1
         assert data[0]["name"] == "Fresh Playlist"
 
-    def test_stale_checkpoint_returns_fallback(
+    def test_stale_checkpoint_triggers_refresh(
         self,
         client: TestClient,
         stale_cache: dict[str, object],
         jwt_service: JWTService,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When checkpoint is old, refresh is attempted but fails (no token).
+        """When checkpoint is old, refresh IS called.
 
-        Stale DB data is returned as fallback.
+        Refresh returns None (simulating Spotify unavailable), stale DB data returned as fallback.
         """
+        refresh_called = False
+
+        async def _spy_refresh(*args: object, **kwargs: object) -> None:
+            nonlocal refresh_called
+            refresh_called = True
+            return None
+
+        monkeypatch.setattr(
+            "app.explorer.service.ExplorerService._fetch_playlists_from_spotify",
+            _spy_refresh,
+        )
         user_id: int = stale_cache["user_id"]  # type: ignore[assignment]
         resp = client.get("/api/me/playlists", cookies=_auth_cookies(jwt_service, user_id))
         assert resp.status_code == 200
+        assert refresh_called is True
         data = resp.json()
         assert len(data) == 1
         assert data[0]["name"] == "Recently Touched Playlist"
 
-    def test_no_checkpoint_returns_fallback(
+    def test_no_checkpoint_triggers_refresh(
         self,
         client: TestClient,
         no_checkpoint: dict[str, object],
         jwt_service: JWTService,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """When no checkpoint exists, cache is stale. DB data returned as fallback."""
+        """When no checkpoint exists, cache is stale — refresh IS called.
+
+        Refresh returns None, DB data returned as fallback.
+        """
+        refresh_called = False
+
+        async def _spy_refresh(*args: object, **kwargs: object) -> None:
+            nonlocal refresh_called
+            refresh_called = True
+            return None
+
+        monkeypatch.setattr(
+            "app.explorer.service.ExplorerService._fetch_playlists_from_spotify",
+            _spy_refresh,
+        )
         user_id: int = no_checkpoint["user_id"]  # type: ignore[assignment]
         resp = client.get("/api/me/playlists", cookies=_auth_cookies(jwt_service, user_id))
         assert resp.status_code == 200
+        assert refresh_called is True
         data = resp.json()
         assert len(data) == 1
         assert data[0]["name"] == "Old Playlist"
