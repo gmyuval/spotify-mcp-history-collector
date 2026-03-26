@@ -70,6 +70,7 @@ from shared.db.enums import PlaylistSnapshotSource
 from shared.db.models.cache import CachedPlaylist, CachedPlaylistTrack
 from shared.db.models.memory import MemoryPlaylist, PlaylistEvent, PlaylistSnapshot, PreferenceEvent, TasteProfile
 from shared.db.models.music import Artist, Play, Track, TrackArtist
+from shared.db.models.operations import SyncCheckpoint
 from shared.db.models.user import SpotifyToken, User
 from shared.musicbrainz.client import MusicBrainzClient
 from shared.spotify.client import SpotifyClient
@@ -658,17 +659,24 @@ class ExplorerService:
 
         Auto-fetches from Spotify if the cache is empty or older than 1 hour.
         """
+        # Check collection-level freshness from sync_checkpoints
+        checkpoint_result = await session.execute(
+            select(SyncCheckpoint.playlist_cache_synced_at).where(SyncCheckpoint.user_id == user_id)
+        )
+        synced_at = checkpoint_result.scalar_one_or_none()
+
+        if synced_at is not None:
+            if synced_at.tzinfo is None:
+                synced_at = synced_at.replace(tzinfo=UTC)
+            cache_stale = datetime.now(UTC) - synced_at > self._PLAYLIST_CACHE_TTL
+        else:
+            cache_stale = True
+
         result = await session.execute(
             select(CachedPlaylist).where(CachedPlaylist.user_id == user_id).order_by(CachedPlaylist.name)
         )
         playlists: list[CachedPlaylist] = list(result.scalars().all())
 
-        def _as_utc(dt: datetime) -> datetime:
-            return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
-
-        cache_stale = not playlists or (
-            datetime.now(UTC) - _as_utc(max(p.fetched_at for p in playlists)) > self._PLAYLIST_CACHE_TTL
-        )
         if cache_stale:
             refreshed = await self._fetch_playlists_from_spotify(user_id, session)
             if refreshed is not None:
@@ -765,6 +773,12 @@ class ExplorerService:
             if fetched_ids:
                 stale_stmt = stale_stmt.where(~CachedPlaylist.spotify_playlist_id.in_(fetched_ids))
             await session.execute(stale_stmt)
+
+            # Update collection-level freshness timestamp
+            cp_result = await session.execute(select(SyncCheckpoint).where(SyncCheckpoint.user_id == user_id))
+            checkpoint = cp_result.scalar_one_or_none()
+            if checkpoint is not None:
+                checkpoint.playlist_cache_synced_at = now
 
             await session.flush()
 

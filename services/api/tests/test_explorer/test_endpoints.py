@@ -15,6 +15,7 @@ from app.settings import AppSettings, get_settings
 from shared.db.base import Base
 from shared.db.models.cache import CachedPlaylist, CachedPlaylistTrack
 from shared.db.models.music import Artist, Play, Track, TrackArtist
+from shared.db.models.operations import SyncCheckpoint
 from shared.db.models.rbac import Permission, Role, RolePermission, UserRole
 from shared.db.models.user import User
 
@@ -102,6 +103,10 @@ async def seeded_data(async_engine: AsyncEngine) -> dict[str, object]:
                 source="spotify_api",
             )
         )
+
+        # Sync checkpoint (marks playlist cache as fresh)
+        checkpoint = SyncCheckpoint(user_id=user.id, playlist_cache_synced_at=now)
+        session.add(checkpoint)
 
         # Cached playlist
         playlist = CachedPlaylist(
