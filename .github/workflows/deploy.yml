@@ -188,6 +188,20 @@ jobs:
               sleep 5
             done
 
+            echo "=== Waiting for database connectivity ==="
+            for i in $(seq 1 12); do
+              if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api python -m app.db_check; then
+                echo "Database is reachable"
+                break
+              fi
+              if [ "$i" -eq 12 ]; then
+                echo "ERROR: Database not reachable after 120s"
+                exit 1
+              fi
+              echo "Waiting for database... ($i/12)"
+              sleep 10
+            done
+
             echo "=== Running migrations ==="
             for attempt in 1 2 3; do
               if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head; then
@@ -199,8 +213,8 @@ jobs:
                 docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=50 api
                 exit 1
               fi
-              echo "Migration attempt $attempt failed, retrying in 10s..."
-              sleep 10
+              echo "Migration attempt $attempt failed, retrying in 15s..."
+              sleep 15
             done
 
             echo "=== Recreating Caddy to apply config + env vars ==="
