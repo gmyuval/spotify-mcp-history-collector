@@ -17,7 +17,6 @@ TOP_TRACKS_URL = f"{SPOTIFY_API_BASE}/me/top/tracks"
 SEARCH_URL = f"{SPOTIFY_API_BASE}/search"
 ALBUMS_URL = f"{SPOTIFY_API_BASE}/albums"
 USER_PLAYLISTS_URL = f"{SPOTIFY_API_BASE}/me/playlists"
-USERS_URL = f"{SPOTIFY_API_BASE}/users"
 PLAYLIST_URL = f"{SPOTIFY_API_BASE}/playlists"
 
 # Retry defaults

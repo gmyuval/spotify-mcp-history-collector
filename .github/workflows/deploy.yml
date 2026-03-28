@@ -137,6 +137,34 @@ jobs:
           echo "deploy_ref=$REF" >> "$GITHUB_OUTPUT"
           echo "Deploying ref: $REF"
 
+      - name: Ensure DB firewall allows spotify-mcp droplets
+        env:
+          DO_API_TOKEN: ${{ secrets.DO_API_TOKEN }}
+          DB_CLUSTER_ID: ${{ secrets.DO_DB_CLUSTER_ID }}
+        run: |
+          if [ -z "$DO_API_TOKEN" ] || [ -z "$DB_CLUSTER_ID" ]; then
+            echo "Skipping DB firewall check (secrets not configured)"
+            exit 0
+          fi
+          # Fetch current rules
+          RULES=$(curl -sf -H "Authorization: Bearer $DO_API_TOKEN" \
+            "https://api.digitalocean.com/v2/databases/$DB_CLUSTER_ID/firewall" \
+            | jq '.rules')
+          # Check if spotify-mcp tag rule exists
+          HAS_TAG=$(echo "$RULES" | jq '[.[] | select(.type == "tag" and .value == "spotify-mcp")] | length')
+          if [ "$HAS_TAG" -gt 0 ]; then
+            echo "DB firewall already allows spotify-mcp tag"
+          else
+            echo "Adding spotify-mcp tag to DB firewall rules"
+            # Append the tag rule to existing rules
+            NEW_RULES=$(echo "$RULES" | jq '. + [{"type": "tag", "value": "spotify-mcp"}] | [.[] | {type, value}]')
+            curl -sf -X PUT -H "Authorization: Bearer $DO_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"rules\": $NEW_RULES}" \
+              "https://api.digitalocean.com/v2/databases/$DB_CLUSTER_ID/firewall"
+            echo "DB firewall updated"
+          fi
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         env:
@@ -188,6 +216,20 @@ jobs:
               sleep 5
             done
 
+            echo "=== Waiting for database connectivity ==="
+            for i in $(seq 1 12); do
+              if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api python -m app.db_check; then
+                echo "Database is reachable"
+                break
+              fi
+              if [ "$i" -eq 12 ]; then
+                echo "ERROR: Database not reachable after 12 attempts"
+                exit 1
+              fi
+              echo "Waiting for database... ($i/12)"
+              sleep 10
+            done
+
             echo "=== Running migrations ==="
             for attempt in 1 2 3; do
               if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head; then
@@ -199,8 +241,8 @@ jobs:
                 docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=50 api
                 exit 1
               fi
-              echo "Migration attempt $attempt failed, retrying in 10s..."
-              sleep 10
+              echo "Migration attempt $attempt failed, retrying in 15s..."
+              sleep 15
             done
 
             echo "=== Recreating Caddy to apply config + env vars ==="
