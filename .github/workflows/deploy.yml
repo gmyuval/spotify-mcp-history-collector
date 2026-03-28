@@ -189,11 +189,19 @@ jobs:
             done
 
             echo "=== Running migrations ==="
-            if ! docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head; then
-              echo "ERROR: Migration failed"
-              docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=50 api
-              exit 1
-            fi
+            for attempt in 1 2 3; do
+              if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head; then
+                echo "Migrations complete"
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "ERROR: Migration failed after 3 attempts"
+                docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=50 api
+                exit 1
+              fi
+              echo "Migration attempt $attempt failed, retrying in 10s..."
+              sleep 10
+            done
 
             echo "=== Recreating Caddy to apply config + env vars ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-deps caddy

@@ -70,6 +70,10 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={
+            "timeout": 30,
+            "command_timeout": 30,
+        },
     )
 
     async with connectable.connect() as connection:
