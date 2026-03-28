@@ -405,21 +405,18 @@ class SpotifyClient:
         self,
         name: str,
         *,
-        spotify_user_id: str | None = None,
+        spotify_user_id: str,
         description: str = "",
         public: bool = True,
     ) -> SpotifyPlaylist:
-        """POST /users/{user_id}/playlists (or /me/playlists as fallback).
+        """POST /users/{user_id}/playlists.
 
-        The Spotify Web API documents playlist creation under
-        ``/users/{user_id}/playlists``.  When *spotify_user_id* is provided
-        we use the correct endpoint; otherwise we fall back to ``/me/playlists``
-        for backwards compatibility.
+        The caller must provide the Spotify user ID so the request hits
+        the correct documented endpoint.
         """
-        if spotify_user_id:
-            url = f"{USERS_URL}/{spotify_user_id}/playlists"
-        else:
-            url = USER_PLAYLISTS_URL
+        if not spotify_user_id or not spotify_user_id.strip():
+            raise ValueError("spotify_user_id is required for playlist creation")
+        url = f"{USERS_URL}/{spotify_user_id}/playlists"
         response = await self._request(
             "POST",
             url,

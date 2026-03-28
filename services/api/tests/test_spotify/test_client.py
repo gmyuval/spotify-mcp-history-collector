@@ -726,20 +726,13 @@ async def test_create_playlist() -> None:
     assert body["public"] is False
 
 
-@respx.mock
-async def test_create_playlist_fallback_me() -> None:
-    """create_playlist falls back to /me/playlists when no spotify_user_id."""
-    route = respx.post("https://api.spotify.com/v1/me/playlists").mock(
-        return_value=httpx.Response(
-            201,
-            json=_playlist_json("new_pl", "Fallback Playlist"),
-        )
-    )
-
+async def test_create_playlist_requires_spotify_user_id() -> None:
+    """create_playlist raises ValueError when spotify_user_id is empty or blank."""
     client = SpotifyClient("test-token", max_retries=0)
-    result = await client.create_playlist("Fallback Playlist")
-    assert result.name == "Fallback Playlist"
-    assert route.called
+    with pytest.raises(ValueError, match="spotify_user_id is required"):
+        await client.create_playlist("Playlist", spotify_user_id="")
+    with pytest.raises(ValueError, match="spotify_user_id is required"):
+        await client.create_playlist("Playlist", spotify_user_id="   ")
 
 
 @respx.mock
