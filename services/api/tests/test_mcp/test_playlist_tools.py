@@ -872,6 +872,7 @@ def test_create_playlist(client: TestClient, seeded_user_with_scopes: int) -> No
         assert data["result"]["public"] is False
         mock_client.create_playlist.assert_called_once_with(
             name="New Playlist",
+            spotify_user_id="plwriter",
             description="Created by ChatGPT",
             public=False,
         )

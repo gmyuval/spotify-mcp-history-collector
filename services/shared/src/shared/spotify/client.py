@@ -22,6 +22,7 @@ from shared.spotify.constants import (
     TOP_TRACKS_URL,
     TRACKS_URL,
     USER_PLAYLISTS_URL,
+    USERS_URL,
 )
 from shared.spotify.exceptions import (
     SpotifyAuthError,
@@ -404,13 +405,24 @@ class SpotifyClient:
         self,
         name: str,
         *,
+        spotify_user_id: str | None = None,
         description: str = "",
         public: bool = True,
     ) -> SpotifyPlaylist:
-        """POST /me/playlists."""
+        """POST /users/{user_id}/playlists (or /me/playlists as fallback).
+
+        The Spotify Web API documents playlist creation under
+        ``/users/{user_id}/playlists``.  When *spotify_user_id* is provided
+        we use the correct endpoint; otherwise we fall back to ``/me/playlists``
+        for backwards compatibility.
+        """
+        if spotify_user_id:
+            url = f"{USERS_URL}/{spotify_user_id}/playlists"
+        else:
+            url = USER_PLAYLISTS_URL
         response = await self._request(
             "POST",
-            USER_PLAYLISTS_URL,
+            url,
             json_body={"name": name, "description": description, "public": public},
         )
         return SpotifyPlaylist.model_validate(response.json())

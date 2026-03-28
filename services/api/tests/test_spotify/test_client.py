@@ -706,8 +706,8 @@ async def test_get_playlist_all_tracks_large_playlist() -> None:
 
 @respx.mock
 async def test_create_playlist() -> None:
-    """create_playlist sends POST with JSON body and returns parsed playlist."""
-    route = respx.post("https://api.spotify.com/v1/me/playlists").mock(
+    """create_playlist sends POST to /users/{user_id}/playlists when spotify_user_id is given."""
+    route = respx.post("https://api.spotify.com/v1/users/testuser123/playlists").mock(
         return_value=httpx.Response(
             201,
             json=_playlist_json("new_pl", "New Playlist"),
@@ -715,13 +715,31 @@ async def test_create_playlist() -> None:
     )
 
     client = SpotifyClient("test-token", max_retries=0)
-    result = await client.create_playlist("New Playlist", description="Desc", public=False)
+    result = await client.create_playlist(
+        "New Playlist", spotify_user_id="testuser123", description="Desc", public=False
+    )
     assert result.name == "New Playlist"
     assert route.called
     request = route.calls[0].request
     body = json.loads(request.content)
     assert body["name"] == "New Playlist"
     assert body["public"] is False
+
+
+@respx.mock
+async def test_create_playlist_fallback_me() -> None:
+    """create_playlist falls back to /me/playlists when no spotify_user_id."""
+    route = respx.post("https://api.spotify.com/v1/me/playlists").mock(
+        return_value=httpx.Response(
+            201,
+            json=_playlist_json("new_pl", "Fallback Playlist"),
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=0)
+    result = await client.create_playlist("Fallback Playlist")
+    assert result.name == "Fallback Playlist"
+    assert route.called
 
 
 @respx.mock
@@ -803,7 +821,7 @@ async def test_update_playlist_partial() -> None:
 @respx.mock
 async def test_post_with_401_refreshes_token() -> None:
     """POST requests also trigger token refresh on 401."""
-    respx.post("https://api.spotify.com/v1/me/playlists").mock(
+    respx.post("https://api.spotify.com/v1/users/someuser/playlists").mock(
         side_effect=[
             httpx.Response(401, json={"error": {"message": "expired"}}),
             httpx.Response(201, json=_playlist_json("pl_new", "Refreshed Playlist")),
@@ -814,5 +832,5 @@ async def test_post_with_401_refreshes_token() -> None:
         return "new-token"
 
     client = SpotifyClient("old-token", on_token_expired=mock_refresh, max_retries=1)
-    result = await client.create_playlist("Refreshed Playlist")
+    result = await client.create_playlist("Refreshed Playlist", spotify_user_id="someuser")
     assert result.name == "Refreshed Playlist"
