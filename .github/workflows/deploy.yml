@@ -223,7 +223,7 @@ jobs:
                 break
               fi
               if [ "$i" -eq 12 ]; then
-                echo "ERROR: Database not reachable after 120s"
+                echo "ERROR: Database not reachable after 12 attempts"
                 exit 1
               fi
               echo "Waiting for database... ($i/12)"

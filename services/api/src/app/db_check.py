@@ -27,5 +27,8 @@ if __name__ == "__main__":
     try:
         asyncio.run(check())
     except Exception as exc:
-        print(f"DB not ready: {exc}", file=sys.stderr)  # noqa: T201
+        print(  # noqa: T201
+            f"DB not ready ({type(exc).__name__}). See API logs for details.",
+            file=sys.stderr,
+        )
         sys.exit(1)

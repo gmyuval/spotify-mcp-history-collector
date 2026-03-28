@@ -12,7 +12,7 @@ from app.cache.service import SpotifyCacheService
 from app.mcp.registry import registry
 from app.mcp.schemas import MCPToolParam
 from app.settings import get_settings
-from shared.db.models.user import SpotifyToken, User
+from shared.db.models.user import SpotifyToken
 from shared.spotify.client import SpotifyClient
 from shared.spotify.embed import SpotifyEmbedClient
 from shared.spotify.exceptions import SpotifyEmbedError, SpotifyRequestError
@@ -500,16 +500,9 @@ class PlaylistToolHandlers:
         scope_error = await self._check_write_scopes(user_id, session)
         if scope_error:
             raise ValueError(scope_error)
-        # Look up the Spotify user ID — POST /users/{user_id}/playlists is
-        # the documented endpoint; POST /me/playlists is not supported.
-        result = await session.execute(select(User.spotify_user_id).where(User.id == user_id))
-        spotify_user_id: str | None = result.scalar_one_or_none()
-        if spotify_user_id is None:
-            raise ValueError("User not found.")
         client = await self._get_client(user_id, session)
         pl = await client.create_playlist(
             name=args["name"],
-            spotify_user_id=spotify_user_id,
             description=args.get("description", ""),
             public=args.get("public", True),
         )
