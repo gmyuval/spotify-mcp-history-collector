@@ -22,6 +22,7 @@ from shared.spotify.constants import (
     TOP_TRACKS_URL,
     TRACKS_URL,
     USER_PLAYLISTS_URL,
+    USERS_URL,
 )
 from shared.spotify.exceptions import (
     SpotifyAuthError,
@@ -404,13 +405,21 @@ class SpotifyClient:
         self,
         name: str,
         *,
+        spotify_user_id: str,
         description: str = "",
         public: bool = True,
     ) -> SpotifyPlaylist:
-        """POST /me/playlists."""
+        """POST /users/{user_id}/playlists.
+
+        The caller must provide the Spotify user ID so the request hits
+        the correct documented endpoint.
+        """
+        if not spotify_user_id or not spotify_user_id.strip():
+            raise ValueError("spotify_user_id is required for playlist creation")
+        url = f"{USERS_URL}/{spotify_user_id}/playlists"
         response = await self._request(
             "POST",
-            USER_PLAYLISTS_URL,
+            url,
             json_body={"name": name, "description": description, "public": public},
         )
         return SpotifyPlaylist.model_validate(response.json())

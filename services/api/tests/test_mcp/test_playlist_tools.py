@@ -872,9 +872,31 @@ def test_create_playlist(client: TestClient, seeded_user_with_scopes: int) -> No
         assert data["result"]["public"] is False
         mock_client.create_playlist.assert_called_once_with(
             name="New Playlist",
+            spotify_user_id="plwriter",
             description="Created by ChatGPT",
             public=False,
         )
+
+
+def test_create_playlist_user_not_found(client: TestClient, seeded_user_with_scopes: int) -> None:
+    """create_playlist returns error when user_id does not exist.
+
+    With a non-existent user_id, _check_write_scopes fails before the
+    User lookup, so the error comes from the token check.  The "User
+    not found" branch is guarded by DB foreign keys (SpotifyToken →
+    User), but is tested via the scope-check short-circuit here.
+    """
+    resp = client.post(
+        "/mcp/call",
+        json={
+            "tool": "spotify.create_playlist",
+            "user_id": 999999,
+            "name": "Should Fail",
+        },
+    )
+    data = resp.json()
+    assert data["success"] is False
+    assert "No token found" in data["error"]
 
 
 def test_create_playlist_missing_scopes(client: TestClient, seeded_user_no_write_scopes: int) -> None:
