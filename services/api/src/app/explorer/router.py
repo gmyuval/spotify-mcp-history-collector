@@ -39,6 +39,7 @@ from app.explorer.schemas import (
     UserProfile,
 )
 from app.explorer.service import ExplorerService
+from app.explorer.services import DetailService, MemoryService, PlaylistService, TasteService
 from app.history.schemas import ArtistCount
 from app.history.service import HistoryService
 from shared.spotify.exceptions import SpotifyAuthError, SpotifyClientError, SpotifyRateLimitError, SpotifyRequestError
@@ -54,6 +55,10 @@ class ExplorerRouter:
 
     def __init__(self) -> None:
         self._service = ExplorerService()
+        self._playlist_service = PlaylistService()
+        self._detail_service = DetailService()
+        self._taste_service = TasteService()
+        self._memory_service = MemoryService()
         self._history_service = HistoryService()
         self.router = APIRouter()
         self._register_routes()
@@ -171,12 +176,12 @@ class ExplorerRouter:
         return await self._service.get_profile(user_id, session)
 
     async def playlists(self, user_id: RequireOwnDataView, session: DBSession) -> list[PlaylistSummary]:
-        return await self._service.get_playlists(user_id, session)
+        return await self._playlist_service.get_playlists(user_id, session)
 
     async def refresh_playlists(self, user_id: RequireOwnDataView, session: DBSession) -> list[PlaylistSummary]:
         """Force-refresh playlist list from Spotify API."""
         try:
-            return await self._service.refresh_playlists(user_id, session)
+            return await self._playlist_service.refresh_playlists(user_id, session)
         except (TokenNotFoundError, TokenRefreshError, SpotifyAuthError) as exc:
             logger.warning("Auth failure refreshing playlists for user %d: %s", user_id, exc)
             raise HTTPException(status_code=401, detail="Spotify authentication failed") from exc
@@ -192,7 +197,7 @@ class ExplorerRouter:
         user_id: RequireOwnDataView,
         session: DBSession,
     ) -> PlaylistDetail:
-        result = await self._service.get_playlist_detail(user_id, spotify_playlist_id, session)
+        result = await self._playlist_service.get_playlist_detail(user_id, spotify_playlist_id, session)
         if result is None:
             raise HTTPException(status_code=404, detail="Playlist not found")
         return result
@@ -205,7 +210,7 @@ class ExplorerRouter:
     ) -> PlaylistDetail:
         """Fetch tracks from Spotify and cache them."""
         try:
-            result = await self._service.fetch_playlist_tracks(user_id, spotify_playlist_id, session)
+            result = await self._playlist_service.fetch_playlist_tracks(user_id, spotify_playlist_id, session)
         except (TokenNotFoundError, TokenRefreshError, SpotifyAuthError) as exc:
             logger.warning("Auth failure fetching tracks for playlist %s: %s", spotify_playlist_id, exc)
             raise HTTPException(status_code=401, detail="Spotify authentication failed") from exc
@@ -223,7 +228,7 @@ class ExplorerRouter:
 
     async def taste_profile(self, user_id: RequireOwnDataView, session: DBSession) -> TasteProfileWithEvents:
         """Get the user's taste profile with recent preference events."""
-        return await self._service.get_taste_profile(user_id, session)
+        return await self._taste_service.get_taste_profile(user_id, session)
 
     async def update_taste_profile(
         self, body: TasteProfilePatch, user_id: RequireOwnDataView, session: DBSession
@@ -231,11 +236,11 @@ class ExplorerRouter:
         """Update taste profile via JSON merge-patch. Creates if missing."""
         if not body.patch:
             raise HTTPException(status_code=422, detail="patch must be a non-empty object")
-        return await self._service.update_taste_profile(user_id, body.patch, body.reason, session)
+        return await self._taste_service.update_taste_profile(user_id, body.patch, body.reason, session)
 
     async def clear_taste_profile(self, user_id: RequireOwnDataView, session: DBSession) -> dict[str, bool]:
         """Delete the user's taste profile, resetting to version 0."""
-        await self._service.clear_taste_profile(user_id, session)
+        await self._taste_service.clear_taste_profile(user_id, session)
         return {"cleared": True}
 
     async def preference_events(
@@ -246,7 +251,7 @@ class ExplorerRouter:
         offset: int = Query(default=0, ge=0),
     ) -> PaginatedPreferenceEvents:
         """Get paginated preference event history."""
-        return await self._service.get_preference_events(user_id, session, limit=limit, offset=offset)
+        return await self._taste_service.get_preference_events(user_id, session, limit=limit, offset=offset)
 
     async def memory_playlists(
         self,
@@ -256,7 +261,7 @@ class ExplorerRouter:
         offset: int = Query(default=0, ge=0),
     ) -> PaginatedMemoryPlaylists:
         """List assistant-tracked playlists from the memory ledger."""
-        return await self._service.get_memory_playlists(user_id, session, limit=limit, offset=offset)
+        return await self._memory_service.get_memory_playlists(user_id, session, limit=limit, offset=offset)
 
     async def memory_playlist_detail(
         self,
@@ -265,7 +270,7 @@ class ExplorerRouter:
         session: DBSession,
     ) -> MemoryPlaylistDetail:
         """Get a memory playlist with track IDs and recent events."""
-        result = await self._service.get_memory_playlist_detail(user_id, playlist_id, session)
+        result = await self._memory_service.get_memory_playlist_detail(user_id, playlist_id, session)
         if result is None:
             raise HTTPException(status_code=404, detail="Memory playlist not found")
         return result
@@ -279,7 +284,7 @@ class ExplorerRouter:
         offset: int = Query(default=0, ge=0),
     ) -> PaginatedMemoryPlaylistEvents:
         """Get paginated mutation events for a memory playlist."""
-        result = await self._service.get_memory_playlist_events(
+        result = await self._memory_service.get_memory_playlist_events(
             user_id, playlist_id, session, limit=limit, offset=offset
         )
         if result is None:
@@ -316,7 +321,7 @@ class ExplorerRouter:
         self, track_id: int, user_id: RequireOwnDataView, session: DBSession, request: Request
     ) -> TrackDetail:
         """Get detailed track information with play stats and enrichment."""
-        result = await self._service.get_track_detail(user_id, track_id, session, request=request)
+        result = await self._detail_service.get_track_detail(user_id, track_id, session, request=request)
         if result is None:
             raise HTTPException(status_code=404, detail="Track not found")
         return result
@@ -325,7 +330,7 @@ class ExplorerRouter:
         self, artist_id: int, user_id: RequireOwnDataView, session: DBSession, request: Request
     ) -> ArtistDetail:
         """Get detailed artist information with play stats and enrichment."""
-        result = await self._service.get_artist_detail(user_id, artist_id, session, request=request)
+        result = await self._detail_service.get_artist_detail(user_id, artist_id, session, request=request)
         if result is None:
             raise HTTPException(status_code=404, detail="Artist not found")
         return result
@@ -334,7 +339,7 @@ class ExplorerRouter:
         self, album_spotify_id: str, user_id: RequireOwnDataView, session: DBSession, request: Request
     ) -> AlbumDetail:
         """Get album detail with per-track play stats and enrichment."""
-        result = await self._service.get_album_detail(user_id, album_spotify_id, session, request=request)
+        result = await self._detail_service.get_album_detail(user_id, album_spotify_id, session, request=request)
         if result is None:
             raise HTTPException(status_code=404, detail="Album not found")
         return result
