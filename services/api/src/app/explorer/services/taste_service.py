@@ -34,7 +34,7 @@ class TasteService(BaseExplorerService):
         stmt = (
             select(PreferenceEvent)
             .where(PreferenceEvent.user_id == user_id)
-            .order_by(desc(PreferenceEvent.timestamp))
+            .order_by(desc(PreferenceEvent.timestamp), desc(PreferenceEvent.event_id))
             .limit(10)
         )
         result = await session.execute(stmt)
@@ -97,7 +97,7 @@ class TasteService(BaseExplorerService):
         stmt = (
             select(PreferenceEvent)
             .where(PreferenceEvent.user_id == user_id)
-            .order_by(desc(PreferenceEvent.timestamp))
+            .order_by(desc(PreferenceEvent.timestamp), desc(PreferenceEvent.event_id))
             .limit(limit)
             .offset(offset)
         )

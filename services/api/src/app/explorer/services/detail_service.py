@@ -169,7 +169,7 @@ class DetailService(BaseExplorerService):
         if artist.spotify_artist_id:
             spotify_enrichment = await self._enrich_artist_spotify(artist.spotify_artist_id, user_id, session)
 
-        mb_enrichment = await self._enrich_artist_musicbrainz(spotify_enrichment, artist.name, request=request)
+        mb_enrichment = await self._enrich_artist_musicbrainz(artist.name, request=request)
 
         return ArtistDetail(
             artist_id=artist.id,
@@ -233,13 +233,10 @@ class DetailService(BaseExplorerService):
         total_play_count = sum(item.play_count for item in album_tracks)
         unique_track_count = sum(1 for item in album_tracks if item.play_count > 0)
 
-        spotify_enrichment: SpotifyAlbumEnrichment | None = None
         spotify_enrichment = await self._enrich_album_spotify(album_spotify_id, user_id, session)
 
         first_artist = sorted(artist_name_set)[0] if artist_name_set else ""
-        mb_enrichment = await self._enrich_album_musicbrainz(
-            album_spotify_id, album_name, first_artist, request=request
-        )
+        mb_enrichment = await self._enrich_album_musicbrainz(album_name, first_artist, request=request)
 
         return AlbumDetail(
             album_spotify_id=album_spotify_id,
@@ -379,7 +376,7 @@ class DetailService(BaseExplorerService):
             return None
 
     async def _enrich_artist_musicbrainz(
-        self, spotify_enrichment: SpotifyArtistEnrichment | None, artist_name: str, request: object | None = None
+        self, artist_name: str, request: object | None = None
     ) -> MusicBrainzArtistEnrichment | None:
         """Fetch artist metadata from MusicBrainz via direct artist search."""
         mb_client = self._get_mb_client(request)
@@ -405,7 +402,7 @@ class DetailService(BaseExplorerService):
             return None
 
     async def _enrich_album_musicbrainz(
-        self, album_spotify_id: str, album_name: str, artist_name: str, request: object | None = None
+        self, album_name: str, artist_name: str, request: object | None = None
     ) -> MusicBrainzAlbumEnrichment | None:
         """Fetch album metadata from MusicBrainz via recording search."""
         mb_client = self._get_mb_client(request)

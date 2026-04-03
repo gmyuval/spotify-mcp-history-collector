@@ -85,16 +85,18 @@ class PlaylistService(BaseExplorerService):
         return [self._playlist_to_summary(p) for p in playlists]
 
     async def refresh_playlists(self, user_id: int, session: AsyncSession) -> list[PlaylistSummary]:
-        """Force-refresh playlists from Spotify API regardless of cache age."""
-        refreshed = await self._fetch_playlists_from_spotify(user_id, session)
-        if refreshed is None:
-            result = await session.execute(
-                select(CachedPlaylist).where(CachedPlaylist.user_id == user_id).order_by(CachedPlaylist.name)
-            )
-            refreshed = list(result.scalars().all())
-        return [self._playlist_to_summary(p) for p in refreshed]
+        """Force-refresh playlists from Spotify API regardless of cache age.
 
-    async def _fetch_playlists_from_spotify(self, user_id: int, session: AsyncSession) -> list[CachedPlaylist] | None:
+        Unlike get_playlists(), this lets Spotify errors propagate so the
+        router can map them to appropriate HTTP status codes.
+        """
+        refreshed = await self._fetch_playlists_from_spotify(user_id, session, swallow_errors=False)
+        # swallow_errors=False guarantees non-None return or an exception
+        return [self._playlist_to_summary(p) for p in (refreshed or [])]
+
+    async def _fetch_playlists_from_spotify(
+        self, user_id: int, session: AsyncSession, *, swallow_errors: bool = True
+    ) -> list[CachedPlaylist] | None:
         """Fetch user playlists from Spotify API and upsert metadata into cached_playlists.
 
         Returns the updated list ordered by name, or None if Spotify is unreachable.
@@ -106,12 +108,15 @@ class PlaylistService(BaseExplorerService):
 
             offset = 0
             all_items: list[SpotifyPlaylistSimplified] = []
+            scan_exhausted = False
             while offset < fetch_max:
-                response = await client.get_user_playlists(limit=self._PLAYLIST_FETCH_PAGE_SIZE, offset=offset)
+                page_size = min(self._PLAYLIST_FETCH_PAGE_SIZE, fetch_max - offset)
+                response = await client.get_user_playlists(limit=page_size, offset=offset)
                 all_items.extend(response.items)
-                if len(response.items) < self._PLAYLIST_FETCH_PAGE_SIZE or response.next is None:
+                if len(response.items) < page_size or response.next is None:
+                    scan_exhausted = True
                     break
-                offset += self._PLAYLIST_FETCH_PAGE_SIZE
+                offset += page_size
 
             existing_rows_result = await session.execute(
                 select(CachedPlaylist).where(CachedPlaylist.user_id == user_id)
@@ -159,10 +164,15 @@ class PlaylistService(BaseExplorerService):
                         )
                     )
 
-            stale_stmt = delete(CachedPlaylist).where(CachedPlaylist.user_id == user_id)
-            if fetched_ids:
-                stale_stmt = stale_stmt.where(~CachedPlaylist.spotify_playlist_id.in_(fetched_ids))
-            await session.execute(stale_stmt)
+            # Only prune unfollowed playlists when the scan was exhaustive;
+            # a truncated scan (hit fetch_max) would incorrectly delete playlists
+            # beyond the scanned prefix.
+            if scan_exhausted and fetched_ids:
+                stale_stmt = delete(CachedPlaylist).where(
+                    CachedPlaylist.user_id == user_id,
+                    ~CachedPlaylist.spotify_playlist_id.in_(fetched_ids),
+                )
+                await session.execute(stale_stmt)
 
             cp_result = await session.execute(select(SyncCheckpoint).where(SyncCheckpoint.user_id == user_id))
             checkpoint = cp_result.scalar_one_or_none()
@@ -188,7 +198,9 @@ class PlaylistService(BaseExplorerService):
             SpotifyRequestError,
         ):
             logger.warning("Failed to fetch playlists from Spotify for user %d", user_id, exc_info=True)
-            return None
+            if swallow_errors:
+                return None
+            raise
 
     async def get_playlist_detail(
         self, user_id: int, spotify_playlist_id: str, session: AsyncSession
