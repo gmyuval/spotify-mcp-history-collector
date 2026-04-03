@@ -43,6 +43,9 @@ class SettingsService:
         "search.default_limit": 1,
         "search.max_limit": 1,
         "search.snippet_max_length": 1,
+        "explorer.playlist_cache_ttl_minutes": 1,
+        "explorer.playlist_fetch_max": 1,
+        "explorer.enrichment_cache_ttl_seconds": 1,
         "playlist.snapshot_compaction_threshold": 1,
         "playlist.default_page_size": 1,
         "playlist.max_page_size": 1,
@@ -79,6 +82,22 @@ class SettingsService:
             "search",
         ),
         "search.score_profile": (0.3, "Relevance score weight for taste profile matches", "search"),
+        # ── Explorer ──────────────────────────────────────────────────
+        "explorer.playlist_cache_ttl_minutes": (
+            60,
+            "Minutes before the playlist list cache is considered stale and auto-refreshed",
+            "explorer",
+        ),
+        "explorer.playlist_fetch_max": (
+            500,
+            "Safety cap: maximum number of playlists to fetch from Spotify",
+            "explorer",
+        ),
+        "explorer.enrichment_cache_ttl_seconds": (
+            86400,
+            "Seconds to cache Spotify enrichment data (track/artist/album detail pages)",
+            "explorer",
+        ),
         # ── Playlist ledger ───────────────────────────────────────────
         "playlist.snapshot_compaction_threshold": (10, "Auto-snapshot created every N mutations", "playlist"),
         "playlist.default_page_size": (50, "Default page size for memory.get_playlists", "playlist"),

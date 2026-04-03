@@ -160,7 +160,7 @@ def client(
     app.dependency_overrides[get_settings] = _test_settings
 
     monkeypatch.setattr("app.auth.middleware.get_settings", _test_settings)
-    monkeypatch.setattr("app.explorer.service.get_settings", _test_settings)
+    monkeypatch.setattr("app.explorer.services.playlist_service.get_settings", _test_settings)
 
     class _TestDBManager:
         def session(self_inner) -> AbstractAsyncContextManager[AsyncSession]:  # noqa: N805
@@ -203,7 +203,7 @@ class TestPlaylistCacheFreshness:
             raise AssertionError("_fetch_playlists_from_spotify should not run for fresh cache")
 
         monkeypatch.setattr(
-            "app.explorer.service.ExplorerService._fetch_playlists_from_spotify",
+            "app.explorer.services.playlist_service.PlaylistService._fetch_playlists_from_spotify",
             _unexpected_refresh,
         )
         user_id: int = fresh_cache["user_id"]  # type: ignore[assignment]
@@ -232,7 +232,7 @@ class TestPlaylistCacheFreshness:
             return None
 
         monkeypatch.setattr(
-            "app.explorer.service.ExplorerService._fetch_playlists_from_spotify",
+            "app.explorer.services.playlist_service.PlaylistService._fetch_playlists_from_spotify",
             _spy_refresh,
         )
         user_id: int = stale_cache["user_id"]  # type: ignore[assignment]
@@ -262,7 +262,7 @@ class TestPlaylistCacheFreshness:
             return None
 
         monkeypatch.setattr(
-            "app.explorer.service.ExplorerService._fetch_playlists_from_spotify",
+            "app.explorer.services.playlist_service.PlaylistService._fetch_playlists_from_spotify",
             _spy_refresh,
         )
         user_id: int = no_checkpoint["user_id"]  # type: ignore[assignment]
