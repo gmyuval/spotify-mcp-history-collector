@@ -12,6 +12,7 @@ from app.explorer.schemas import (
     TasteProfileWithEvents,
 )
 from app.explorer.services._base import BaseExplorerService
+from shared.db.enums import PreferenceEventSource, PreferenceEventType
 from shared.db.models.memory import PreferenceEvent, TasteProfile
 
 
@@ -67,8 +68,8 @@ class TasteService(BaseExplorerService):
             event = PreferenceEvent(
                 event_id=uuid.uuid4(),
                 user_id=user_id,
-                source="user",
-                type="note",
+                source=PreferenceEventSource.USER,
+                type=PreferenceEventType.NOTE,
                 payload_json={"action": "profile_update", "reason": reason, "patch_keys": list(patch.keys())},
             )
             session.add(event)

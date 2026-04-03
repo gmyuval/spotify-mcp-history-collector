@@ -332,6 +332,7 @@ class PlaylistService(BaseExplorerService):
             "name": pl.name,
             "description": pl.description,
             "public": pl.public,
+            "owner_id": pl.owner.id if pl.owner else None,
             "owner": pl.owner.display_name if pl.owner else None,
             "tracks_total": pl.tracks.total if pl.tracks else 0,
             "snapshot_id": pl.snapshot_id,

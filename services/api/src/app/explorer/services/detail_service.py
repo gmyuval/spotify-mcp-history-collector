@@ -204,6 +204,8 @@ class DetailService(BaseExplorerService):
             .options(selectinload(Track.artists))
         )
         tracks = list(tracks_result.scalars().all())
+        if not tracks:
+            return None
 
         album_name = tracks[0].album_name or ""
         artist_name_set: set[str] = set()
@@ -404,7 +406,12 @@ class DetailService(BaseExplorerService):
     async def _enrich_album_musicbrainz(
         self, album_name: str, artist_name: str, request: object | None = None
     ) -> MusicBrainzAlbumEnrichment | None:
-        """Fetch album metadata from MusicBrainz via recording search."""
+        """Fetch album metadata from MusicBrainz via recording search.
+
+        Note: MusicBrainzClient has no dedicated release search, so we use
+        search_recording(artist, album_name) as a best-effort heuristic to
+        find a recording from the album, then extract its first release.
+        """
         mb_client = self._get_mb_client(request)
         if mb_client is None:
             return None

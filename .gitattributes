@@ -1,0 +1,2 @@
+# Normalize all text files to LF in the repo, let the OS decide on checkout.
+* text=auto eol=lf
