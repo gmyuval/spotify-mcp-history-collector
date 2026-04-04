@@ -72,7 +72,7 @@ async def run_async_migrations() -> None:
         poolclass=pool.NullPool,
         connect_args={
             "timeout": 60,
-            "command_timeout": 60,
+            "command_timeout": 300,
         },
     )
 

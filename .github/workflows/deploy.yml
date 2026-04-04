@@ -230,6 +230,10 @@ jobs:
               sleep 10
             done
 
+            echo "=== Stopping collector before migrations ==="
+            docker compose --env-file .env.prod -f docker-compose.prod.yml stop collector
+            echo "Collector stopped"
+
             echo "=== Running migrations ==="
             for attempt in 1 2 3; do
               if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head; then
@@ -244,6 +248,10 @@ jobs:
               echo "Migration attempt $attempt failed, retrying in 15s..."
               sleep 15
             done
+
+            echo "=== Restarting collector ==="
+            docker compose --env-file .env.prod -f docker-compose.prod.yml up -d collector
+            echo "Collector restarted"
 
             echo "=== Recreating Caddy to apply config + env vars ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --force-recreate --no-deps caddy
