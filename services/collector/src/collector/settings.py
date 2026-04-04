@@ -36,6 +36,12 @@ class CollectorSettings(BaseSettings):
     ENRICH_BATCH_SIZE: int = 100
     ENRICH_MAX_PER_CYCLE: int = 500
 
+    # Local track resolution
+    RESOLVE_LOCAL_TRACKS_ENABLED: bool = True
+    RESOLVE_BATCH_SIZE: int = 50
+    RESOLVE_MAX_PER_CYCLE: int = 200
+    RESOLVE_COOLDOWN_DAYS: int = 30
+
     # Valkey cache
     VALKEY_URL: str = ""
 
