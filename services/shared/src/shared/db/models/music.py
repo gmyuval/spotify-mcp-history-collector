@@ -44,13 +44,16 @@ class Track(Base):
         nullable=False,
         default=TrackSource.SPOTIFY_API,
     )
+    resolution_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
 
     # Relationships
-    artists: Mapped[list[Artist]] = relationship("Artist", secondary="track_artists", back_populates="tracks")
+    artists: Mapped[list[Artist]] = relationship(
+        "Artist", secondary="track_artists", back_populates="tracks", order_by="TrackArtist.position"
+    )
     plays: Mapped[list[Play]] = relationship("Play", back_populates="track")
     audio_features: Mapped[AudioFeatures | None] = relationship("AudioFeatures", back_populates="track", uselist=False)
 

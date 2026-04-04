@@ -19,6 +19,7 @@ class JobType(enum.StrEnum):
     INITIAL_SYNC = "initial_sync"
     POLL = "poll"
     ENRICH = "enrich"
+    RESOLVE_LOCAL = "resolve_local"
 
 
 class JobStatus(enum.StrEnum):
@@ -53,6 +54,7 @@ class TrackSource(enum.StrEnum):
 
     SPOTIFY_API = "spotify_api"
     IMPORT_ZIP = "import_zip"
+    RESOLVED = "resolved"
 
 
 class PreferenceEventSource(enum.StrEnum):

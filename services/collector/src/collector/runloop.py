@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from collector.enrichment import AudioFeaturesEnrichmentService
 from collector.initial_sync import InitialSyncService
 from collector.polling import PollingService
+from collector.resolve import LocalTrackResolutionService
 from collector.settings import CollectorSettings
 from collector.zip_import import ZipImportService
 from shared.db.enums import SyncStatus
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class CollectorRunLoop:
-    """Priority-based collector: ZIP imports -> initial sync -> incremental polling -> enrichment."""
+    """Priority-based collector: ZIP imports -> initial sync -> polling -> enrichment -> resolution."""
 
     def __init__(self, settings: CollectorSettings, db_manager: DatabaseManager) -> None:
         self._settings = settings
@@ -30,6 +31,7 @@ class CollectorRunLoop:
         self._initial_sync_service = InitialSyncService(settings)
         self._zip_import_service = ZipImportService(settings)
         self._enrichment_service = AudioFeaturesEnrichmentService(settings)
+        self._resolution_service = LocalTrackResolutionService(settings)
         self._user_semaphore = asyncio.Semaphore(self._settings.INITIAL_SYNC_CONCURRENCY)
 
     async def run(self, shutdown_event: asyncio.Event) -> None:
@@ -83,7 +85,7 @@ class CollectorRunLoop:
             if isinstance(result, Exception):
                 logger.error("Error processing user %d: %s", user_id, result)
 
-        # Phase 4: Audio features enrichment (lowest priority)
+        # Phase 4: Audio features enrichment
         try:
             async with self._db_manager.session() as session:
                 enriched = await self._enrichment_service.enrich(session)
@@ -91,6 +93,15 @@ class CollectorRunLoop:
                     logger.info("Enriched %d tracks with audio features", enriched)
         except Exception:
             logger.exception("Error during audio features enrichment phase")
+
+        # Phase 5: Local track resolution (lowest priority)
+        try:
+            async with self._db_manager.session() as session:
+                resolved = await self._resolution_service.resolve(session)
+                if resolved:
+                    logger.info("Resolved %d local tracks to Spotify IDs", resolved)
+        except Exception:
+            logger.exception("Error during local track resolution phase")
 
         logger.info("Collector cycle complete")
 
