@@ -51,7 +51,9 @@ class Track(Base):
     )
 
     # Relationships
-    artists: Mapped[list[Artist]] = relationship("Artist", secondary="track_artists", back_populates="tracks")
+    artists: Mapped[list[Artist]] = relationship(
+        "Artist", secondary="track_artists", back_populates="tracks", order_by="TrackArtist.position"
+    )
     plays: Mapped[list[Play]] = relationship("Play", back_populates="track")
     audio_features: Mapped[AudioFeatures | None] = relationship("AudioFeatures", back_populates="track", uselist=False)
 

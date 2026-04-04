@@ -176,7 +176,6 @@ class LocalTrackResolutionService:
         """Get the name of the first artist for a track."""
         if not track.artists:
             return None
-        # Artists are ordered by TrackArtist.position; relationship loads in PK order
         return track.artists[0].name
 
     @staticmethod
@@ -198,6 +197,10 @@ class LocalTrackResolutionService:
 
     @staticmethod
     async def _get_any_active_user(session: AsyncSession) -> int | None:
-        """Get any user ID that has an active Spotify token."""
+        """Get any user ID that has an active Spotify token.
+
+        Search results are account-agnostic (free/premium, region don't affect search),
+        so any valid token suffices.
+        """
         result = await session.execute(select(SpotifyToken.user_id).limit(1))
         return result.scalar_one_or_none()
