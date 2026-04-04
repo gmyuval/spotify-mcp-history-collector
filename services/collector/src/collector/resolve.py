@@ -97,11 +97,17 @@ class LocalTrackResolutionService:
             await session.commit()
         except Exception:
             logger.exception("Error during local track resolution")
+            started_at = job_run.started_at
             await session.rollback()
-            job_run.completed_at = datetime.now(UTC)
-            job_run.status = JobStatus.ERROR
-            job_run.error_message = "Resolution failed — see logs"
-            session.add(job_run)
+            error_job = JobRun(
+                user_id=user_id,
+                job_type=JobType.RESOLVE_LOCAL,
+                started_at=started_at,
+                completed_at=datetime.now(UTC),
+                status=JobStatus.ERROR,
+                error_message="Resolution failed — see logs",
+            )
+            session.add(error_job)
             await session.commit()
             raise
 
@@ -141,7 +147,9 @@ class LocalTrackResolutionService:
                 continue
 
             try:
-                query = f"track:{track.name} artist:{artist_name}"
+                escaped_track = track.name.replace('"', '\\"')
+                escaped_artist = artist_name.replace('"', '\\"')
+                query = f'track:"{escaped_track}" artist:"{escaped_artist}"'
                 search_result = await client.search(query, search_type="track", limit=5)
 
                 if search_result.tracks and search_result.tracks.items:
