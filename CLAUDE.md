@@ -1,6 +1,18 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This is a transitional Claude Code adapter. Read [AGENTS.md](AGENTS.md) first, then
+[docs/agent/orchestration.md](docs/agent/orchestration.md) before delegating work. `AGENTS.md` is
+the canonical, vendor-neutral contract and wins if this file conflicts with it, unless a
+higher-priority user or harness instruction says otherwise.
+
+For an orchestrated Claude session, use
+[.claude/agents/orchestrator.md](.claude/agents/orchestrator.md) as the thin startup adapter.
+
+## Legacy technical snapshot - non-authoritative and potentially stale
+
+The material below is preserved as pre-modernization technical context. It is not an operating
+contract. Verify architecture, commands, integrations, implementation status, and deployment facts
+against the current repository, Linear, and live-state evidence before relying on them.
 
 ## Context7 MCP
 

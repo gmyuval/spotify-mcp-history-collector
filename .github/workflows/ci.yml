@@ -8,6 +8,17 @@ env:
   PYTHON_VERSION: '3.14'
 
 jobs:
+  agent-contract:
+    name: Agent Contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: python -m unittest discover -s tests/contracts -p "test_*.py"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

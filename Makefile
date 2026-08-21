@@ -1,4 +1,4 @@
-.PHONY: setup compile-deps lint format typecheck test docker-up docker-down
+.PHONY: setup compile-deps agent-contract lint format typecheck test docker-up docker-down
 
 # ──────────────────────────────────────────────
 # Development environment setup
@@ -42,6 +42,10 @@ upgrade-deps:
 # ──────────────────────────────────────────────
 # Code quality
 # ──────────────────────────────────────────────
+
+## Validate the vendor-neutral agent contract and tool-specific adapters.
+agent-contract:
+	python -m unittest discover -s tests/contracts -p "test_*.py"
 
 ## Run ruff linter and format checker (no changes).
 lint:
