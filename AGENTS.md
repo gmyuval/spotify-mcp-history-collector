@@ -13,13 +13,19 @@ an automatically binding target architecture.
 
 - `AGENTS.md` - canonical agent contract and authority boundary.
 - `docs/agent/orchestration.md` - portable delegation protocol; read it before dispatching work.
+- `.agents/skills/<name>/SKILL.md` - canonical, vendor-neutral project procedures.
+- `.claude/skills/<name>/SKILL.md` - exact, pointer-only Claude Code discovery adapters. They
+  contain no procedure of their own.
 - **Linear, team SPM / project Spotify MCP modernization** - authoritative tracker for planned
   work, status, priority, estimate, dependencies, milestones, and weekly-cycle commitments.
 - The current code, tests, and deployed-state evidence - authoritative for observed behaviour.
 - `docs/` - product, integration, and deployment references. Some pre-modernization documents may
   be stale; verify them against code and current infrastructure before relying on them.
-- `CLAUDE.md` - transitional Claude adapter followed by a legacy technical snapshot. It is not
-  authoritative and does not override this file.
+- `docs/agent/current-state.md` - dated, volatile repository orientation; verify its claims before
+  relying on them.
+- `docs/agent/memory/` - durable, evidence-backed project lessons. Memory is context, not authority.
+- `CLAUDE.md` - thin Claude-specific orientation adapter. It is not authoritative and does not
+  override this file.
 
 Do not create a second issue queue in Markdown, comments, private memory, or another tracker.
 Durable work belongs in Linear; repository documents may explain decisions and execution evidence.
@@ -45,6 +51,23 @@ Keep issue status, dependencies, estimates, and milestone placement current as w
 Weekly cycles are owner-approved planning commitments, not an unbounded backlog. Adding, removing,
 or swapping cycle scope requires owner-approved replanning. Record the agreed change in Linear;
 do not silently reshape the cycle because capacity or implementation order changed.
+
+## Branch and pull-request linkage
+
+Every implementation branch and pull request names exactly one primary Linear issue from team
+SPM. Use a lowercase issue identifier in the branch and the canonical uppercase identifier
+elsewhere:
+
+- branch: `<type-or-agent>/spm-<number>-<short-slug>`, for example
+  `codex/spm-3-orchestration-contract` or `fix/spm-12-token-refresh`;
+- pull-request title: `SPM-<number>: <description>`;
+- pull-request body: `Fixes SPM-<number>` only when the pull request satisfies every remaining
+  acceptance criterion, otherwise `Part of SPM-<number>`.
+
+The prefix identifies the kind of branch or the creating harness; it does not replace the SPM
+identifier. Related issues may be discussed without adding a second closing or partial-delivery
+linkage. Read the issue before branching, preserve its cycle and dependency placement, and verify
+the Linear state after merge rather than assuming automation moved it correctly.
 
 ## Orchestration is the default for substantive work
 
