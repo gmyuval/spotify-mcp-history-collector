@@ -12,7 +12,7 @@
 #
 # Usage:
 #   bash deploy/provision.sh
-#   bash deploy/provision.sh --resume-after-allowlist
+#   bash deploy/provision.sh --resume-after-allowlist <full-commit-sha>
 #
 # Configuration is read from resources/.env.do:
 #   DOMAIN_NAME, SSH_KEY_NAME, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET,
@@ -22,11 +22,25 @@
 set -euo pipefail
 
 RESUME_AFTER_ALLOWLIST=false
+RESUME_DEPLOY_SHA=""
 case "${1:-}" in
-    "") ;;
-    --resume-after-allowlist) RESUME_AFTER_ALLOWLIST=true ;;
+    "")
+        [[ "$#" -eq 0 ]] || exit 2
+        ;;
+    --resume-after-allowlist)
+        if [[ "$#" -ne 2 ]]; then
+            echo "Usage: bash deploy/provision.sh --resume-after-allowlist <full-commit-sha>" >&2
+            exit 2
+        fi
+        RESUME_AFTER_ALLOWLIST=true
+        RESUME_DEPLOY_SHA="$2"
+        if ! [[ "$RESUME_DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "ERROR: resume revision must be a full 40-character commit SHA" >&2
+            exit 2
+        fi
+        ;;
     *)
-        echo "Usage: bash deploy/provision.sh [--resume-after-allowlist]" >&2
+        echo "Usage: bash deploy/provision.sh [--resume-after-allowlist <full-commit-sha>]" >&2
         exit 2
         ;;
 esac
@@ -410,6 +424,42 @@ else
     [[ -n "$DROPLET_IP" ]] || err "existing droplet has no public IPv4 address"
     ADMIN_TOKEN="unchanged (resume mode does not read it)"
     wait_for_ssh "$DROPLET_IP"
+
+    RESUME_CAPTURE=$(ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" bash -s -- \
+        "$RESUME_DEPLOY_SHA" <<'REMOTE_RESUME'
+set -euo pipefail
+RESUME_DEPLOY_SHA="$1"
+cd /opt/spotify-mcp
+[[ -z "$(git status --porcelain --untracked-files=all)" ]] \
+    || { echo "ERROR: resume checkout has tracked or untracked changes" >&2; exit 1; }
+git fetch origin main:refs/remotes/origin/main
+git cat-file -e "$RESUME_DEPLOY_SHA^{commit}" \
+    || { echo "ERROR: resume revision does not exist" >&2; exit 1; }
+git merge-base --is-ancestor "$RESUME_DEPLOY_SHA" origin/main \
+    || { echo "ERROR: resume revision is not reachable from origin/main" >&2; exit 1; }
+ALLOWLIST_MOUNT="/opt/spotify-mcp-config/authenticated-emails.txt:/etc/oauth2-proxy/authenticated-emails.txt:ro"
+git show "${RESUME_DEPLOY_SHA}:docker-compose.prod.yml" \
+    | grep -Fqx "      - $ALLOWLIST_MOUNT" \
+    || { echo "ERROR: resume revision lacks the external OAuth allowlist contract" >&2; exit 1; }
+EXPECTED_RESUME_SHA=$(git rev-parse "$RESUME_DEPLOY_SHA^{commit}")
+git checkout --detach "$EXPECTED_RESUME_SHA"
+[[ "$(git rev-parse HEAD)" == "$EXPECTED_RESUME_SHA" ]] \
+    || { echo "ERROR: resume checkout did not land on the requested revision" >&2; exit 1; }
+[[ -z "$(git status --porcelain --untracked-files=all)" ]] \
+    || { echo "ERROR: exact resume checkout is not clean" >&2; exit 1; }
+echo "RESUME_DEPLOY_SHA=$EXPECTED_RESUME_SHA"
+REMOTE_RESUME
+    )
+    INITIAL_DEPLOY_SHA=$(printf '%s\n' "$RESUME_CAPTURE" | sed -n 's/^RESUME_DEPLOY_SHA=//p')
+    [[ "$INITIAL_DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] \
+        || err "resume did not return exactly one immutable revision"
+fi
+
+if [[ "$RESUME_AFTER_ALLOWLIST" == "false" ]]; then
+    INITIAL_DEPLOY_SHA=$(ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" \
+        "cd '$PROJECT_PATH' && git rev-parse --verify HEAD^{commit}")
+    [[ "$INITIAL_DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] \
+        || err "initial checkout is not an immutable revision"
 fi
 
 # ---------------------------------------------------------------------------
@@ -420,7 +470,7 @@ AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
 
 allowlist_ready() {
     ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" \
-        "test -f '$AUTHENTICATED_EMAILS_FILE' && test -r '$AUTHENTICATED_EMAILS_FILE' && test -s '$AUTHENTICATED_EMAILS_FILE'"
+        "test -f '$AUTHENTICATED_EMAILS_FILE' && test -r '$AUTHENTICATED_EMAILS_FILE' && test -s '$AUTHENTICATED_EMAILS_FILE' && test \"\$(stat -c '%a:%U:%G' '${AUTHENTICATED_EMAILS_FILE%/*}')\" = '750:deploy:deploy' && test \"\$(stat -c '%a:%U:%G' '$AUTHENTICATED_EMAILS_FILE')\" = '644:deploy:deploy'"
 }
 
 if allowlist_ready; then
@@ -431,7 +481,7 @@ else
     if [[ -t 0 ]]; then
         read -r -p "Press Enter after the allowlist is populated: "
     else
-        err "populate the allowlist, then rerun: bash deploy/provision.sh --resume-after-allowlist"
+        err "populate the allowlist, then rerun with --resume-after-allowlist and the authorized full SHA"
     fi
 fi
 
@@ -442,8 +492,9 @@ allowlist_ready || err "external OAuth allowlist is still missing, unreadable, o
 # ---------------------------------------------------------------------------
 log "Step 10: Running initial deployment"
 
-ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" bash -s <<REMOTE_DEPLOY
+ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" bash -s -- "$INITIAL_DEPLOY_SHA" <<REMOTE_DEPLOY
 set -euo pipefail
+EXPECTED_INITIAL_SHA="\$1"
 AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
 if [[ ! -f "\$AUTHENTICATED_EMAILS_FILE" || ! -r "\$AUTHENTICATED_EMAILS_FILE" ]]; then
     echo "ERROR: external OAuth allowlist is missing or unreadable"
@@ -453,7 +504,20 @@ if [[ ! -s "\$AUTHENTICATED_EMAILS_FILE" ]]; then
     echo "ERROR: external OAuth allowlist is empty; configure it before starting services"
     exit 1
 fi
+AUTHENTICATED_EMAILS_DIR="\${AUTHENTICATED_EMAILS_FILE%/*}"
+if [[ "\$(stat -c '%a:%U:%G' "\$AUTHENTICATED_EMAILS_DIR")" != "750:deploy:deploy" ]]; then
+    echo "ERROR: external OAuth allowlist directory must be deploy:deploy mode 0750"
+    exit 1
+fi
+if [[ "\$(stat -c '%a:%U:%G' "\$AUTHENTICATED_EMAILS_FILE")" != "644:deploy:deploy" ]]; then
+    echo "ERROR: external OAuth allowlist must be deploy:deploy mode 0644 for the non-root consumer"
+    exit 1
+fi
 cd $PROJECT_PATH
+[[ "\$(git rev-parse HEAD)" == "\$EXPECTED_INITIAL_SHA" ]] \
+    || { echo "ERROR: initial deployment revision changed before service mutation"; exit 1; }
+[[ -z "\$(git status --porcelain --untracked-files=all)" ]] \
+    || { echo "ERROR: initial deployment checkout is not clean"; exit 1; }
 
 echo "--- Building images ---"
 docker compose --env-file .env.prod -f docker-compose.prod.yml build --pull
@@ -481,6 +545,11 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alemb
 
 echo "--- Service status ---"
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+FINAL_INITIAL_SHA=\$(git rev-parse --verify HEAD^{commit})
+[[ "\$FINAL_INITIAL_SHA" == "\$EXPECTED_INITIAL_SHA" ]] \
+    || { echo "ERROR: initial deployment revision changed during service mutation"; exit 1; }
+echo "INITIAL_DEPLOY_REVISION=\$FINAL_INITIAL_SHA"
+echo "INITIAL_DEPLOY_API_HEALTH_RESULT=healthy"
 REMOTE_DEPLOY
 
 # ---------------------------------------------------------------------------

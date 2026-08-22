@@ -205,6 +205,15 @@ jobs:
               echo "ERROR: external OAuth allowlist is empty"
               exit 1
             fi
+            AUTHENTICATED_EMAILS_DIR="${AUTHENTICATED_EMAILS_FILE%/*}"
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_DIR")" != "750:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist directory must be deploy:deploy mode 0750"
+              exit 1
+            fi
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_FILE")" != "644:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist must be deploy:deploy mode 0644 for the non-root consumer"
+              exit 1
+            fi
             cd /opt/spotify-mcp
 
             echo "=== Fixing repo ownership ==="
@@ -264,6 +273,15 @@ jobs:
               echo "ERROR: external OAuth allowlist is empty"
               exit 1
             fi
+            AUTHENTICATED_EMAILS_DIR="${AUTHENTICATED_EMAILS_FILE%/*}"
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_DIR")" != "750:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist directory must be deploy:deploy mode 0750"
+              exit 1
+            fi
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_FILE")" != "644:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist must be deploy:deploy mode 0644 for the non-root consumer"
+              exit 1
+            fi
 
       - name: Ensure DB firewall allows spotify-mcp droplets
         env:
@@ -314,6 +332,15 @@ jobs:
             fi
             if [[ ! -s "$AUTHENTICATED_EMAILS_FILE" ]]; then
               echo "ERROR: external OAuth allowlist is empty"
+              exit 1
+            fi
+            AUTHENTICATED_EMAILS_DIR="${AUTHENTICATED_EMAILS_FILE%/*}"
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_DIR")" != "750:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist directory must be deploy:deploy mode 0750"
+              exit 1
+            fi
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_FILE")" != "644:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist must be deploy:deploy mode 0644 for the non-root consumer"
               exit 1
             fi
             cd /opt/spotify-mcp
@@ -416,6 +443,23 @@ jobs:
             echo "=== Caddy logs (last 20 lines) ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=20 caddy
 
+            echo "=== Waiting for oauth2-proxy health ==="
+            for i in $(seq 1 30); do
+              if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T caddy \
+                wget -q -O /dev/null http://oauth2-proxy:4180/ping; then
+                echo "oauth2-proxy is healthy"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "ERROR: oauth2-proxy health failed after 30 attempts"
+                docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=100 oauth2-proxy
+                exit 1
+              fi
+              echo "Waiting for oauth2-proxy... ($i/30)"
+              sleep 5
+            done
+            echo "OAUTH2_PROXY_HEALTH_RESULT=healthy"
+
             echo "=== Waiting for Explorer health ==="
             for i in $(seq 1 30); do
               if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T explorer curl -sf http://localhost:8002/healthz > /dev/null 2>&1; then
@@ -473,7 +517,7 @@ jobs:
           ROLLBACK_POSTURE="$ROLLBACK_POSTURE $DATABASE_ROLLBACK_CAUTION"
 
           if [ "$DEPLOY_OUTCOME" = "success" ]; then
-            TERMINAL_HEALTH_RESULT="healthy"
+            TERMINAL_HEALTH_RESULT="healthy (API, frontend, explorer, oauth2-proxy /ping)"
           else
             TERMINAL_HEALTH_RESULT="not confirmed (deploy job result: $DEPLOY_OUTCOME)"
           fi

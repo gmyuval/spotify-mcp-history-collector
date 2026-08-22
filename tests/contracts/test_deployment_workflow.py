@@ -336,8 +336,9 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
         """Regression: a fresh empty allowlist must have a safe completion path."""
         checkpoint = 'log "Pre-Step-10: Verifying external OAuth allowlist"'
 
-        self.assertIn("--resume-after-allowlist", self.provision)
+        self.assertIn("--resume-after-allowlist <full-commit-sha>", self.provision)
         self.assertIn("RESUME_AFTER_ALLOWLIST=true", self.provision)
+        self.assertIn('RESUME_DEPLOY_SHA="$2"', self.provision)
         self.assertIn(checkpoint, self.provision)
         self.assertIn("if [[ -t 0 ]]", self.provision)
         self.assertIn('read -r -p "Press Enter after the allowlist is populated: "', self.provision)
@@ -345,6 +346,61 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
         self.assertLess(self.provision.index(checkpoint), self.provision.index('log "Step 10:'))
         self.assertIn("--resume-after-allowlist", self.runbook)
         self.assertRegex(self.runbook, r"skips Steps\s+1-9")
+
+    def test_resume_requires_clean_exact_eligible_revision_before_mutation(self) -> None:
+        """Regression: resume must not deploy an arbitrary existing checkout."""
+        heredoc = self.provision.index("<<'REMOTE_RESUME'")
+        resume_start = self.provision.index("set -euo pipefail", heredoc)
+        resume_end = self.provision.index("\nREMOTE_RESUME", resume_start)
+        resume = self.provision[resume_start:resume_end]
+        for required in (
+            "git fetch origin main:refs/remotes/origin/main",
+            'git cat-file -e "$RESUME_DEPLOY_SHA^{commit}"',
+            'git merge-base --is-ancestor "$RESUME_DEPLOY_SHA" origin/main',
+            'git checkout --detach "$EXPECTED_RESUME_SHA"',
+            '[[ "$(git rev-parse HEAD)" == "$EXPECTED_RESUME_SHA" ]]',
+            '[[ -z "$(git status --porcelain --untracked-files=all)" ]]',
+        ):
+            self.assertIn(required, resume)
+        self.assertIn('[[ "$RESUME_DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]]', self.provision[:heredoc])
+        self.assertIn("INITIAL_DEPLOY_REVISION=", self.provision)
+        self.assertIn("INITIAL_DEPLOY_API_HEALTH_RESULT=healthy", self.provision)
+        self.assertIn('bash deploy/provision.sh --resume-after-allowlist "$DEPLOY_SHA"', self.runbook)
+
+    def test_legacy_rollback_is_exact_revision_bound_and_monitored(self) -> None:
+        """Regression: legacy rollback must bind state, revision, and health evidence."""
+        for required in (
+            'LEGACY_DEPLOY_SHA="0123456789abcdef0123456789abcdef01234567"',
+            'git cat-file -e "$LEGACY_DEPLOY_SHA^{commit}"',
+            'git merge-base --is-ancestor "$LEGACY_DEPLOY_SHA" origin/main',
+            'git checkout --detach "$EXPECTED_LEGACY_SHA"',
+            'test "$(git rev-parse HEAD)" = "$EXPECTED_LEGACY_SHA"',
+            'test -z "$(git status --porcelain --untracked-files=all)"',
+            "LEGACY_ROLLBACK_REVISION=",
+            "LEGACY_ROLLBACK_HEALTH_RESULT=healthy",
+            "database compatibility decision",
+        ):
+            self.assertIn(required, self.runbook)
+
+    def test_allowlist_permissions_and_oauth_runtime_are_verified(self) -> None:
+        """Regression: deploy readability does not prove UID 65532 can consume the file."""
+        state_capture = self.job_body("capture-production-state")
+        deploy = self.job_body("deploy")
+        summary = self.job_body("summary")
+
+        self.assertGreaterEqual(state_capture.count("750:deploy:deploy"), 1)
+        self.assertGreaterEqual(state_capture.count("644:deploy:deploy"), 1)
+        self.assertGreaterEqual(deploy.count("750:deploy:deploy"), 2)
+        self.assertGreaterEqual(deploy.count("644:deploy:deploy"), 2)
+        self.assertIn("750:deploy:deploy", self.provision)
+        self.assertIn("644:deploy:deploy", self.provision)
+        self.assertIn("http://oauth2-proxy:4180/ping", deploy)
+        self.assertIn("OAUTH2_PROXY_HEALTH_RESULT=healthy", deploy)
+        self.assertLess(
+            deploy.index("http://oauth2-proxy:4180/ping"),
+            deploy.index("TERMINAL_HEALTH_RESULT=healthy"),
+        )
+        self.assertIn("oauth2-proxy /ping", summary)
 
     def test_summary_always_reports_captured_state_without_failed_step_stdout(self) -> None:
         summary = self.job_body("summary")

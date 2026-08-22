@@ -97,13 +97,19 @@ allowlist is not ready. After a separately authorized operator populates the
 file, resume with:
 
 ```bash
-bash deploy/provision.sh --resume-after-allowlist
+DEPLOY_SHA="0123456789abcdef0123456789abcdef01234567"  # authorized full SHA
+bash deploy/provision.sh --resume-after-allowlist "$DEPLOY_SHA"
 ```
 
 This narrowly scoped mode locates the existing production Droplet, skips Steps
-1-9, reruns the allowlist checkpoint, and completes the initial deployment and
-CI credential setup. It does not recreate or reconfigure the infrastructure,
-database, DNS, repository, or production environment file.
+1-9, requires the requested immutable revision to be reachable from
+`origin/main` and to use the external allowlist contract, then refuses to
+continue unless it can check out that exact revision with a clean tracked and
+untracked tree. It reruns the permission-aware allowlist checkpoint before any
+service or database mutation and records the final deployed revision and health
+result for the API check performed by initial provisioning. It does not recreate
+or reconfigure the infrastructure, database, DNS, or production environment
+file.
 
 The script will:
 
@@ -228,22 +234,88 @@ If a separately authorized rollback selects a legacy Compose revision that
 mounts the tracked path, restore the external file to that path after checking
 out the legacy revision and before restarting its services:
 
+This procedure is valid only after the operator records the accepted database
+compatibility decision for the exact legacy revision. If migrations may have
+started or applied and no accepted decision exists, stop. Set
+`LEGACY_DEPLOY_SHA` to the separately authorized full revision; never use a
+branch, tag, abbreviation, or current checkout.
+
 ```bash
 set -euo pipefail
 cd /opt/spotify-mcp
+LEGACY_DEPLOY_SHA="0123456789abcdef0123456789abcdef01234567"
 LEGACY_ALLOWLIST="deploy/authenticated-emails.txt"
 EXTERNAL_ALLOWLIST="/opt/spotify-mcp-config/authenticated-emails.txt"
+
+test -z "$(git status --porcelain --untracked-files=all)"
+if ! [[ "$LEGACY_DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  echo "ERROR: legacy revision must be exactly 40 hexadecimal characters"
+  exit 1
+fi
+git fetch origin main:refs/remotes/origin/main
+git cat-file -e "$LEGACY_DEPLOY_SHA^{commit}"
+git merge-base --is-ancestor "$LEGACY_DEPLOY_SHA" origin/main
+EXPECTED_LEGACY_SHA=$(git rev-parse "$LEGACY_DEPLOY_SHA^{commit}")
+LEGACY_MOUNT="./deploy/authenticated-emails.txt:/etc/oauth2-proxy/authenticated-emails.txt:ro"
+git show "${EXPECTED_LEGACY_SHA}:docker-compose.prod.yml" | grep -Fqx "      - $LEGACY_MOUNT"
+git checkout --detach "$EXPECTED_LEGACY_SHA"
+test "$(git rev-parse HEAD)" = "$EXPECTED_LEGACY_SHA"
+test -z "$(git status --porcelain --untracked-files=all)"
+
 test -f "$EXTERNAL_ALLOWLIST"
 test -r "$EXTERNAL_ALLOWLIST"
 test -s "$EXTERNAL_ALLOWLIST"
 install -m 0644 "$EXTERNAL_ALLOWLIST" "$LEGACY_ALLOWLIST"
 test "$(stat -c %s "$EXTERNAL_ALLOWLIST")" = "$(stat -c %s "$LEGACY_ALLOWLIST")"
 cmp -s "$EXTERNAL_ALLOWLIST" "$LEGACY_ALLOWLIST"
+git status --porcelain -- "$LEGACY_ALLOWLIST" | grep -Fqx " M $LEGACY_ALLOWLIST"
+UNEXPECTED_CHANGES=$(git status --porcelain --untracked-files=all \
+  | grep -Fvx " M $LEGACY_ALLOWLIST" || true)
+test -z "$UNEXPECTED_CHANGES"
+
 docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+
+wait_for_legacy_health() {
+  local service="$1"
+  local url="$2"
+  for attempt in $(seq 1 30); do
+    if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T "$service" \
+      curl -sf "$url" > /dev/null 2>&1; then
+      return 0
+    fi
+    test "$attempt" -lt 30 \
+      || { echo "ERROR: legacy $service health failed"; return 1; }
+    sleep 5
+  done
+}
+wait_for_legacy_health api http://localhost:8000/healthz
+wait_for_legacy_health frontend http://localhost:8001/healthz
+wait_for_legacy_health explorer http://localhost:8002/healthz
+for attempt in $(seq 1 30); do
+  if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T caddy \
+    wget -q -O /dev/null http://oauth2-proxy:4180/ping; then
+    break
+  fi
+  test "$attempt" -lt 30 || { echo "ERROR: legacy oauth2-proxy health failed"; exit 1; }
+  sleep 5
+done
+
+test "$(git rev-parse HEAD)" = "$EXPECTED_LEGACY_SHA"
+git status --porcelain -- "$LEGACY_ALLOWLIST" | grep -Fqx " M $LEGACY_ALLOWLIST"
+UNEXPECTED_CHANGES=$(git status --porcelain --untracked-files=all \
+  | grep -Fvx " M $LEGACY_ALLOWLIST" || true)
+test -z "$UNEXPECTED_CHANGES"
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+echo "LEGACY_ROLLBACK_REVISION=$EXPECTED_LEGACY_SHA"
+echo "LEGACY_ROLLBACK_HEALTH_RESULT=healthy"
+echo "LEGACY_ROLLBACK_POSTURE=legacy tracked allowlist restored from current external authorization state"
 ```
 
 The resulting tracked-file modification is expected only for the legacy
-configuration. Do not run the new exact-SHA workflow against that dirty
+configuration and is verified as the only dirty path before and after restart.
+Preserve the exact revision, terminal API and oauth2-proxy health results,
+database compatibility decision, and rollback-posture line as the monitored
+operation's evidence. Do not run the new exact-SHA workflow against that dirty
 checkout, and do not restart the legacy configuration without separate
 rollback authorization.
 
@@ -259,7 +331,8 @@ rollback authorization.
 - A new deployment UUID will be generated after authorization. Never reuse an
   earlier deployment UUID, including for a retry or rollback.
 - `/opt/spotify-mcp-config/authenticated-emails.txt` exists, is readable and
-  non-empty, and the production Git checkout is clean.
+  non-empty, has a `deploy:deploy` mode-`0644` file behind a `deploy:deploy`
+  mode-`0750` parent, and the production Git checkout is clean.
 
 Confirm the candidate before dispatching:
 
@@ -374,8 +447,10 @@ every service test suite against that exact revision, then captures a clean,
 exact production commit in a separate successful job. The deploy job stops if
 the production checkout changes after capture, fetches `origin/main`, validates
 the requested SHA again, and checks out that exact revision in a clean detached
-state. It preserves the existing firewall handling, Compose build, health
-checks, migration order, and collector restart sequence.
+state. It verifies the allowlist's documented owner and modes and requires an
+oauth2-proxy `/ping` response through the production service network before
+reporting terminal health. It preserves the existing firewall handling,
+Compose build, migration order, and collector restart sequence.
 
 Monitor the run to a terminal result. A successful deployment has all required
 GitHub jobs green and a job summary that records the requested SHA, previous
