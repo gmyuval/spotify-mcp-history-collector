@@ -11,7 +11,7 @@ from unittest import mock
 from scripts import compile_docker_requirements as docker_requirements
 from scripts import validate_uv_workflow as uv_workflow
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT: Path = Path(__file__).resolve().parents[2]
 
 
 def _pinned_requirements(path: Path) -> dict[str, tuple[str, str | None]]:
@@ -131,6 +131,7 @@ jobs:
             self.assertIn(f"--constraint={specification.runtime_output}", runtime_command)
             self.assertNotIn("--extra=dev", runtime_command)
             self.assertIn("--no-strip-extras", runtime_command)
+            self.assertNotIn("\\", runtime_command[-1])
             self.assertEqual("pyproject.toml", Path(runtime_command[-1]).name)
             if specification.dev_output is None:
                 continue
@@ -140,7 +141,46 @@ jobs:
             self.assertIn(f"--constraint={specification.runtime_output}", dev_command)
             self.assertIn("--extra=dev", dev_command)
             self.assertIn("--no-strip-extras", dev_command)
+            self.assertNotIn("\\", dev_command[-1])
             self.assertEqual("pyproject.toml", Path(dev_command[-1]).name)
+
+        for specification in docker_requirements.REQUIREMENT_SETS:
+            outputs = [specification.runtime_output]
+            if specification.dev_output is not None:
+                outputs.append(specification.dev_output)
+            for output in outputs:
+                header = "\n".join((ROOT / output).read_text(encoding="utf-8").splitlines()[:7])
+                with self.subTest(output=output):
+                    self.assertNotIn("\\", header)
+
+    def test_targeted_upgrades_release_only_the_runtime_self_constraint(self) -> None:
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary_directory:
+            with (
+                mock.patch.object(docker_requirements, "SCRATCH_ROOT", Path(temporary_directory) / "scratch"),
+                mock.patch.object(docker_requirements, "_record_manifest"),
+                mock.patch.object(docker_requirements.subprocess, "run") as run,
+            ):
+                docker_requirements._compile_all(
+                    upgrade=False,
+                    upgrade_packages=("idna", "Mako"),
+                )
+
+        commands = [call.args[0] for call in run.call_args_list]
+        for specification in docker_requirements.REQUIREMENT_SETS:
+            runtime_command = next(
+                command for command in commands if f"--output-file={specification.runtime_output}" in command
+            )
+            self.assertNotIn(f"--constraint={specification.runtime_output}", runtime_command)
+            self.assertIn("--upgrade-package=idna", runtime_command)
+            self.assertIn("--upgrade-package=Mako", runtime_command)
+            if specification.dev_output is None:
+                continue
+            dev_command = next(
+                command for command in commands if f"--output-file={specification.dev_output}" in command
+            )
+            self.assertIn(f"--constraint={specification.runtime_output}", dev_command)
+            self.assertIn("--upgrade-package=idna", dev_command)
+            self.assertIn("--upgrade-package=Mako", dev_command)
 
     def test_dev_requirement_outputs_retain_runtime_pins_and_markers(self) -> None:
         for specification in docker_requirements.REQUIREMENT_SETS:
@@ -175,6 +215,49 @@ jobs:
         self.assertIn('"uvicorn[standard]>=0.32.0"', project)
         self.assertIn('"types-python-dateutil"', project)
         self.assertNotIn('"spotify-mcp-shared"', project)
+
+    def test_dev_marker_source_merges_runtime_and_dev_markers(self) -> None:
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary_directory:
+            root = Path(temporary_directory)
+            runtime_path = root / "requirements.txt"
+            dev_path = root / "requirements-dev.txt"
+            runtime_path.write_text(
+                'common==1 ; python_version >= "3.14"\n',
+                encoding="utf-8",
+            )
+            dev_path.write_text(
+                'common==2 ; python_version >= "3.14"\ndev-only==3 ; sys_platform == "win32"\n',
+                encoding="utf-8",
+            )
+
+            retained = docker_requirements._retained_marked_requirements(
+                output_path=dev_path,
+                runtime_constraint_path=runtime_path,
+            )
+
+        self.assertEqual(
+            {
+                "common": 'common==2 ; python_version >= "3.14"',
+                "dev-only": 'dev-only==3 ; sys_platform == "win32"',
+            },
+            retained,
+        )
+
+    def test_docker_requirements_exclude_known_vulnerable_pins(self) -> None:
+        for specification in docker_requirements.REQUIREMENT_SETS:
+            outputs = [specification.runtime_output]
+            if specification.dev_output is not None:
+                outputs.append(specification.dev_output)
+            for output in outputs:
+                pins = _pinned_requirements(ROOT / output)
+                minimum_versions = {"idna": (3, 15)}
+                if output.startswith("services/api/"):
+                    minimum_versions["mako"] = (1, 3, 12)
+                for package, minimum in minimum_versions.items():
+                    with self.subTest(output=output, package=package):
+                        self.assertIn(package, pins)
+                        version = tuple(int(part) for part in pins[package][0].split("."))
+                        self.assertGreaterEqual(version, minimum)
 
     def test_marker_constraints_preserve_environment_marker_without_freezing_version(self) -> None:
         with tempfile.TemporaryDirectory(dir=ROOT) as temporary_directory:

@@ -37,13 +37,13 @@ fixtures can conflict. The same commands are exposed through the root `Makefile`
 optional convenience rather than a prerequisite.
 
 On the Windows SPM-2 writer host, a fresh locked environment synchronized successfully with the
-exact pinned tools. Fresh root verification passed 12 uv-workflow contract tests, 24 shared tests,
+exact pinned tools. Fresh root verification passed 15 uv-workflow contract tests, 24 shared tests,
 618 API unit tests (7 integration tests deselected), 53 collector tests, 66 frontend tests, and
 102 Explorer tests. Ruff validated 271 files and strict mypy validated 157 source files. Both
 development and production Compose configurations validated without starting services. Linux
 GitHub Actions remains the independent published-head verification source.
 
-The 870 package tests currently collected plus 12 workflow contract tests supersede the earlier
+The 870 package tests currently collected plus 15 workflow contract tests supersede the earlier
 874-function static orientation count; the discrepancy is recorded rather than silently treated
 as a failure in the uv migration.
 

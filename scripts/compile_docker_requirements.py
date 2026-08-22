@@ -243,6 +243,15 @@ def _marked_requirements(output_path: Path) -> dict[str, str]:
     return requirements
 
 
+def _retained_marked_requirements(
+    *,
+    output_path: Path,
+    runtime_constraint_path: Path | None,
+) -> dict[str, str]:
+    runtime_requirements = _marked_requirements(runtime_constraint_path) if runtime_constraint_path is not None else {}
+    return {**runtime_requirements, **_marked_requirements(output_path)}
+
+
 def _restore_marked_requirements(output_path: Path, marked_requirements: dict[str, str]) -> None:
     if not marked_requirements:
         return
@@ -314,10 +323,14 @@ def _compile_output(
     output: str,
     constraint: str | None,
     upgrade: bool,
+    upgrade_packages: tuple[str, ...],
 ) -> None:
     input_path = _write_project_input(specification)
-    marker_source = ROOT / (constraint if include_dev and constraint is not None else output)
-    retained_marked_requirements = _marked_requirements(marker_source)
+    runtime_constraint_path = ROOT / constraint if include_dev and constraint is not None else None
+    retained_marked_requirements = _retained_marked_requirements(
+        output_path=ROOT / output,
+        runtime_constraint_path=runtime_constraint_path,
+    )
     command = [
         sys.executable,
         "-m",
@@ -334,23 +347,26 @@ def _compile_output(
     else:
         marker_path = _write_marker_constraints(ROOT / output)
         if marker_path is not None:
-            command.append(f"--constraint={marker_path.relative_to(ROOT)}")
+            command.append(f"--constraint={marker_path.relative_to(ROOT).as_posix()}")
     if upgrade:
         command.append("--upgrade")
-    command.append(str(input_path.relative_to(ROOT)))
+    for package in upgrade_packages:
+        command.append(f"--upgrade-package={package}")
+    command.append(input_path.relative_to(ROOT).as_posix())
     subprocess.run(command, cwd=ROOT, check=True)
     _restore_marked_requirements(ROOT / output, retained_marked_requirements)
 
 
-def _compile_all(*, upgrade: bool) -> None:
+def _compile_all(*, upgrade: bool, upgrade_packages: tuple[str, ...] = ()) -> None:
     try:
         for specification in REQUIREMENT_SETS:
             _compile_output(
                 specification,
                 include_dev=False,
                 output=specification.runtime_output,
-                constraint=None if upgrade else specification.runtime_output,
+                constraint=None if upgrade or upgrade_packages else specification.runtime_output,
                 upgrade=upgrade,
+                upgrade_packages=upgrade_packages,
             )
             if specification.dev_output is not None:
                 _compile_output(
@@ -359,6 +375,7 @@ def _compile_all(*, upgrade: bool) -> None:
                     output=specification.dev_output,
                     constraint=specification.runtime_output,
                     upgrade=upgrade,
+                    upgrade_packages=upgrade_packages,
                 )
         _record_manifest()
     finally:
@@ -370,7 +387,8 @@ def _parse_args() -> argparse.Namespace:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--record", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--upgrade", action="store_true")
+    mode.add_argument("--upgrade", action="store_true")
+    mode.add_argument("--upgrade-package", action="append", default=[])
     return parser.parse_args()
 
 
@@ -389,7 +407,7 @@ def main() -> int:
             _record_manifest()
             print("Recorded the current temporary Docker requirements boundary.")
             return 0
-        _compile_all(upgrade=args.upgrade)
+        _compile_all(upgrade=args.upgrade, upgrade_packages=tuple(args.upgrade_package))
     except (OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as exc:
         print(exc, file=sys.stderr)
         return 1

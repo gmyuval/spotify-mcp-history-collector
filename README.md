@@ -395,8 +395,10 @@ uv run --locked python scripts/compile_docker_requirements.py --check
 ```
 
 Normal regeneration self-constrains each committed runtime output, preserves its environment
-markers, and constrains the matching development output to the same runtime pins. Use
-`make upgrade-deps` only for an intentional production-requirements update.
+markers, and constrains the matching development output to the same runtime pins. For a focused
+dependency refresh, repeat `--upgrade-package <name>` for each package, then run the normal
+regeneration command once to normalize the recorded command headers. Use `make upgrade-deps` only
+for an intentional broad production-requirements update.
 
 ### Database migrations
 
@@ -472,7 +474,7 @@ services/
 
 ## Testing
 
-The current branch collects 870 package tests plus 12 dependency-free uv-workflow contract tests. The
+The current branch collects 870 package tests plus 15 dependency-free uv-workflow contract tests. The
 package total is the measured pytest collection; it supersedes the earlier 874-function static
 orientation count.
 
@@ -483,7 +485,7 @@ orientation count.
 | Collector | 53 | `uv run --locked pytest services/collector/tests/` |
 | Admin Frontend | 66 | `uv run --locked pytest services/frontend/tests/` |
 | Explorer | 102 | `uv run --locked pytest services/explorer/tests/` |
-| UV workflow contract | 12 | `uv run --locked python -m unittest discover -s tests/contracts -p "test_*.py"` |
+| UV workflow contract | 15 | `uv run --locked python -m unittest discover -s tests/contracts -p "test_*.py"` |
 | **All package suites** | **870** | `make test` |
 
 **Important:** Run package suites separately (or via `make test`) because their fixtures can
