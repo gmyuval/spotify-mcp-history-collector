@@ -7,7 +7,11 @@ from typing import ClassVar
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "deploy.yml"
 RUNBOOK = Path(__file__).resolve().parents[2] / "docs" / "digitalocean-deployment.md"
+OAUTH_RUNBOOK = Path(__file__).resolve().parents[2] / "docs" / "google-oauth-setup.md"
 PROVISION = Path(__file__).resolve().parents[2] / "deploy" / "provision.sh"
+COMPOSE = Path(__file__).resolve().parents[2] / "docker-compose.prod.yml"
+TRACKED_ALLOWLIST = Path(__file__).resolve().parents[2] / "deploy" / "authenticated-emails.txt"
+ALLOWLIST_TEMPLATE = Path(__file__).resolve().parents[2] / "deploy" / "authenticated-emails.txt.example"
 VALIDATION_GATES = (
     "lint",
     "typecheck",
@@ -101,7 +105,9 @@ def dependency_names(job: str) -> tuple[str, ...]:
 class DeploymentWorkflowContractTests(unittest.TestCase):
     workflow: ClassVar[str]
     runbook: ClassVar[str]
+    oauth_runbook: ClassVar[str]
     provision: ClassVar[str]
+    compose: ClassVar[str]
     trigger_body: ClassVar[str]
     jobs_body: ClassVar[str]
 
@@ -109,7 +115,9 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
         cls.runbook = RUNBOOK.read_text(encoding="utf-8")
+        cls.oauth_runbook = OAUTH_RUNBOOK.read_text(encoding="utf-8")
         cls.provision = PROVISION.read_text(encoding="utf-8")
+        cls.compose = COMPOSE.read_text(encoding="utf-8")
         cls.trigger_body = mapping_body(cls.workflow, "on")
         cls.jobs_body = mapping_body(cls.workflow, "jobs")
 
@@ -264,6 +272,51 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
         )
         positions = [deploy.index(item) for item in sequence]
         self.assertEqual(positions, sorted(positions))
+
+    def test_oauth_allowlist_is_external_and_preflight_fails_closed(self) -> None:
+        """Regression: a checkout-tracked allowlist makes exact-SHA deployment dirty."""
+        external_allowlist = "/opt/spotify-mcp-config/authenticated-emails.txt"
+        mount = f"{external_allowlist}:/etc/oauth2-proxy/authenticated-emails.txt:ro"
+        state_capture = self.job_body("capture-production-state")
+        deploy = self.job_body("deploy")
+
+        self.assertFalse(TRACKED_ALLOWLIST.exists())
+        self.assertTrue(ALLOWLIST_TEMPLATE.is_file())
+        self.assertIn(mount, self.compose)
+        self.assertNotIn("./deploy/authenticated-emails.txt:", self.compose)
+        self.assertIn(f'AUTHENTICATED_EMAILS_FILE="{external_allowlist}"', state_capture)
+        self.assertIn(f'AUTHENTICATED_EMAILS_FILE="{external_allowlist}"', deploy)
+        self.assertIn('! -r "$AUTHENTICATED_EMAILS_FILE"', state_capture)
+        self.assertIn('[[ ! -s "$AUTHENTICATED_EMAILS_FILE" ]]', state_capture)
+        self.assertIn('! -r "$AUTHENTICATED_EMAILS_FILE"', deploy)
+        self.assertIn('[[ ! -s "$AUTHENTICATED_EMAILS_FILE" ]]', deploy)
+        self.assertIn(
+            "install -d -o deploy -g deploy -m 0750 /opt/spotify-mcp-config",
+            self.provision,
+        )
+        self.assertIn(
+            'install -o deploy -g deploy -m 0644 /dev/null "$AUTHENTICATED_EMAILS_FILE"',
+            self.provision,
+        )
+        self.assertIn(external_allowlist, self.runbook)
+        self.assertIn(external_allowlist, self.oauth_runbook)
+        self.assertIn('git restore --source=HEAD -- "$LEGACY_ALLOWLIST"', self.runbook)
+        self.assertIn('cmp -s "$LEGACY_ALLOWLIST" "$EXTERNAL_ALLOWLIST"', self.runbook)
+        self.assertLess(
+            deploy.index("- name: Verify external OAuth allowlist"),
+            deploy.index("- name: Ensure DB firewall allows spotify-mcp droplets"),
+            "the external allowlist must be checked before any production mutation",
+        )
+        self.assertLess(
+            state_capture.index('! -r "$AUTHENTICATED_EMAILS_FILE"'),
+            state_capture.index("sudo -n chown"),
+            "the external allowlist must be checked before state capture mutates production",
+        )
+        self.assertLess(
+            deploy.index('! -r "$AUTHENTICATED_EMAILS_FILE"'),
+            deploy.index("docker compose"),
+            "the external allowlist must be checked before service mutation",
+        )
 
     def test_summary_always_reports_captured_state_without_failed_step_stdout(self) -> None:
         summary = self.job_body("summary")

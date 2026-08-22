@@ -194,7 +194,7 @@ services:
       OAUTH2_PROXY_EMAIL_DOMAINS: "*"
       OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
     volumes:
-      - ./deploy/authenticated-emails.txt:/etc/oauth2-proxy/authenticated-emails.txt:ro
+      - /opt/spotify-mcp-config/authenticated-emails.txt:/etc/oauth2-proxy/authenticated-emails.txt:ro
     networks:
       - app_network
     restart: unless-stopped

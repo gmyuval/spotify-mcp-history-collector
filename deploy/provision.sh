@@ -226,6 +226,21 @@ else
     echo "  deploy user already exists"
 fi
 
+echo "--- Configure external OAuth allowlist path ---"
+AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
+install -d -o deploy -g deploy -m 0750 /opt/spotify-mcp-config
+if [[ -e "$AUTHENTICATED_EMAILS_FILE" && ! -f "$AUTHENTICATED_EMAILS_FILE" ]]; then
+    echo "ERROR: $AUTHENTICATED_EMAILS_FILE exists but is not a regular file"
+    exit 1
+fi
+if [[ ! -e "$AUTHENTICATED_EMAILS_FILE" ]]; then
+    install -o deploy -g deploy -m 0644 /dev/null "$AUTHENTICATED_EMAILS_FILE"
+    echo "  Created empty $AUTHENTICATED_EMAILS_FILE; populate it before Step 10"
+else
+    chown deploy:deploy "$AUTHENTICATED_EMAILS_FILE"
+    chmod 0644 "$AUTHENTICATED_EMAILS_FILE"
+fi
+
 echo "--- Configure UFW ---"
 ufw allow OpenSSH
 ufw allow 80/tcp
@@ -376,6 +391,15 @@ log "Step 10: Running initial deployment"
 
 ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" bash -s <<REMOTE_DEPLOY
 set -euo pipefail
+AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
+if [[ ! -f "\$AUTHENTICATED_EMAILS_FILE" || ! -r "\$AUTHENTICATED_EMAILS_FILE" ]]; then
+    echo "ERROR: external OAuth allowlist is missing or unreadable"
+    exit 1
+fi
+if [[ ! -s "\$AUTHENTICATED_EMAILS_FILE" ]]; then
+    echo "ERROR: external OAuth allowlist is empty; configure it before starting services"
+    exit 1
+fi
 cd $PROJECT_PATH
 
 echo "--- Building images ---"
@@ -467,7 +491,7 @@ echo "     b. Set redirect URI: https://$DOMAIN_NAME/oauth2/callback"
 echo "     c. SSH to the droplet and edit $PROJECT_PATH/.env.prod:"
 echo "        - Set GOOGLE_OAUTH_CLIENT_ID"
 echo "        - Set GOOGLE_OAUTH_CLIENT_SECRET"
-echo "     d. Add your email to $PROJECT_PATH/deploy/authenticated-emails.txt"
+echo "     d. Add your email to /opt/spotify-mcp-config/authenticated-emails.txt"
 echo "     e. Restart: cd $PROJECT_PATH && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d"
 echo ""
 echo "  Future deploys use the separately authorized manual GitHub Actions workflow."

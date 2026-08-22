@@ -146,9 +146,12 @@ The provisioning script generates this automatically. Key values:
 | `GOOGLE_OAUTH_CLIENT_ID` | Manual — from Google Cloud Console |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Manual — from Google Cloud Console |
 
-Email access control is managed via `deploy/authenticated-emails.txt`
-(one email per line). See [Google OAuth setup guide](./google-oauth-setup.md)
-for complete instructions.
+Email access control is managed outside the Git checkout at
+`/opt/spotify-mcp-config/authenticated-emails.txt` (one email per line). The
+parent directory is owned by `deploy:deploy` with mode `0750`; the file is
+owned by `deploy:deploy` with mode `0644` so the non-root oauth2-proxy process
+can read it through the read-only bind mount. See the
+[Google OAuth setup guide](./google-oauth-setup.md) for complete instructions.
 
 For the full template with all available options, see `.env.prod.example`.
 
@@ -167,6 +170,64 @@ authorization and a manual dispatch of `.github/workflows/deploy.yml` with an
 immutable, full 40-character commit SHA that is reachable from `origin/main`
 and a fresh deployment UUID that identifies this one authorized dispatch.
 
+### One-time external allowlist migration
+
+Before the first deployment that uses the external allowlist mount, a
+separately authorized operator must migrate the current server-side allowlist.
+Do this while production is still on the legacy revision that tracks
+`deploy/authenticated-emails.txt`. The commands below do not print the file or
+its digest:
+
+```bash
+set -euo pipefail
+cd /opt/spotify-mcp
+LEGACY_ALLOWLIST="deploy/authenticated-emails.txt"
+EXTERNAL_ALLOWLIST="/opt/spotify-mcp-config/authenticated-emails.txt"
+
+test -f "$LEGACY_ALLOWLIST"
+test -r "$LEGACY_ALLOWLIST"
+test -s "$LEGACY_ALLOWLIST"
+sudo install -d -o deploy -g deploy -m 0750 /opt/spotify-mcp-config
+sudo install -o deploy -g deploy -m 0644 "$LEGACY_ALLOWLIST" "$EXTERNAL_ALLOWLIST"
+test -f "$EXTERNAL_ALLOWLIST"
+test -r "$EXTERNAL_ALLOWLIST"
+test -s "$EXTERNAL_ALLOWLIST"
+test "$(stat -c %s "$LEGACY_ALLOWLIST")" = "$(stat -c %s "$EXTERNAL_ALLOWLIST")"
+cmp -s "$LEGACY_ALLOWLIST" "$EXTERNAL_ALLOWLIST"
+
+# Remove the runtime edit from the tracked path and prove the checkout is exact.
+git restore --source=HEAD -- "$LEGACY_ALLOWLIST"
+test -z "$(git status --porcelain --untracked-files=all)"
+```
+
+Stop if any command fails. Do not dispatch the new workflow until the external
+file passes both readability and non-empty checks and the Git checkout is
+clean. Keep the authorization and monitoring evidence for the separately
+authorized deployment; this repository change does not perform the migration.
+
+If a separately authorized rollback selects a legacy Compose revision that
+mounts the tracked path, restore the external file to that path after checking
+out the legacy revision and before restarting its services:
+
+```bash
+set -euo pipefail
+cd /opt/spotify-mcp
+LEGACY_ALLOWLIST="deploy/authenticated-emails.txt"
+EXTERNAL_ALLOWLIST="/opt/spotify-mcp-config/authenticated-emails.txt"
+test -f "$EXTERNAL_ALLOWLIST"
+test -r "$EXTERNAL_ALLOWLIST"
+test -s "$EXTERNAL_ALLOWLIST"
+install -m 0644 "$EXTERNAL_ALLOWLIST" "$LEGACY_ALLOWLIST"
+test "$(stat -c %s "$EXTERNAL_ALLOWLIST")" = "$(stat -c %s "$LEGACY_ALLOWLIST")"
+cmp -s "$EXTERNAL_ALLOWLIST" "$LEGACY_ALLOWLIST"
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+```
+
+The resulting tracked-file modification is expected only for the legacy
+configuration. Do not run the new exact-SHA workflow against that dirty
+checkout, and do not restart the legacy configuration without separate
+rollback authorization.
+
 ### Prerequisites
 
 - The change has been merged to `main` and any required repository review and
@@ -178,6 +239,8 @@ and a fresh deployment UUID that identifies this one authorized dispatch.
   SHA, or the current checkout.
 - A new deployment UUID will be generated after authorization. Never reuse an
   earlier deployment UUID, including for a retry or rollback.
+- `/opt/spotify-mcp-config/authenticated-emails.txt` exists, is readable and
+  non-empty, and the production Git checkout is clean.
 
 Confirm the candidate before dispatching:
 
@@ -340,7 +403,7 @@ gh secret set SSH_PRIVATE_KEY --repo gmyuval/spotify-mcp-history-collector < dep
 |------|---------|
 | `docker-compose.prod.yml` | Production service definitions (no local Postgres, Caddy, production uvicorn) |
 | `deploy/Caddyfile` | Reverse proxy routes with automatic HTTPS and forward_auth |
-| `deploy/authenticated-emails.txt` | Email whitelist for oauth2-proxy (one email per line) |
+| `deploy/authenticated-emails.txt.example` | Non-sensitive format example for the external oauth2-proxy allowlist |
 | `deploy/provision.sh` | One-time automated provisioning script |
 | `.github/workflows/deploy.yml` | Manual, immutable-revision production deployment workflow |
 | `.env.prod.example` | Template for production environment variables |
