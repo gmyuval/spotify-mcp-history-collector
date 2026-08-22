@@ -254,11 +254,20 @@ obtain separate authorization before a retry or rollback.
 
 ### Rollback
 
-The job summary's **Previous production SHA** is the rollback revision. With
-separate production authorization, dispatch the same workflow again using that
-full SHA as `commit_sha`, then monitor it to a terminal result using the same
-success evidence. Do not use `main`, a branch, a tag, or a local `git reset` as
-a rollback mechanism.
+The job summary's **Previous production SHA** is only an application-code
+rollback candidate, never a complete rollback. Redeploying it does not reverse
+database schema or data changes. Determine from the exact failed run whether
+migrations may have started or applied. If they may have, or the evidence is
+uncertain, stop and obtain a separately accepted database compatibility or
+recovery decision or procedure before redispatching older code. This runbook
+does not define or perform a database rollback.
+
+If the exact run proves that migrations did not start, separate production
+authorization may allow the operator to dispatch the same workflow with the
+captured full SHA as `commit_sha`. If a database decision is required, any
+older-code redispatch must follow its accepted outcome. In either case, monitor
+that exact run to a terminal result using the same success evidence. Do not use
+`main`, a branch, a tag, or a local `git reset` as a rollback mechanism.
 
 ### GitHub Secrets
 

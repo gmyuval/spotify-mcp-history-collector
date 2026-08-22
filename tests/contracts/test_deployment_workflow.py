@@ -15,22 +15,32 @@ VALIDATION_GATES = (
     "test-frontend",
     "test-explorer",
 )
+REVIEWED_ACTIONS = {
+    "actions/checkout": "d23441a48e516b6c34aea4fa41551a30e30af803",
+    "actions/setup-python": "ece7cb06caefa5fff74198d8649806c4678c61a1",
+    "appleboy/ssh-action": "0ff4204d59e8e51228ff73bce53f80d53301dee2",
+}
 
 
 def mapping_body(document: str, key: str, indent: int = 0) -> str:
     """Return an indentation-delimited YAML mapping body without parsing YAML."""
     lines = document.splitlines(keepends=True)
-    marker = f"{' ' * indent}{key}:"
+    markers = {
+        f"{' ' * indent}{key}:",
+        f'{" " * indent}"{key}":',
+        f"{' ' * indent}'{key}':",
+    }
 
     for start, line in enumerate(lines):
-        if line.rstrip("\r\n") != marker:
+        if line.rstrip("\r\n") not in markers:
             continue
 
         body = []
         for line in lines[start + 1 :]:
             stripped = line.strip()
             leading_spaces = len(line) - len(line.lstrip(" "))
-            if stripped and leading_spaces <= indent:
+            comment_only = line.lstrip(" ").startswith("#")
+            if stripped and not comment_only and leading_spaces <= indent:
                 break
             body.append(line)
         return "".join(body)
@@ -40,8 +50,11 @@ def mapping_body(document: str, key: str, indent: int = 0) -> str:
 
 def direct_mapping_keys(body: str, indent: int) -> tuple[str, ...]:
     """Return only mapping keys at one exact indentation level."""
-    pattern = re.compile(rf"^{' ' * indent}([A-Za-z0-9_-]+):(?:\s|$)", re.MULTILINE)
-    return tuple(match.group(1) for match in pattern.finditer(body))
+    pattern = re.compile(
+        rf"^{' ' * indent}(?P<key>[A-Za-z0-9_-]+|\"[A-Za-z0-9_-]+\"|'[A-Za-z0-9_-]+'):(?:\s|$)",
+        re.MULTILINE,
+    )
+    return tuple(match.group("key").strip("\"'") for match in pattern.finditer(body))
 
 
 def mapping_value(document: str, key: str, indent: int) -> str:
@@ -105,6 +118,30 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
         self.assertIn("group: production-deployment", concurrency)
         self.assertIn("cancel-in-progress: false", concurrency)
 
+    def test_trigger_parser_detects_comment_separated_and_quoted_push_keys(self) -> None:
+        adversarial_documents = {
+            "comment separated": "on:\n  workflow_dispatch:\n# deceptive separator\n  push:\n",
+            "double quoted": 'on:\n  workflow_dispatch:\n  "push":\n',
+            "single quoted": "on:\n  workflow_dispatch:\n  'push':\n",
+        }
+        for case, document in adversarial_documents.items():
+            with self.subTest(case=case):
+                trigger_body = mapping_body(document, "on")
+                self.assertIn("push", direct_mapping_keys(trigger_body, 2))
+
+    def test_external_actions_are_immutable_and_permissions_are_read_only(self) -> None:
+        uses = re.findall(r"(?m)^\s*-?\s*uses:\s*([^\s#]+)", self.workflow)
+        self.assertGreater(len(uses), 0)
+        for reference in uses:
+            with self.subTest(reference=reference):
+                self.assertRegex(reference, r"^[^@]+@[0-9a-f]{40}$")
+                action, revision = reference.rsplit("@", 1)
+                self.assertEqual(revision, REVIEWED_ACTIONS[action])
+
+        permissions = mapping_body(self.workflow, "permissions")
+        self.assertEqual(direct_mapping_keys(permissions, 2), ("contents",))
+        self.assertEqual(mapping_value(permissions, "contents", indent=2), "read")
+
     def test_production_jobs_keep_the_protected_environment(self) -> None:
         """Regression: removing environment protection must fail this contract."""
         for job in ("capture-production-state", "deploy"):
@@ -165,7 +202,7 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
             "environment: production",
             "DO_API_TOKEN: ${{ secrets.DO_API_TOKEN }}",
             "DB_CLUSTER_ID: ${{ secrets.DO_DB_CLUSTER_ID }}",
-            "appleboy/ssh-action@v1",
+            f"appleboy/ssh-action@{REVIEWED_ACTIONS['appleboy/ssh-action']}",
             "docker compose --env-file .env.prod -f docker-compose.prod.yml build --pull",
             "=== Waiting for API health ===",
             "=== Waiting for database connectivity ===",
@@ -207,6 +244,17 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
             "Rollback posture:",
         ):
             self.assertIn(field, summary)
+
+    def test_rollback_is_limited_to_code_and_stops_at_database_decisions(self) -> None:
+        summary = self.job_body("summary").lower()
+        runbook = self.runbook.lower()
+        for document in (summary, runbook):
+            normalized = re.sub(r"\s+", " ", document)
+            self.assertIn("application-code rollback candidate", normalized)
+            self.assertIn("never a complete rollback", normalized)
+            self.assertIn("migrations may have started or applied", normalized)
+            self.assertIn("database compatibility or recovery decision", normalized)
+            self.assertNotIn("alembic downgrade", normalized)
 
     def test_runbook_identifies_and_monitors_the_exact_sha_named_run(self) -> None:
         self.assertIn(
