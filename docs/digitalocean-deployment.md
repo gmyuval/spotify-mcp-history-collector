@@ -159,21 +159,74 @@ The asyncpg driver uses a different parameter name: `ssl=require`.
 The `DATABASE_URL` in `.env.prod` is configured with `?ssl=require`
 which asyncpg understands natively. No application code changes needed.
 
-## CI/CD (GitHub Actions)
+## Production deployment (GitHub Actions)
 
-After provisioning, all deploys are automatic:
+Merging into `main` makes a revision eligible for production, but **a merge
+alone never deploys production**. Production deployment requires separate
+authorization and a manual dispatch of `.github/workflows/deploy.yml` with an
+immutable, full 40-character commit SHA that is reachable from `origin/main`.
 
-- **Trigger:** Push to `main` branch, or manual dispatch from the
-  Actions tab
-- **Workflow:** `.github/workflows/deploy.yml`
-- **Process:**
-  1. SSH to Droplet as `deploy` user
-  2. Pull latest code from `main`
-  3. Build Docker images on the Droplet
-  4. Restart services with zero-config rolling update
-  5. Wait for API health check
-  6. Run database migrations (Alembic)
-  7. Verify all services
+### Prerequisites
+
+- The change has been merged to `main` and any required repository review and
+  checks have completed.
+- The operator has separate authorization to change production.
+- `gh` is authenticated for this repository, or the operator can use the
+  repository's **Actions** tab.
+- The exact candidate SHA is known; do not use a branch name, tag, abbreviated
+  SHA, or the current checkout.
+
+Confirm the candidate before dispatching:
+
+```bash
+DEPLOY_SHA="0123456789abcdef0123456789abcdef01234567"  # replace with the full SHA
+git fetch origin main:refs/remotes/origin/main
+git rev-parse "$DEPLOY_SHA^{commit}"
+git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+```
+
+Both Git commands must succeed. Stop if the SHA is not 40 hexadecimal
+characters, does not name a commit, or is not reachable from `origin/main`.
+
+### Dispatch and monitor
+
+Use one of these paths after authorization:
+
+```bash
+gh workflow run deploy.yml --ref main -f commit_sha="$DEPLOY_SHA"
+gh run list --workflow deploy.yml --limit 1
+gh run watch RUN_ID --exit-status
+```
+
+Or in GitHub, open **Actions** → **Deploy to DigitalOcean** → **Run workflow**,
+select the `main` workflow definition, enter `commit_sha` as the full SHA, and
+select **Run workflow**. Do not dispatch from a branch or tag.
+
+The workflow validates the SHA before deployment, runs lint, type checking, and
+every service test suite against that exact revision, then SSHes to the Droplet.
+The Droplet records its current commit before changing it, fetches
+`origin/main`, validates the SHA again, and checks out the exact revision in a
+detached state. It preserves the existing firewall handling, Compose build,
+health checks, migration order, and collector restart sequence.
+
+Monitor the run to a terminal result. A successful deployment has all required
+GitHub jobs green and a job summary that records the requested SHA, previous
+production SHA, `production` environment, terminal health result, and rollback
+posture. Those are the required success evidence; a dispatched or merely
+started run is not success.
+
+On any validation, CI, SSH, migration, or health failure, stop. Do not retry by
+resetting the Droplet to a branch and do not infer that production is healthy.
+Inspect the failed job and its summary, preserve the captured prior SHA, and
+obtain separate authorization before a retry or rollback.
+
+### Rollback
+
+The job summary's **Previous production SHA** is the rollback revision. With
+separate production authorization, dispatch the same workflow again using that
+full SHA as `commit_sha`, then monitor it to a terminal result using the same
+success evidence. Do not use `main`, a branch, a tag, or a local `git reset` as
+a rollback mechanism.
 
 ### GitHub Secrets
 
@@ -197,7 +250,7 @@ gh secret set SSH_PRIVATE_KEY --repo gmyuval/spotify-mcp-history-collector < dep
 | `deploy/Caddyfile` | Reverse proxy routes with automatic HTTPS and forward_auth |
 | `deploy/authenticated-emails.txt` | Email whitelist for oauth2-proxy (one email per line) |
 | `deploy/provision.sh` | One-time automated provisioning script |
-| `.github/workflows/deploy.yml` | CI/CD pipeline (deploy on push to main) |
+| `.github/workflows/deploy.yml` | Manual, immutable-revision production deployment workflow |
 | `.env.prod.example` | Template for production environment variables |
 | `resources/.env.do` | Provisioning parameters (not committed — gitignored) |
 | `docs/google-oauth-setup.md` | Google OAuth setup guide for oauth2-proxy |
@@ -242,16 +295,12 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml restart
 docker compose --env-file .env.prod -f docker-compose.prod.yml exec api alembic upgrade head
 ```
 
-### Manual deploy (without CI/CD)
+### Production deploys and rollback
 
-```bash
-ssh deploy@DROPLET_IP
-cd /opt/spotify-mcp
-git fetch origin main && git reset --hard origin/main
-docker compose --env-file .env.prod -f docker-compose.prod.yml build --pull
-docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
-docker compose --env-file .env.prod -f docker-compose.prod.yml exec api alembic upgrade head
-```
+Use the manual GitHub Actions procedure in
+[Production deployment (GitHub Actions)](#production-deployment-github-actions).
+Do not deploy or roll back directly over SSH; that bypasses immutable-SHA
+validation, required checks, and recorded rollback evidence.
 
 ### Check service health
 
