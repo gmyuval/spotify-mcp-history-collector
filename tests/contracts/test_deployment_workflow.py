@@ -20,6 +20,11 @@ REVIEWED_ACTIONS = {
     "actions/setup-python": "ece7cb06caefa5fff74198d8649806c4678c61a1",
     "appleboy/ssh-action": "0ff4204d59e8e51228ff73bce53f80d53301dee2",
 }
+UUID_V4_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+
+
+def deployment_run_title(commit_sha: str, deployment_id: str) -> str:
+    return f"Deploy {commit_sha} to production [{deployment_id}]"
 
 
 def mapping_body(document: str, key: str, indent: int = 0) -> str:
@@ -109,10 +114,13 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
         commit_sha_body = mapping_body(inputs_body, "commit_sha", indent=6)
         self.assertIn("required: true", commit_sha_body)
         self.assertNotIn("default:", commit_sha_body)
+        deployment_id_body = mapping_body(inputs_body, "deployment_id", indent=6)
+        self.assertIn("required: true", deployment_id_body)
+        self.assertNotIn("default:", deployment_id_body)
         self.assertIn(
-            'run-name: "Deploy ${{ inputs.commit_sha }} to production"',
+            'run-name: "Deploy ${{ inputs.commit_sha }} to production [${{ inputs.deployment_id }}]"',
             self.workflow,
-            "the run title must identify the immutable deployment SHA",
+            "the run title must identify both the immutable SHA and authorized dispatch",
         )
         concurrency = mapping_body(self.workflow, "concurrency")
         self.assertIn("group: production-deployment", concurrency)
@@ -163,6 +171,8 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
 
         sha_validation = self.job_body("validate-deploy-sha")
         self.assertIn('[[ "$DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]]', sha_validation)
+        self.assertIn("DEPLOYMENT_ID: ${{ inputs.deployment_id }}", sha_validation)
+        self.assertIn(f'[[ "$DEPLOYMENT_ID" =~ {UUID_V4_PATTERN} ]]', sha_validation)
         self.assertLess(
             sha_validation.index("git fetch origin main"),
             sha_validation.index('git cat-file -e "$DEPLOY_SHA^{commit}"'),
@@ -257,15 +267,39 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
             self.assertNotIn("alembic downgrade", normalized)
 
     def test_runbook_identifies_and_monitors_the_exact_sha_named_run(self) -> None:
+        normalized_runbook = re.sub(r"\s+", " ", self.runbook)
+        self.assertIn("uuid.uuid4()", self.runbook)
+        self.assertIn('-f deployment_id="$DEPLOYMENT_ID"', self.runbook)
+        self.assertIn("DISPATCH_OUTPUT=$(gh workflow run", normalized_runbook)
         self.assertIn(
-            "Deploy $DEPLOY_SHA to production",
+            'EXPECTED_RUN_TITLE="Deploy $DEPLOY_SHA to production [$DEPLOYMENT_ID]"',
             self.runbook,
-            "operators must correlate the run title with the requested SHA",
+        )
+        self.assertIn("RUN_URL", self.runbook)
+        self.assertIn("RUN_ID", self.runbook)
+        self.assertIn(
+            "Deploy $DEPLOY_SHA to production [$DEPLOYMENT_ID]",
+            self.runbook,
+            "operators must correlate the run title with both authorized values",
         )
         self.assertIn("displayTitle", self.runbook)
         self.assertIn('gh run watch "$RUN_ID" --exit-status', self.runbook)
         self.assertIn('gh run view "$RUN_ID"', self.runbook)
         self.assertNotIn("gh run list --workflow deploy.yml --limit 1", self.runbook)
+
+    def test_same_sha_dispatches_have_distinct_matchable_run_titles(self) -> None:
+        commit_sha = "1" * 40
+        first_id = "11111111-1111-4111-8111-111111111111"
+        second_id = "22222222-2222-4222-a222-222222222222"
+        runs = (
+            {"databaseId": 101, "displayTitle": deployment_run_title(commit_sha, first_id)},
+            {"databaseId": 102, "displayTitle": deployment_run_title(commit_sha, second_id)},
+        )
+
+        expected_title = deployment_run_title(commit_sha, first_id)
+        matches = [run["databaseId"] for run in runs if run["displayTitle"] == expected_title]
+        self.assertEqual(matches, [101])
+        self.assertNotEqual(runs[0]["displayTitle"], runs[1]["displayTitle"])
 
     def test_provisioning_handoff_does_not_claim_merges_auto_deploy(self) -> None:
         self.assertNotIn("automatic via GitHub Actions on push to main", self.provision)

@@ -164,7 +164,8 @@ which asyncpg understands natively. No application code changes needed.
 Merging into `main` makes a revision eligible for production, but **a merge
 alone never deploys production**. Production deployment requires separate
 authorization and a manual dispatch of `.github/workflows/deploy.yml` with an
-immutable, full 40-character commit SHA that is reachable from `origin/main`.
+immutable, full 40-character commit SHA that is reachable from `origin/main`
+and a fresh deployment UUID that identifies this one authorized dispatch.
 
 ### Prerequisites
 
@@ -175,6 +176,8 @@ immutable, full 40-character commit SHA that is reachable from `origin/main`.
   repository's **Actions** tab.
 - The exact candidate SHA is known; do not use a branch name, tag, abbreviated
   SHA, or the current checkout.
+- A new deployment UUID will be generated after authorization. Never reuse an
+  earlier deployment UUID, including for a retry or rollback.
 
 Confirm the candidate before dispatching:
 
@@ -193,45 +196,92 @@ characters, does not name a commit, or is not reachable from `origin/main`.
 Use one of these paths after authorization:
 
 ```bash
+set -euo pipefail
+DEPLOYMENT_ID=$(python -c 'import uuid; print(uuid.uuid4())')
+EXPECTED_RUN_TITLE="Deploy $DEPLOY_SHA to production [$DEPLOYMENT_ID]"
 DISPATCHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-gh workflow run deploy.yml --ref main -f commit_sha="$DEPLOY_SHA"
+if ! DISPATCH_OUTPUT=$(gh workflow run deploy.yml \
+  --ref main \
+  -f commit_sha="$DEPLOY_SHA" \
+  -f deployment_id="$DEPLOYMENT_ID" 2>&1); then
+  printf '%s\n' "$DISPATCH_OUTPUT" >&2
+  exit 1
+fi
+printf '%s\n' "$DISPATCH_OUTPUT"
 
-# Identify the new run by both its SHA-bearing title and dispatch time. If more
-# than one candidate appears, stop instead of guessing which run to monitor.
+# Prefer an exact run URL or numeric run ID returned by the dispatch command.
+RUN_URL=$(printf '%s\n' "$DISPATCH_OUTPUT" \
+  | sed -nE 's|.*(https://github.com/[^[:space:]]+/actions/runs/[0-9]+).*|\1|p' \
+  | tail -n1)
 RUN_ID=""
-for attempt in $(seq 1 30); do
-  MATCHING_RUNS=$(gh run list \
-    --workflow deploy.yml \
-    --event workflow_dispatch \
-    --branch main \
-    --limit 100 \
-    --json databaseId,displayTitle,createdAt \
-    --jq ".[] | select(.displayTitle == \"Deploy $DEPLOY_SHA to production\" and .createdAt >= \"$DISPATCHED_AT\") | .databaseId")
-  RUN_COUNT=$(printf '%s\n' "$MATCHING_RUNS" | awk 'NF { count++ } END { print count + 0 }')
-  if [ "$RUN_COUNT" -eq 1 ]; then
-    RUN_ID=$(printf '%s\n' "$MATCHING_RUNS" | awk 'NF { print; exit }')
-    break
-  fi
-  if [ "$RUN_COUNT" -gt 1 ]; then
-    echo "ERROR: multiple runs match Deploy $DEPLOY_SHA to production; identify the exact run in GitHub"
+if [ -n "$RUN_URL" ]; then
+  RUN_ID=${RUN_URL##*/}
+else
+  RETURNED_RUN_IDS=$(printf '%s\n' "$DISPATCH_OUTPUT" \
+    | awk '{
+        normalized = tolower($0)
+        if (normalized ~ /^((run[ _-]?)?id[=: ]+)?[0-9]+$/) {
+          sub(/^((run[ _-]?)?id[=: ]+)?/, "", normalized)
+          print normalized
+        }
+      }')
+  RETURNED_RUN_COUNT=$(printf '%s\n' "$RETURNED_RUN_IDS" \
+    | awk 'NF { count++ } END { print count + 0 }')
+  if [ "$RETURNED_RUN_COUNT" -gt 1 ]; then
+    echo "ERROR: dispatch returned more than one run ID"
     exit 1
   fi
-  sleep 2
-done
+  if [ "$RETURNED_RUN_COUNT" -eq 1 ]; then
+    RUN_ID=$(printf '%s\n' "$RETURNED_RUN_IDS" | awk 'NF { print; exit }')
+  fi
+fi
+
+# Older gh versions may return neither value. Query only by the unique full
+# SHA + deployment UUID title after the recorded dispatch time. Never fall back
+# to the newest run or to a SHA-only match.
+if [ -z "$RUN_ID" ]; then
+  for attempt in $(seq 1 30); do
+    MATCHING_RUNS=$(gh run list \
+      --workflow deploy.yml \
+      --event workflow_dispatch \
+      --branch main \
+      --limit 100 \
+      --json databaseId,displayTitle,createdAt,url \
+      --jq ".[] | select(.displayTitle == \"$EXPECTED_RUN_TITLE\" and .createdAt >= \"$DISPATCHED_AT\") | [.databaseId, .url] | @tsv")
+    RUN_COUNT=$(printf '%s\n' "$MATCHING_RUNS" \
+      | awk 'NF { count++ } END { print count + 0 }')
+    if [ "$RUN_COUNT" -eq 1 ]; then
+      RUN_ID=$(printf '%s\n' "$MATCHING_RUNS" | awk -F '\t' 'NF { print $1; exit }')
+      RUN_URL=$(printf '%s\n' "$MATCHING_RUNS" | awk -F '\t' 'NF { print $2; exit }')
+      break
+    fi
+    if [ "$RUN_COUNT" -gt 1 ]; then
+      echo "ERROR: multiple runs match $EXPECTED_RUN_TITLE; do not guess"
+      exit 1
+    fi
+    sleep 2
+  done
+fi
 test -n "$RUN_ID" || { echo "ERROR: dispatched run was not found"; exit 1; }
 
-gh run view "$RUN_ID" --json databaseId,displayTitle,event,status,conclusion,url
+ACTUAL_RUN_TITLE=$(gh run view "$RUN_ID" --json displayTitle --jq .displayTitle)
+test "$ACTUAL_RUN_TITLE" = "$EXPECTED_RUN_TITLE" \
+  || { echo "ERROR: run $RUN_ID does not match $EXPECTED_RUN_TITLE"; exit 1; }
+RUN_URL=$(gh run view "$RUN_ID" --json url --jq .url)
+printf 'Monitoring run %s at %s\n' "$RUN_ID" "$RUN_URL"
 gh run watch "$RUN_ID" --exit-status
 gh run view "$RUN_ID" --json databaseId,displayTitle,status,conclusion,url
 ```
 
 Or in GitHub, open **Actions** → **Deploy to DigitalOcean** → **Run workflow**,
 select the `main` workflow definition, enter `commit_sha` as the full SHA, and
-select **Run workflow**. Do not dispatch from a branch or tag. Open the run
-whose title is exactly `Deploy <the full SHA> to production`, record its run ID
-and URL, and monitor that exact run page. Stop if more than one run could be the
-authorized dispatch; never substitute the newest run without verifying its
-SHA-bearing title.
+enter a freshly generated UUID v4 as `deployment_id`. Select **Run workflow**
+only after verifying both values against the authorization. Do not dispatch
+from a branch or tag. Open the run whose title is exactly
+`Deploy <the full SHA> to production [<the deployment UUID>]`, record its run ID
+and URL, and monitor that exact run page. Stop if the title does not contain
+both authorized values or if more than one run could match; never substitute
+the newest run or a SHA-only match.
 
 The workflow validates the SHA before deployment, runs lint, type checking, and
 every service test suite against that exact revision, then captures a clean,
@@ -264,10 +314,11 @@ does not define or perform a database rollback.
 
 If the exact run proves that migrations did not start, separate production
 authorization may allow the operator to dispatch the same workflow with the
-captured full SHA as `commit_sha`. If a database decision is required, any
-older-code redispatch must follow its accepted outcome. In either case, monitor
-that exact run to a terminal result using the same success evidence. Do not use
-`main`, a branch, a tag, or a local `git reset` as a rollback mechanism.
+captured full SHA as `commit_sha` and a newly generated `deployment_id`. If a
+database decision is required, any older-code redispatch must follow its
+accepted outcome. In either case, monitor that exact run to a terminal result
+using the same success evidence. Do not use `main`, a branch, a tag, or a local
+`git reset` as a rollback mechanism.
 
 ### GitHub Secrets
 
