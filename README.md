@@ -472,7 +472,7 @@ services/
 
 ## Testing
 
-The current branch collects 870 package tests plus 11 dependency-free uv-workflow contract tests. The
+The current branch collects 870 package tests plus 12 dependency-free uv-workflow contract tests. The
 package total is the measured pytest collection; it supersedes the earlier 874-function static
 orientation count.
 
@@ -483,7 +483,7 @@ orientation count.
 | Collector | 53 | `uv run --locked pytest services/collector/tests/` |
 | Admin Frontend | 66 | `uv run --locked pytest services/frontend/tests/` |
 | Explorer | 102 | `uv run --locked pytest services/explorer/tests/` |
-| UV workflow contract | 11 | `uv run --locked python -m unittest discover -s tests/contracts -p "test_*.py"` |
+| UV workflow contract | 12 | `uv run --locked python -m unittest discover -s tests/contracts -p "test_*.py"` |
 | **All package suites** | **870** | `make test` |
 
 **Important:** Run package suites separately (or via `make test`) because their fixtures can

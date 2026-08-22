@@ -197,6 +197,18 @@ jobs:
                 constraint_path.read_text(encoding="utf-8"),
             )
 
+    def test_manifest_digest_normalizes_checkout_line_endings(self) -> None:
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary_directory:
+            root = Path(temporary_directory)
+            tracked_path = root / "requirements.txt"
+            with mock.patch.object(docker_requirements, "ROOT", root):
+                tracked_path.write_bytes(b"httpx==0.28.1\r\n")
+                windows_digest = docker_requirements._sha256("requirements.txt")
+                tracked_path.write_bytes(b"httpx==0.28.1\n")
+                linux_digest = docker_requirements._sha256("requirements.txt")
+
+        self.assertEqual(windows_digest, linux_digest)
+
     def test_marked_requirements_are_restored_after_host_specific_resolution(self) -> None:
         with tempfile.TemporaryDirectory(dir=ROOT) as temporary_directory:
             output_path = Path(temporary_directory) / "requirements.txt"
@@ -216,6 +228,7 @@ jobs:
                 "pyyaml==6.0.3\n",
                 output_path.read_text(encoding="utf-8"),
             )
+            self.assertNotIn(b"\r\n", output_path.read_bytes())
 
             output_path.write_text("httpx==0.28.1\npyyaml==6.0.3\n", encoding="utf-8")
             docker_requirements._restore_marked_requirements(

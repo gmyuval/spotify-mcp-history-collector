@@ -143,7 +143,8 @@ def _tracked_paths() -> tuple[str, ...]:
 
 
 def _sha256(relative_path: str) -> str:
-    return hashlib.sha256((ROOT / relative_path).read_bytes()).hexdigest()
+    canonical_content = (ROOT / relative_path).read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(canonical_content).hexdigest()
 
 
 def _manifest() -> dict[str, object]:
@@ -160,6 +161,7 @@ def _record_manifest() -> None:
     MANIFEST_PATH.write_text(
         json.dumps(_manifest(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 
@@ -284,7 +286,7 @@ def _restore_marked_requirements(output_path: Path, marked_requirements: dict[st
             "    # retained from committed cross-platform marker set",
         ]
 
-    output_path.write_text("\n".join(retained_lines) + "\n", encoding="utf-8")
+    output_path.write_text("\n".join(retained_lines) + "\n", encoding="utf-8", newline="\n")
 
 
 def _write_marker_constraints(output_path: Path) -> Path | None:

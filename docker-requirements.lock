@@ -1,8 +1,8 @@
 {
   "files": {
     "services/api/pyproject.toml": "76592c5f50a4886ee64f04bbb9466078f8749965231d30448236e9666d7fb2a6",
-    "services/api/requirements-dev.txt": "3ea37b191165ddac542fbc131ca5e78737344484a1b0e32c6a40ed80fa59c097",
-    "services/api/requirements.txt": "8b4f29f80d8fcec65fe65a91b462f6a66237006ae811582ccc6bcac630d9c7cc",
+    "services/api/requirements-dev.txt": "7c44b8faeb25a5b5af8c7de5ec41e57daa0cb3e9965571af63e2551dbe879a63",
+    "services/api/requirements.txt": "cf70864d4ed4de9c7eb0055fa6536a36387c1bf028fe12d2127d92d4bd42a9a6",
     "services/collector/pyproject.toml": "d3204f748d89eb9c37a35fed4f9017311087886a60a2a7ec39838171fcbb52c0",
     "services/collector/requirements-dev.txt": "6d25bc9682f95fe7e79bc453459954b4934276cbab86aa3facaf64bb4cd18aec",
     "services/collector/requirements.txt": "932a78c143d3cdd01acc90b39900856876e7f3124e79af126252e5cfb494bdd9",
