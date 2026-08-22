@@ -72,9 +72,9 @@ Docker Compose, Caddy (automatic HTTPS), and GitHub Actions CI/CD.
 - A Google OAuth 2.0 application for oauth2-proxy
   (see [Google OAuth setup guide](./google-oauth-setup.md))
 
-## Quick Start (Automated)
+## Quick Start (Automated with an authorization checkpoint)
 
-The provisioning script handles everything in one command:
+The interactive provisioning script coordinates the full setup in one command:
 
 ```bash
 # 1. Fill in your parameters
@@ -85,6 +85,25 @@ The provisioning script handles everything in one command:
 # 2. Run the provisioning script
 bash deploy/provision.sh
 ```
+
+Before Step 10 starts any services, a fresh provision pauses at the external
+OAuth allowlist checkpoint. In a separate SSH session, populate
+`/opt/spotify-mcp-config/authenticated-emails.txt` without printing its
+contents, then return to the provisioning command and press Enter. The script
+reruns the regular/readable/non-empty preflight before it continues.
+
+In a noninteractive run, the script exits before service startup when the
+allowlist is not ready. After a separately authorized operator populates the
+file, resume with:
+
+```bash
+bash deploy/provision.sh --resume-after-allowlist
+```
+
+This narrowly scoped mode locates the existing production Droplet, skips Steps
+1-9, reruns the allowlist checkpoint, and completes the initial deployment and
+CI credential setup. It does not recreate or reconfigure the infrastructure,
+database, DNS, repository, or production environment file.
 
 The script will:
 
@@ -249,10 +268,14 @@ DEPLOY_SHA="0123456789abcdef0123456789abcdef01234567"  # replace with the full S
 git fetch origin main:refs/remotes/origin/main
 git rev-parse "$DEPLOY_SHA^{commit}"
 git merge-base --is-ancestor "$DEPLOY_SHA" origin/main
+ALLOWLIST_MOUNT="/opt/spotify-mcp-config/authenticated-emails.txt:/etc/oauth2-proxy/authenticated-emails.txt:ro"
+git show "${DEPLOY_SHA}:docker-compose.prod.yml" | grep -Fqx "      - $ALLOWLIST_MOUNT"
 ```
 
-Both Git commands must succeed. Stop if the SHA is not 40 hexadecimal
-characters, does not name a commit, or is not reachable from `origin/main`.
+All commands must succeed. Stop if the SHA is not 40 hexadecimal characters,
+does not name a commit, is not reachable from `origin/main`, or does not use
+the external OAuth allowlist mount. Use the separately authorized legacy
+rollback procedure for a revision that fails the mount check.
 
 ### Dispatch and monitor
 
@@ -377,11 +400,18 @@ does not define or perform a database rollback.
 
 If the exact run proves that migrations did not start, separate production
 authorization may allow the operator to dispatch the same workflow with the
-captured full SHA as `commit_sha` and a newly generated `deployment_id`. If a
-database decision is required, any older-code redispatch must follow its
-accepted outcome. In either case, monitor that exact run to a terminal result
-using the same success evidence. Do not use `main`, a branch, a tag, or a local
-`git reset` as a rollback mechanism.
+captured full SHA as `commit_sha` and a newly generated `deployment_id`.
+Generic workflow redispatch is limited to revisions whose production Compose
+file uses the external allowlist mount; validation rejects older revisions
+before production contact. Do not dispatch the workflow for a legacy revision.
+Follow the separately authorized legacy procedure above so the current
+external authorization state is copied into the legacy tracked path before
+its services restart.
+
+If a database decision is required, any older-code redispatch must follow its
+accepted outcome. In either case, monitor the exact authorized operation to a
+terminal result using the same success evidence. Do not use `main`, a branch,
+a tag, or a local `git reset` as a rollback mechanism.
 
 ### GitHub Secrets
 
@@ -454,7 +484,8 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml exec api alembic 
 
 Use the manual GitHub Actions procedure in
 [Production deployment (GitHub Actions)](#production-deployment-github-actions).
-Do not deploy or roll back directly over SSH; that bypasses immutable-SHA
+Except for the separately authorized legacy allowlist rollback procedure above,
+do not deploy or roll back directly over SSH; that bypasses immutable-SHA
 validation, required checks, and recorded rollback evidence.
 
 ### Check service health

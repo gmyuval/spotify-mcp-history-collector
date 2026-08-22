@@ -12,6 +12,7 @@
 #
 # Usage:
 #   bash deploy/provision.sh
+#   bash deploy/provision.sh --resume-after-allowlist
 #
 # Configuration is read from resources/.env.do:
 #   DOMAIN_NAME, SSH_KEY_NAME, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET,
@@ -19,6 +20,16 @@
 #   DB_PASSWORD, DB_NAME, DB_CLUSTER_ID
 # =============================================================================
 set -euo pipefail
+
+RESUME_AFTER_ALLOWLIST=false
+case "${1:-}" in
+    "") ;;
+    --resume-after-allowlist) RESUME_AFTER_ALLOWLIST=true ;;
+    *)
+        echo "Usage: bash deploy/provision.sh [--resume-after-allowlist]" >&2
+        exit 2
+        ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -75,6 +86,7 @@ wait_for_ssh() {
 # ---------------------------------------------------------------------------
 # Step 1: Look up SSH key ID
 # ---------------------------------------------------------------------------
+if [[ "$RESUME_AFTER_ALLOWLIST" == "false" ]]; then
 log "Step 1: Looking up SSH key '$SSH_KEY_NAME'"
 SSH_KEY_ID=$(doctl compute ssh-key list --format ID,Name --no-header | grep "$SSH_KEY_NAME" | awk '{print $1}')
 if [[ -z "$SSH_KEY_ID" ]]; then
@@ -383,6 +395,47 @@ echo "  NOTE: Google OAuth credentials (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLI
 echo "  are left blank. You must fill them in on the droplet before oauth2-proxy will work."
 echo "  See docs/google-oauth-setup.md for setup instructions."
 echo ""
+
+else
+    log "Resume: locating existing droplet and skipping Steps 1-9"
+    mapfile -t MATCHING_DROPLETS < <(
+        doctl compute droplet list --format ID,Name --no-header \
+            | awk -v name="$DROPLET_NAME" '$2 == name {print $1}'
+    )
+    if [[ "${#MATCHING_DROPLETS[@]}" -ne 1 ]]; then
+        err "resume requires exactly one existing '$DROPLET_NAME' droplet"
+    fi
+    DROPLET_ID="${MATCHING_DROPLETS[0]}"
+    DROPLET_IP=$(doctl compute droplet get "$DROPLET_ID" --format PublicIPv4 --no-header)
+    [[ -n "$DROPLET_IP" ]] || err "existing droplet has no public IPv4 address"
+    ADMIN_TOKEN="unchanged (resume mode does not read it)"
+    wait_for_ssh "$DROPLET_IP"
+fi
+
+# ---------------------------------------------------------------------------
+# Pre-Step-10 operator checkpoint
+# ---------------------------------------------------------------------------
+log "Pre-Step-10: Verifying external OAuth allowlist"
+AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
+
+allowlist_ready() {
+    ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" \
+        "test -f '$AUTHENTICATED_EMAILS_FILE' && test -r '$AUTHENTICATED_EMAILS_FILE' && test -s '$AUTHENTICATED_EMAILS_FILE'"
+}
+
+if allowlist_ready; then
+    echo "  External OAuth allowlist is ready"
+else
+    echo "  External OAuth allowlist is missing, unreadable, or empty."
+    echo "  Populate $AUTHENTICATED_EMAILS_FILE in a separate SSH session without printing it."
+    if [[ -t 0 ]]; then
+        read -r -p "Press Enter after the allowlist is populated: "
+    else
+        err "populate the allowlist, then rerun: bash deploy/provision.sh --resume-after-allowlist"
+    fi
+fi
+
+allowlist_ready || err "external OAuth allowlist is still missing, unreadable, or empty"
 
 # ---------------------------------------------------------------------------
 # Step 10: Initial deployment

@@ -318,6 +318,34 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
             "the external allowlist must be checked before service mutation",
         )
 
+    def test_legacy_allowlist_revision_is_rejected_before_production_contact(self) -> None:
+        """Regression: generic rollback must not start legacy tracked authorization."""
+        validate = self.job_body("validate-deploy-sha")
+
+        self.assertIn('git show "${DEPLOY_SHA}:docker-compose.prod.yml"', validate)
+        self.assertIn(
+            "/opt/spotify-mcp-config/authenticated-emails.txt:/etc/oauth2-proxy/authenticated-emails.txt:ro",
+            validate,
+        )
+        self.assertIn("selected revision predates the external OAuth allowlist contract", validate)
+        self.assertIn("separately authorized legacy rollback procedure", validate)
+        self.assertIn("Generic workflow redispatch is limited to revisions", self.runbook)
+        self.assertIn("Do not dispatch the workflow for a legacy revision", self.runbook)
+
+    def test_fresh_provision_has_interactive_checkpoint_and_narrow_resume(self) -> None:
+        """Regression: a fresh empty allowlist must have a safe completion path."""
+        checkpoint = 'log "Pre-Step-10: Verifying external OAuth allowlist"'
+
+        self.assertIn("--resume-after-allowlist", self.provision)
+        self.assertIn("RESUME_AFTER_ALLOWLIST=true", self.provision)
+        self.assertIn(checkpoint, self.provision)
+        self.assertIn("if [[ -t 0 ]]", self.provision)
+        self.assertIn('read -r -p "Press Enter after the allowlist is populated: "', self.provision)
+        self.assertGreaterEqual(self.provision.count("allowlist_ready"), 3)
+        self.assertLess(self.provision.index(checkpoint), self.provision.index('log "Step 10:'))
+        self.assertIn("--resume-after-allowlist", self.runbook)
+        self.assertRegex(self.runbook, r"skips Steps\s+1-9")
+
     def test_summary_always_reports_captured_state_without_failed_step_stdout(self) -> None:
         summary = self.job_body("summary")
         expected_needs = {"validate-deploy-sha", *VALIDATION_GATES, "capture-production-state", "deploy"}

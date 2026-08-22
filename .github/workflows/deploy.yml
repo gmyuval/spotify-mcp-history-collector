@@ -52,6 +52,13 @@ jobs:
             || { echo "ERROR: requested commit does not exist"; exit 1; }
           git merge-base --is-ancestor "$DEPLOY_SHA" origin/main \
             || { echo "ERROR: requested commit is not reachable from origin/main"; exit 1; }
+          ALLOWLIST_MOUNT="/opt/spotify-mcp-config/authenticated-emails.txt:/etc/oauth2-proxy/authenticated-emails.txt:ro"
+          if ! git show "${DEPLOY_SHA}:docker-compose.prod.yml" \
+            | grep -Fqx "      - $ALLOWLIST_MOUNT"; then
+            echo "ERROR: selected revision predates the external OAuth allowlist contract"
+            echo "Use the separately authorized legacy rollback procedure; generic workflow deployment is blocked"
+            exit 1
+          fi
 
   lint:
     name: Lint
