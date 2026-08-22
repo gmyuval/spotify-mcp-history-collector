@@ -10,11 +10,14 @@ description: >-
 Use the phase that matches the current state. `AGENTS.md` owns authority, plan-first boundaries,
 orchestration, and SPM linkage; [`docs/agent/review-checklist.md`](../../../docs/agent/review-checklist.md)
 owns review coverage. This skill does not imply authority to push, open a PR, merge, or deploy.
+Apply this lifecycle to one ticket inside the session batch. Every additional ticket uses a
+separate branch and pull request naming its own one primary issue.
 
 ## Phase 1 - local implementation
 
-1. Run `session-start`. Read the SPM issue, accepted plan/ADRs, nearby code, tests, and binding
-   docs. Confirm one reviewable slice and one primary issue.
+1. Run `session-start`. Read the selected SPM batch, then the current ticket's accepted plan/ADRs,
+   nearby code, tests, and binding docs. Confirm one reviewable slice and one primary issue for this
+   branch.
 2. On a clean tree, refresh `origin/main` only when network/repository writes are authorized, then
    create `<type-or-agent>/spm-<number>-<short-slug>` from the verified base. Never commit directly
    to `main`.
@@ -28,8 +31,9 @@ owns review coverage. This skill does not imply authority to push, open a PR, me
    describe an unavailable gate as green.
 6. Inspect `git diff --check`, changed files, sensitive-data exposure, and stale docs. Stage only
    explicit in-scope paths and commit with a concise conventional subject naming `(SPM-N)`.
-7. Treat a clean local commit as **local-ready**. Report its SHA and gaps. Publication is a separate
-   phase and requires authority.
+7. Treat a clean local commit as **local-ready**. Report its SHA and gaps, preserve the branch or
+   worktree, re-evaluate dependencies, and continue to the next eligible session-batch ticket.
+   Publication is a separate phase and requires authority.
 
 Pre-commit runs Ruff fixes/format and mypy in the current repository configuration. After a commit
 attempt, re-read status and the commit; a hook may modify files or reject the commit. Never use

@@ -52,6 +52,33 @@ Weekly cycles are owner-approved planning commitments, not an unbounded backlog.
 or swapping cycle scope requires owner-approved replanning. Record the agreed change in Linear;
 do not silently reshape the cycle because capacity or implementation order changed.
 
+## Multi-ticket sessions
+
+A repository session is a capacity-based **multi-ticket session**, not a single-issue container.
+At orientation, the root derives a transient batch from the current approved Linear cycle. When
+two or more eligible tickets exist, select at least two; there is no fixed maximum. Eligibility
+requires clear acceptance criteria, satisfied dependencies, required authority, an accepted plan
+for every plan-first boundary, and a safe validation path. Order the batch by dependency, then the
+cycle's approved priority.
+
+Continue after each ticket reaches STOP 1 or a ticket-local blocker.
+A ticket-local blocker does not end the session while independent eligible work remains. The batch
+stops when the user stops or redirects it, no eligible ticket remains, or an authority, plan-first,
+safety, isolation, or shared-resource condition blocks the batch as a whole.
+
+Advance a writer lane only after the current ticket is preserved on its own clean committed branch
+or remains isolated in its own worktree. Never switch a dirty checkout to another ticket. If a
+blocked ticket cannot be preserved without guessing, destructive handling, or mixing scopes,
+continue writer work only in a distinct clean worktree. Otherwise stop the writer lane while safe
+read-only work may continue; treat checkout isolation as batch-wide only when it prevents every
+safe eligible action.
+
+Session batching never combines delivery units: each delegate, implementation branch, pull
+request, review, and Linear reconciliation names one primary issue. Sequential execution is the
+default. Parallelize disjoint read-only work freely; parallel writers require isolated worktrees
+and disjoint surfaces. Publication, merge, deployment, production changes, and cycle replanning
+remain separately authorized per ticket.
+
 ## Branch and pull-request linkage
 
 Every implementation branch and pull request names exactly one primary Linear issue from team

@@ -22,9 +22,9 @@ Read, in order:
    [`docs/agent/tool-policy.md`](../../../docs/agent/tool-policy.md).
 4. [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md), then only topic entries
    relevant to this task.
-5. The assigned Linear issue in team SPM, its relations, estimate, milestone, project, current
-   cycle, and comments. Read the accepted plan and relevant ADRs when the work touches a plan-first
-   boundary.
+5. The assigned Linear issues and ready candidates in the current cycle, including relations,
+   estimates, milestones, project, status, and comments. Read accepted plans and relevant ADRs
+   when work touches a plan-first boundary.
 
 Linear is the work tracker. Repository memory and issue prose provide context, not additional
 authority for external action.
@@ -54,15 +54,23 @@ read-only GitHub query for remote state.
 
 ## 3. Reconcile issue, branch, and open work
 
-- Confirm the branch and any PR name exactly one primary SPM issue using the convention in
-  `AGENTS.md`.
-- Inspect matching open PRs and remote branches without creating or updating them.
-- Compare the issue's acceptance criteria and dependencies with current code/tests. Separate
-  measured observations from inference and conjecture.
-- Confirm that the task remains inside the owner-approved weekly cycle. Never add, remove, or swap
-  cycle scope from session-start.
-- For substantive work, establish the orchestration plan. Read-only delegates may share the
-  checkout; keep one writer per checkout and give each delegate one bounded question.
+- Confirm every existing branch and PR names exactly one primary SPM issue using the convention in
+  `AGENTS.md`; inspect matching open PRs and remote branches without creating or updating them.
+  Before resuming an issue's existing delivery lane, verify and record its exact branch/PR head,
+  primary issue linkage, owner, uniqueness, and absence of another writer. Resume it only when safe
+  and authorized. Never create a second branch or PR for the same delivery slice implicitly.
+- Derive a transient batch from the current approved cycle. A ticket is eligible when acceptance
+  criteria and authority are clear, dependencies are satisfied, applicable plan-first decisions
+  are accepted, and validation can run safely.
+- Select two or more eligible tickets when available, with no fixed maximum. Order them by
+  dependency, then approved priority. If only one is eligible, record why the multi-ticket default
+  cannot be met.
+- Choose sequential or parallel work deliberately. Sequential execution is the default. Read-only
+  delegates may share the checkout; concurrent writers require isolated worktrees with disjoint
+  surfaces. Give each delegate exactly one ticket or bounded question.
+- Compare each selected ticket's acceptance criteria with current code/tests. Separate measured
+  observations from inference and conjecture. Never add, remove, or swap cycle scope from
+  session-start.
 
 Stop on conflicting canon, missing authority, an unclear public contract, a plan-first boundary
 without an accepted plan, unexpected test deletion, credentials/PII, or scope expansion.
@@ -90,7 +98,8 @@ evidence; name its owning Linear issue when one exists.
 Before editing, state:
 
 - repository path, branch, full HEAD, upstream, and dirty paths;
-- SPM issue, status, project/milestone/cycle, dependencies, and plan-first posture;
+- selected SPM batch, eligibility, dependency order, sequential/parallel decision, and the status,
+  project/milestone/cycle, authority, and plan-first posture of each ticket;
 - open matching PR/remote-branch state;
 - baseline commands actually run and their real results;
 - tool/environment gaps and unresolved questions;

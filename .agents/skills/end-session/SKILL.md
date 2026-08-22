@@ -85,7 +85,7 @@ local-ready handoff, not a pull-request-ready claim.
 
 ## 5. Reconcile Linear from evidence
 
-For each SPM issue touched:
+For each selected ticket and every additional SPM issue touched:
 
 - check only acceptance criteria supported by the final diff and validation;
 - leave the issue started when work is local/unpushed or criteria remain;
@@ -93,6 +93,11 @@ For each SPM issue touched:
 - complete it only after the required delivery state is verified;
 - preserve dependencies, milestone, estimate, and owner-approved cycle scope;
 - add one concise evidence comment when it materially improves the handoff.
+
+Record each selected ticket's terminal session state: verified STOP 1; verified STOP 2/merged;
+blocked with its exact reason/owner; or not started with the eligibility change that prevented it.
+Name the next eligible ticket. A ticket-local blocker is not a reason to wrap while independent
+eligible work remains; identify the user direction or batch-wide stop that ended the session.
 
 Read the resulting issue back after any write. Do not create a second issue queue or invent a
 follow-up during wind-down.
@@ -109,6 +114,7 @@ resume bookmark or action-bearing instruction as durable memory.
 Report all of the following:
 
 - relevant Linear issue and reconciled status/criteria;
+- the selected batch, per-ticket outcome, blocked/skipped reasons, and next eligible work;
 - changed files and final diff scope;
 - commands actually run, revision, exit/result, and environment gaps;
 - branch, full commit SHA, clean/dirty state, upstream, remote branch, and PR state;

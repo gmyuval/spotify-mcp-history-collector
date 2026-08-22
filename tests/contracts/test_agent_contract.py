@@ -291,6 +291,78 @@ class AgentContractTests(unittest.TestCase):
             "Linear planning contract",
         )
 
+    def test_multi_ticket_sessions_are_capacity_based_and_issue_isolated(self) -> None:
+        agents = self.read("AGENTS.md")
+        protocol = self.read("docs/agent/orchestration.md")
+        session_start = self.read(".agents/skills/session-start/SKILL.md")
+        end_session = self.read(".agents/skills/end-session/SKILL.md")
+        pr_lifecycle = self.read(".agents/skills/pr-lifecycle/SKILL.md")
+        normalized_session_start = " ".join(session_start.split())
+
+        self.assert_terms(
+            agents,
+            (
+                "multi-ticket session",
+                "two or more eligible",
+                "no fixed maximum",
+                "ticket-local blocker",
+                "does not end the session",
+            ),
+            "multi-ticket standing directive",
+        )
+        self.assertIn(
+            "Never switch a dirty checkout to another ticket.",
+            agents,
+            "the standing directive must fail closed when a writer lane is dirty",
+        )
+        self.assertIn(
+            "batch-wide only when it prevents every safe eligible action",
+            " ".join(agents.split()),
+            "checkout isolation must not end safe independent read-only work",
+        )
+        self.assert_terms(
+            protocol,
+            (
+                "transient batch",
+                "current approved cycle",
+                "dependency order",
+                "sequential execution is the default",
+                "isolated worktrees",
+                "batch-wide stop",
+            ),
+            "multi-ticket orchestration protocol",
+        )
+        self.assertIn(
+            "After each verified STOP 1 or ticket-local blocker",
+            " ".join(protocol.split()),
+            "eligibility must be refreshed after both completion and a blocker",
+        )
+        self.assert_terms(
+            session_start,
+            ("two or more", "eligible", "dependency", "batch"),
+            "session-start batch selection",
+        )
+        self.assertIn(
+            "Never create a second branch or PR for the same delivery slice implicitly.",
+            normalized_session_start,
+            "session-start must resume or explicitly reconcile an existing delivery lane",
+        )
+        self.assert_terms(
+            session_start,
+            ("exact branch/PR head", "primary issue linkage", "owner", "absence of another writer"),
+            "existing delivery lane evidence",
+        )
+        self.assert_terms(
+            end_session,
+            ("each selected ticket", "STOP 2/merged", "blocked", "next eligible"),
+            "end-session batch reconciliation",
+        )
+        self.assert_terms(
+            pr_lifecycle,
+            ("session batch", "separate branch", "one primary issue"),
+            "per-ticket branch and PR isolation",
+        )
+
     def test_make_and_ci_run_the_cross_platform_contract(self) -> None:
         command = 'python -m unittest discover -s tests/contracts -p "test_*.py"'
         makefile = self.read("Makefile")
