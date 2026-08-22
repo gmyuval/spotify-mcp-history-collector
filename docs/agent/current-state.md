@@ -1,7 +1,7 @@
 # Current repository state
 
-Last verified: 2026-08-21 (UTC), from repository revision
-`d0c8107eb8126e705c5b5852e39563d05e35f6a1` plus the local SPM-3 working tree.
+Last verified: 2026-08-22 (UTC), from the SPM-2 working tree on
+`codex/spm-2-uv-baseline`, based at `e1459adcd6ae34026af439435083de4ff0bbe4b3`.
 
 This is volatile orientation, not a work queue or an architecture decision. Linear team **SPM**,
 project **Spotify MCP modernization**, is authoritative for planned work, ownership, status,
@@ -38,28 +38,26 @@ Product and integration detail belongs in the code, `README.md`, and the topic d
 
 ## Validation surface
 
-The CI workflow runs these independent gates:
+Development and pull-request CI use the root uv workspace, pinned uv 0.12.3, Python 3.14.7, and
+the committed `uv.lock`. The canonical clean-checkout setup command is:
 
 ```text
-python -m unittest discover -s tests/contracts -p "test_*.py"
-ruff check .
-ruff format --check .
-mypy services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src
-pytest services/api/tests/
-(from services/collector) pytest tests/
-pytest services/frontend/tests/
-pytest services/explorer/tests/
+uv sync --locked --all-packages --all-extras --all-groups
 ```
 
-Run `pytest services/shared/tests/` when shared code changes; it is not currently a separate CI
-job. Do not treat `make test` as proof that every package-specific suite ran: the root pytest
-configuration does not include Explorer or shared tests, and collector has a separate invocation
-because the suites' fixtures conflict.
+The CI workflow then runs lock and workflow drift checks, the dependency-free agent-contract
+suite, Ruff check and format validation, strict mypy across all five source trees, pre-commit, and
+one isolated pytest job for each workspace package. Keep package suites separate because their
+fixtures can conflict. The same commands are exposed through the root `Makefile`, but Make is an
+optional convenience rather than a prerequisite.
 
-On the host used for the SPM-3 implementation session, `make`, Ruff, pytest, pre-commit, and mypy
-were not available on `PATH`; the mypy environment gap is tracked by SPM-2. An unavailable tool is
-an explicit gap, never a passing result. The dependency-free agent contract can be run with any
-suitable Python 3 interpreter when the `python` launcher itself is unavailable.
+On the Windows SPM-2 writer host, the locked environment synchronized successfully and produced
+these local results: 23 agent-contract tests, 24 shared tests, 618 API unit tests (7 integration
+tests deselected), 53 collector tests, 66 frontend tests, and 102 Explorer tests passed. Ruff
+validated 273 files and strict mypy validated 157 source files. A second locked sync also created
+a fresh environment, and both development and production Compose configurations validated without
+starting services. Linux GitHub Actions remains unverified until publication is separately
+authorized and CI actually runs.
 
 ## Deployment evidence and cautions
 
@@ -68,6 +66,15 @@ describe a DigitalOcean production path. That workflow can change the database f
 the server checkout, rebuild and restart services, run Alembic migrations, recreate Caddy, and
 prune images. Reading those files is orientation; executing or changing that path requires an
 accepted plan and explicit authority.
+
+SPM-2 does not change that packaging path. Production Dockerfiles still install the committed
+pip-tools `requirements*.txt` files through their existing Compose build contexts, and the deploy
+workflow still uses its existing pip-based pre-deployment gates. `docker-requirements.lock` records
+the package metadata and requirement-file digests so this temporary boundary fails closed on
+drift. Its current evidence also records two inherited direct-dependency gaps: collector dev
+requirements omit `aiosqlite`, and Explorer dev requirements omit `python-multipart`. SPM-4 owns
+the accepted-plan decision between direct `uv.lock` consumption and pip-compatible exports; do
+not change Docker or deployment consumption before that decision.
 
 No production health, deployment freshness, live database state, user account state, or secret
 configuration is asserted by this document.

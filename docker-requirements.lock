@@ -1,0 +1,26 @@
+{
+  "files": {
+    "services/api/pyproject.toml": "76592c5f50a4886ee64f04bbb9466078f8749965231d30448236e9666d7fb2a6",
+    "services/api/requirements-dev.txt": "5c29c2390ede3abfb64eb042f87ec3e5967c75bf66bc4014c48983936ee1d12e",
+    "services/api/requirements.txt": "6d87bc96cb97299cac1c58ece9e15a3086c43a15e09c46cb90c28c1d7ae87323",
+    "services/collector/pyproject.toml": "d3204f748d89eb9c37a35fed4f9017311087886a60a2a7ec39838171fcbb52c0",
+    "services/collector/requirements-dev.txt": "a5ce98801e36295671d04151212823f03cba6315079373398a3146eed51c569d",
+    "services/collector/requirements.txt": "491ab945de07db01ebe9c91e2bcbd56aeafa56e20bb0c5dbe073fbcb995e2827",
+    "services/explorer/pyproject.toml": "3cac4e8c2a4f282f5ae81615c36f58e4b7c1843409af3e68f4e6a4e1930c08f9",
+    "services/explorer/requirements-dev.txt": "ad806b09c728e0b57394930879a86df8456d219c09401c47830a76f85a334f09",
+    "services/explorer/requirements.txt": "0a85c9b5e4bcc8bf816880f621bdb0d12a3340e2c9d47378daac73c2bf4bd0c6",
+    "services/frontend/pyproject.toml": "aff13c6d42fbd81e16b8eef3891504727d8b8515ca1cbd81d901177cc47a1396",
+    "services/frontend/requirements-dev.txt": "fc1be87d33af9afc7cf3fa819d772bcbcd9dd452d9804f073af66ded8dc1a787",
+    "services/frontend/requirements.txt": "c5f5b8d9ead3dcb34e5c37a43d4c414e78fd1686ce4c56543e27b9f1abda1986",
+    "services/shared/pyproject.toml": "e226280957d57269f9e7ef8886e32e651b75fcb57e1e1c97924491d88834c257",
+    "services/shared/requirements.txt": "9939803a32df2730f8d745a94b09b8a44bd3e0fa6f13b0f2b7f7b52cc13ebac4",
+    "uv.lock": "3ee304aa7a6d0d050b6f3c242a7a73e553648a436d1ee234abd598aaa795f192"
+  },
+  "format": 1,
+  "generator": "pip-tools 7.5.3 via uv.lock",
+  "known-direct-gaps": [
+    "services/collector/requirements-dev.txt: missing direct dependencies aiosqlite",
+    "services/explorer/requirements-dev.txt: missing direct dependencies python-multipart"
+  ],
+  "python": "3.14.7"
+}
