@@ -1,7 +1,5 @@
 """Dependency-free validation for the repository's pinned uv workflow."""
 
-from __future__ import annotations
-
 import json
 import re
 import sys
@@ -61,6 +59,34 @@ def _dependency_names(requirements: object) -> set[str]:
         if match is not None:
             names.add(match.group(0).lower().replace("_", "-"))
     return names
+
+
+def _action_refs(workflow: str) -> list[str]:
+    return re.findall(r"(?m)^\s*(?:-\s+)?uses:\s+([^\s#]+)", workflow)
+
+
+def _checkout_steps_missing_credentials(workflow: str) -> list[int]:
+    missing: list[int] = []
+    checkout_count = 0
+    workflow_lines = workflow.splitlines()
+    for line_number, line in enumerate(workflow_lines):
+        if CHECKOUT_ACTION not in line:
+            continue
+        checkout_count += 1
+        step_indent = len(line) - len(line.lstrip())
+        step_lines: list[str] = []
+        for following_line in workflow_lines[line_number + 1 :]:
+            if not following_line.strip():
+                continue
+            following_indent = len(following_line) - len(following_line.lstrip())
+            if following_indent < step_indent:
+                break
+            if following_indent == step_indent and following_line.lstrip().startswith("- "):
+                break
+            step_lines.append(following_line)
+        if not any(re.fullmatch(r"\s*persist-credentials:\s*false\s*", item) for item in step_lines):
+            missing.append(checkout_count)
+    return missing
 
 
 def _check_root_metadata(root: Path, issues: list[str]) -> None:
@@ -188,26 +214,13 @@ def _check_commands(root: Path, issues: list[str]) -> None:
         if re.search(r"(?m)^permissions:\n  contents: read\s*$", workflow) is None:
             issues.append(_issue("UV_CI_PERMISSIONS", "top-level contents: read"))
 
-        action_refs = re.findall(r"(?m)^\s*-\s+uses:\s+([^\s#]+)", workflow)
+        action_refs = _action_refs(workflow)
         for action_ref in action_refs:
             if re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", action_ref) is None:
                 issues.append(_issue("UV_CI_ACTION_NOT_PINNED", action_ref))
 
-        workflow_lines = workflow.splitlines()
-        checkout_count = 0
-        for line_number, line in enumerate(workflow_lines):
-            if CHECKOUT_ACTION not in line:
-                continue
-            checkout_count += 1
-            step_indent = len(line) - len(line.lstrip())
-            step_lines: list[str] = []
-            for following_line in workflow_lines[line_number + 1 :]:
-                following_indent = len(following_line) - len(following_line.lstrip())
-                if following_indent == step_indent and following_line.lstrip().startswith("- "):
-                    break
-                step_lines.append(following_line)
-            if not any(re.fullmatch(r"\s*persist-credentials:\s*false\s*", item) for item in step_lines):
-                issues.append(_issue("UV_CI_CHECKOUT_CREDENTIALS", f"checkout step {checkout_count}"))
+        for checkout_number in _checkout_steps_missing_credentials(workflow):
+            issues.append(_issue("UV_CI_CHECKOUT_CREDENTIALS", f"checkout step {checkout_number}"))
 
         for forbidden in ("actions/setup-python", "pip install", "conda"):
             if forbidden.lower() in workflow.lower():

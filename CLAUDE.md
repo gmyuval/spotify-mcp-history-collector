@@ -56,6 +56,7 @@ This is a containerized system that enables ChatGPT-style assistants to analyze 
 ## Commands
 
 ### Environment Setup
+
 ```bash
 # uv 0.12.3 and Python 3.14.7 are pinned by repository metadata.
 uv sync --locked --all-packages --all-extras --all-groups
@@ -63,6 +64,7 @@ uv run --locked pre-commit install
 ```
 
 ### Dependency Management
+
 ```bash
 # Verify workspace metadata and uv.lock agree
 uv lock --check
@@ -76,6 +78,7 @@ uv run --locked python scripts/compile_docker_requirements.py --check
 ```
 
 ### Database
+
 ```bash
 # Run migrations (inside Docker)
 docker-compose exec api alembic upgrade head
@@ -341,6 +344,7 @@ CI/CD via GitHub Actions: tests gate all deploys, manual dispatch supports branc
   SPM-4 owns the decision whether that path later uses `uv.lock` or exported requirements.
 
 ### Architecture Notes
+
 - **Shared code pattern**: Code needed by both api and collector goes in `services/shared/`. Docker build context is `./services` so both can COPY shared.
 - **Token management**: `app.auth.tokens.TokenManager` (API) and `collector.tokens.CollectorTokenManager` (collector) are intentionally separate. They share `shared.crypto.TokenEncryptor`.
 - **DB datetimes**: All columns use `DateTime(timezone=True)` (`TIMESTAMPTZ`). Always use `datetime.now(UTC)`. SQLite (tests) returns naive datetimes — use `.replace(tzinfo=None)` only in test assertions.

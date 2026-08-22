@@ -1,7 +1,5 @@
 """Validate development and production Compose configuration without applying it."""
 
-from __future__ import annotations
-
 import os
 import shutil
 import subprocess

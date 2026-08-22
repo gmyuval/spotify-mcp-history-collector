@@ -6,8 +6,6 @@ the committed pip-tools outputs tied together without changing Docker build
 contexts.
 """
 
-from __future__ import annotations
-
 import argparse
 import hashlib
 import json
@@ -171,6 +169,8 @@ def _check_manifest() -> list[str]:
         recorded = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return [*issues, f"docker-requirements.lock: {exc}"]
+    if not isinstance(recorded, dict):
+        return ["docker-requirements.lock: manifest must be an object"]
 
     expected = _manifest()
     if recorded.get("format") != expected["format"]:
@@ -196,14 +196,113 @@ def _check_manifest() -> list[str]:
     return issues
 
 
-def _write_input(specification: RequirementSet, *, include_dev: bool) -> Path:
-    suffix = "-dev" if include_dev else ""
+def _write_project_input(specification: RequirementSet) -> Path:
     name = Path(specification.package_dir).name
-    path = SCRATCH_ROOT / f"{name}{suffix}.in"
+    path = SCRATCH_ROOT / name / "pyproject.toml"
     path.parent.mkdir(parents=True, exist_ok=True)
-    requirements = _external_requirements(specification, include_dev=include_dev)
-    path.write_text("\n".join(requirements) + "\n", encoding="utf-8")
+    runtime_requirements = _external_requirements(specification, include_dev=False)
+    all_requirements = _external_requirements(specification, include_dev=True)
+    runtime_names = {_normalise_name(requirement) for requirement in runtime_requirements}
+    dev_requirements = [
+        requirement for requirement in all_requirements if _normalise_name(requirement) not in runtime_names
+    ]
+
+    def toml_array(requirements: list[str]) -> list[str]:
+        return [f"    {json.dumps(requirement)}," for requirement in requirements]
+
+    project = [
+        "[project]",
+        f"name = {json.dumps(f'spotify-mcp-{name}-docker-requirements')}",
+        'version = "0"',
+        'requires-python = ">=3.14"',
+        "dependencies = [",
+        *toml_array(runtime_requirements),
+        "]",
+        "",
+        "[project.optional-dependencies]",
+        "dev = [",
+        *toml_array(dev_requirements),
+        "]",
+        "",
+    ]
+    path.write_text("\n".join(project), encoding="utf-8")
     return path
+
+
+def _marked_requirements(output_path: Path) -> dict[str, str]:
+    requirements: dict[str, str] = {}
+    for line in output_path.read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(
+            r"([A-Za-z0-9_.-]+)(?:\[[^]]+\])?==[^;\s]+\s*;\s*.+",
+            line.strip(),
+        )
+        if match is not None:
+            requirements[_normalise_name(match.group(1))] = line.strip()
+    return requirements
+
+
+def _restore_marked_requirements(output_path: Path, marked_requirements: dict[str, str]) -> None:
+    if not marked_requirements:
+        return
+
+    lines = output_path.read_text(encoding="utf-8").splitlines()
+    retained_lines: list[str] = []
+    resolved_marked_requirements: dict[str, str] = {}
+    line_number = 0
+    while line_number < len(lines):
+        line = lines[line_number]
+        match = re.fullmatch(
+            r"([A-Za-z0-9_.-]+)(?:\[[^]]+\])?==[^;\s]+(?:\s*;\s*.+)?",
+            line.strip(),
+        )
+        if match is None or _normalise_name(match.group(1)) not in marked_requirements:
+            retained_lines.append(line)
+            line_number += 1
+            continue
+
+        requirement_name = _normalise_name(match.group(1))
+        marker = marked_requirements[requirement_name].split(";", maxsplit=1)[1].strip()
+        compiled_requirement = line.strip().split(";", maxsplit=1)[0].rstrip()
+        resolved_marked_requirements[requirement_name] = f"{compiled_requirement} ; {marker}"
+        line_number += 1
+        while line_number < len(lines) and lines[line_number].startswith((" ", "\t")):
+            line_number += 1
+
+    for requirement_name, saved_requirement_line in sorted(marked_requirements.items()):
+        requirement_line = resolved_marked_requirements.get(requirement_name, saved_requirement_line)
+        insertion_index = len(retained_lines)
+        for candidate_index, candidate in enumerate(retained_lines):
+            match = re.fullmatch(
+                r"([A-Za-z0-9_.-]+)(?:\[[^]]+\])?==[^;\s]+(?:\s*;\s*.+)?",
+                candidate.strip(),
+            )
+            if match is not None and _normalise_name(match.group(1)) > requirement_name:
+                insertion_index = candidate_index
+                break
+        retained_lines[insertion_index:insertion_index] = [
+            requirement_line,
+            "    # retained from committed cross-platform marker set",
+        ]
+
+    output_path.write_text("\n".join(retained_lines) + "\n", encoding="utf-8")
+
+
+def _write_marker_constraints(output_path: Path) -> Path | None:
+    marker_requirements: list[str] = []
+    for line in _marked_requirements(output_path).values():
+        match = re.fullmatch(
+            r"([A-Za-z0-9_.-]+)(?:\[[^]]+\])?==[^;\s]+\s*;\s*(.+)",
+            line,
+        )
+        if match is not None:
+            marker_requirements.append(f"{match.group(1)} ; {match.group(2)}")
+    if not marker_requirements:
+        return None
+
+    marker_path = SCRATCH_ROOT / "markers" / f"{output_path.parent.name}-{output_path.name}"
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    marker_path.write_text("\n".join(marker_requirements) + "\n", encoding="utf-8")
+    return marker_path
 
 
 def _compile_output(
@@ -211,21 +310,34 @@ def _compile_output(
     *,
     include_dev: bool,
     output: str,
+    constraint: str | None,
     upgrade: bool,
 ) -> None:
-    input_path = _write_input(specification, include_dev=include_dev)
+    input_path = _write_project_input(specification)
+    marker_source = ROOT / (constraint if include_dev and constraint is not None else output)
+    retained_marked_requirements = _marked_requirements(marker_source)
     command = [
         sys.executable,
         "-m",
         "piptools",
         "compile",
-        "--strip-extras",
+        "--no-strip-extras",
+        "--quiet",
         f"--output-file={output}",
     ]
+    if include_dev:
+        command.append("--extra=dev")
+    if constraint is not None:
+        command.append(f"--constraint={constraint}")
+    else:
+        marker_path = _write_marker_constraints(ROOT / output)
+        if marker_path is not None:
+            command.append(f"--constraint={marker_path.relative_to(ROOT)}")
     if upgrade:
         command.append("--upgrade")
     command.append(str(input_path.relative_to(ROOT)))
     subprocess.run(command, cwd=ROOT, check=True)
+    _restore_marked_requirements(ROOT / output, retained_marked_requirements)
 
 
 def _compile_all(*, upgrade: bool) -> None:
@@ -235,6 +347,7 @@ def _compile_all(*, upgrade: bool) -> None:
                 specification,
                 include_dev=False,
                 output=specification.runtime_output,
+                constraint=None if upgrade else specification.runtime_output,
                 upgrade=upgrade,
             )
             if specification.dev_output is not None:
@@ -242,6 +355,7 @@ def _compile_all(*, upgrade: bool) -> None:
                     specification,
                     include_dev=True,
                     output=specification.dev_output,
+                    constraint=specification.runtime_output,
                     upgrade=upgrade,
                 )
         _record_manifest()
