@@ -193,21 +193,53 @@ characters, does not name a commit, or is not reachable from `origin/main`.
 Use one of these paths after authorization:
 
 ```bash
+DISPATCHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 gh workflow run deploy.yml --ref main -f commit_sha="$DEPLOY_SHA"
-gh run list --workflow deploy.yml --limit 1
-gh run watch RUN_ID --exit-status
+
+# Identify the new run by both its SHA-bearing title and dispatch time. If more
+# than one candidate appears, stop instead of guessing which run to monitor.
+RUN_ID=""
+for attempt in $(seq 1 30); do
+  MATCHING_RUNS=$(gh run list \
+    --workflow deploy.yml \
+    --event workflow_dispatch \
+    --branch main \
+    --limit 100 \
+    --json databaseId,displayTitle,createdAt \
+    --jq ".[] | select(.displayTitle == \"Deploy $DEPLOY_SHA to production\" and .createdAt >= \"$DISPATCHED_AT\") | .databaseId")
+  RUN_COUNT=$(printf '%s\n' "$MATCHING_RUNS" | awk 'NF { count++ } END { print count + 0 }')
+  if [ "$RUN_COUNT" -eq 1 ]; then
+    RUN_ID=$(printf '%s\n' "$MATCHING_RUNS" | awk 'NF { print; exit }')
+    break
+  fi
+  if [ "$RUN_COUNT" -gt 1 ]; then
+    echo "ERROR: multiple runs match Deploy $DEPLOY_SHA to production; identify the exact run in GitHub"
+    exit 1
+  fi
+  sleep 2
+done
+test -n "$RUN_ID" || { echo "ERROR: dispatched run was not found"; exit 1; }
+
+gh run view "$RUN_ID" --json databaseId,displayTitle,event,status,conclusion,url
+gh run watch "$RUN_ID" --exit-status
+gh run view "$RUN_ID" --json databaseId,displayTitle,status,conclusion,url
 ```
 
 Or in GitHub, open **Actions** → **Deploy to DigitalOcean** → **Run workflow**,
 select the `main` workflow definition, enter `commit_sha` as the full SHA, and
-select **Run workflow**. Do not dispatch from a branch or tag.
+select **Run workflow**. Do not dispatch from a branch or tag. Open the run
+whose title is exactly `Deploy <the full SHA> to production`, record its run ID
+and URL, and monitor that exact run page. Stop if more than one run could be the
+authorized dispatch; never substitute the newest run without verifying its
+SHA-bearing title.
 
 The workflow validates the SHA before deployment, runs lint, type checking, and
-every service test suite against that exact revision, then SSHes to the Droplet.
-The Droplet records its current commit before changing it, fetches
-`origin/main`, validates the SHA again, and checks out the exact revision in a
-detached state. It preserves the existing firewall handling, Compose build,
-health checks, migration order, and collector restart sequence.
+every service test suite against that exact revision, then captures a clean,
+exact production commit in a separate successful job. The deploy job stops if
+the production checkout changes after capture, fetches `origin/main`, validates
+the requested SHA again, and checks out that exact revision in a clean detached
+state. It preserves the existing firewall handling, Compose build, health
+checks, migration order, and collector restart sequence.
 
 Monitor the run to a terminal result. A successful deployment has all required
 GitHub jobs green and a job summary that records the requested SHA, previous

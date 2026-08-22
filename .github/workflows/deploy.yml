@@ -1,4 +1,5 @@
 name: Deploy to DigitalOcean
+run-name: "Deploy ${{ inputs.commit_sha }} to production"
 
 on:
   workflow_dispatch:
@@ -10,6 +11,10 @@ on:
 
 env:
   PYTHON_VERSION: '3.14'
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
 
 jobs:
   validate-deploy-sha:
@@ -38,6 +43,7 @@ jobs:
 
   lint:
     name: Lint
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -53,6 +59,7 @@ jobs:
 
   typecheck:
     name: Type Check
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -73,6 +80,7 @@ jobs:
 
   test-api:
     name: Test API
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -90,6 +98,7 @@ jobs:
 
   test-collector:
     name: Test Collector
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -108,6 +117,7 @@ jobs:
 
   test-frontend:
     name: Test Frontend
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -125,6 +135,7 @@ jobs:
 
   test-explorer:
     name: Test Explorer
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -140,9 +151,62 @@ jobs:
           pip install -e "services/explorer[dev]"
       - run: pytest services/explorer/tests/
 
+  capture-production-state:
+    name: Capture production state
+    needs: [lint, typecheck, test-api, test-collector, test-frontend, test-explorer]
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    outputs:
+      previous_production_sha: ${{ steps.normalize.outputs.previous_production_sha }}
+    steps:
+      - name: Capture clean production revision
+        id: capture
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: deploy
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          capture_stdout: true
+          script: |
+            set -euo pipefail
+            cd /opt/spotify-mcp
+
+            echo "=== Fixing repo ownership ==="
+            sudo -n chown -R deploy:deploy /opt/spotify-mcp/.git \
+              || { echo "ERROR: sudo requires a password for deploy"; exit 1; }
+
+            if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+              echo "ERROR: production repository has tracked or untracked changes"
+              exit 1
+            fi
+            PREVIOUS_PRODUCTION_SHA=$(git rev-parse --verify HEAD^{commit})
+            if ! [[ "$PREVIOUS_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "ERROR: production HEAD is not an immutable commit SHA"
+              exit 1
+            fi
+            git fetch origin main:refs/remotes/origin/main
+            git merge-base --is-ancestor "$PREVIOUS_PRODUCTION_SHA" origin/main \
+              || { echo "ERROR: production HEAD is not reachable from origin/main"; exit 1; }
+            echo "PREVIOUS_PRODUCTION_SHA=$PREVIOUS_PRODUCTION_SHA"
+
+      - name: Normalize captured production revision
+        id: normalize
+        env:
+          CAPTURE_STDOUT: ${{ steps.capture.outputs.stdout }}
+        run: |
+          set -euo pipefail
+          PREVIOUS_PRODUCTION_SHA=$(printf '%s\n' "$CAPTURE_STDOUT" \
+            | sed -n 's/^PREVIOUS_PRODUCTION_SHA=//p')
+          if ! [[ "$PREVIOUS_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: state capture did not return exactly one production commit SHA"
+            exit 1
+          fi
+          echo "previous_production_sha=$PREVIOUS_PRODUCTION_SHA" >> "$GITHUB_OUTPUT"
+
   deploy:
     name: Deploy
-    needs: [validate-deploy-sha, lint, typecheck, test-api, test-collector, test-frontend, test-explorer]
+    needs: capture-production-state
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 15
@@ -181,12 +245,12 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           DEPLOY_SHA: ${{ inputs.commit_sha }}
+          EXPECTED_PREVIOUS_SHA: ${{ needs.capture-production-state.outputs.previous_production_sha }}
         with:
           host: ${{ secrets.DROPLET_IP }}
           username: deploy
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          capture_stdout: true
-          envs: DEPLOY_SHA
+          envs: DEPLOY_SHA,EXPECTED_PREVIOUS_SHA
           script: |
             set -euo pipefail
             cd /opt/spotify-mcp
@@ -195,7 +259,15 @@ jobs:
             sudo -n chown -R deploy:deploy /opt/spotify-mcp/.git \
               || { echo "ERROR: sudo requires a password for deploy"; exit 1; }
 
-            PREVIOUS_PRODUCTION_SHA=$(git rev-parse HEAD)
+            if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+              echo "ERROR: production repository changed after state capture"
+              exit 1
+            fi
+            CURRENT_PRODUCTION_SHA=$(git rev-parse --verify HEAD^{commit})
+            if [ "$CURRENT_PRODUCTION_SHA" != "$EXPECTED_PREVIOUS_SHA" ]; then
+              echo "ERROR: production HEAD changed after state capture"
+              exit 1
+            fi
             git fetch origin main:refs/remotes/origin/main
             if ! [[ "$DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
               echo "ERROR: commit_sha must be a full 40-character hexadecimal commit SHA"
@@ -205,9 +277,17 @@ jobs:
               || { echo "ERROR: requested commit does not exist"; exit 1; }
             git merge-base --is-ancestor "$DEPLOY_SHA" origin/main \
               || { echo "ERROR: requested commit is not reachable from origin/main"; exit 1; }
-            echo "PREVIOUS_PRODUCTION_SHA=$PREVIOUS_PRODUCTION_SHA"
+            EXPECTED_DEPLOY_SHA=$(git rev-parse "$DEPLOY_SHA^{commit}")
             echo "=== Deploying immutable SHA: $DEPLOY_SHA ==="
             git checkout --detach "$DEPLOY_SHA"
+            if [ "$(git rev-parse HEAD)" != "$EXPECTED_DEPLOY_SHA" ]; then
+              echo "ERROR: checkout did not land on the requested commit"
+              exit 1
+            fi
+            if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+              echo "ERROR: exact checkout is not clean"
+              exit 1
+            fi
 
             echo "=== Building and deploying ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml build --pull
@@ -301,26 +381,38 @@ jobs:
             echo "TERMINAL_HEALTH_RESULT=healthy"
             echo "=== Deployment complete: $DEPLOY_SHA ==="
 
+  summary:
+    name: Summarize production deployment
+    if: always()
+    needs: [validate-deploy-sha, lint, typecheck, test-api, test-collector, test-frontend, test-explorer, capture-production-state, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
       - name: Write summary
-        if: always()
         env:
           DEPLOY_SHA: ${{ inputs.commit_sha }}
-          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
-          DEPLOY_STDOUT: ${{ steps.deploy.outputs.stdout }}
+          CAPTURE_OUTCOME: ${{ needs.capture-production-state.result }}
+          DEPLOY_OUTCOME: ${{ needs.deploy.result }}
+          CAPTURED_PRODUCTION_SHA: ${{ needs.capture-production-state.outputs.previous_production_sha }}
         run: |
-          PREVIOUS_PRODUCTION_SHA=$(printf '%s\n' "$DEPLOY_STDOUT" | sed -n 's/^PREVIOUS_PRODUCTION_SHA=//p' | tail -n1)
-          TERMINAL_HEALTH_RESULT=$(printf '%s\n' "$DEPLOY_STDOUT" | sed -n 's/^TERMINAL_HEALTH_RESULT=//p' | tail -n1)
-          if [ -z "$PREVIOUS_PRODUCTION_SHA" ]; then
-            PREVIOUS_PRODUCTION_SHA="not captured; do not guess a rollback revision"
-          fi
-          if [ -z "$TERMINAL_HEALTH_RESULT" ]; then
-            TERMINAL_HEALTH_RESULT="not confirmed (deploy step outcome: $DEPLOY_OUTCOME)"
-          fi
-          if [[ "$PREVIOUS_PRODUCTION_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+          set -euo pipefail
+          PREVIOUS_PRODUCTION_SHA="$CAPTURED_PRODUCTION_SHA"
+          if [[ "$PREVIOUS_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             ROLLBACK_POSTURE="With separate production authorization, dispatch this workflow again using the captured previous SHA."
+          elif [ "$CAPTURE_OUTCOME" = "skipped" ]; then
+            PREVIOUS_PRODUCTION_SHA="not captured; production was never contacted"
+            ROLLBACK_POSTURE="No rollback SHA was captured; do not guess a revision."
           else
-            ROLLBACK_POSTURE="Do not guess a revision; inspect the SSH job output before authorizing rollback."
+            PREVIOUS_PRODUCTION_SHA="not captured; production state capture did not succeed"
+            ROLLBACK_POSTURE="Do not guess a revision; resolve state capture before authorizing a retry or rollback."
           fi
+
+          if [ "$DEPLOY_OUTCOME" = "success" ]; then
+            TERMINAL_HEALTH_RESULT="healthy"
+          else
+            TERMINAL_HEALTH_RESULT="not confirmed (deploy job result: $DEPLOY_OUTCOME)"
+          fi
+
           {
             echo "### Production deployment summary"
             echo "- Environment: production"
