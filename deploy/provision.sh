@@ -543,6 +543,9 @@ done
 echo "--- Running migrations ---"
 docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head
 
+echo "--- Verifying post-migration API health ---"
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api curl -sf http://localhost:8000/healthz > /dev/null
+
 echo "--- Service status ---"
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
 FINAL_INITIAL_SHA=\$(git rev-parse --verify HEAD^{commit})

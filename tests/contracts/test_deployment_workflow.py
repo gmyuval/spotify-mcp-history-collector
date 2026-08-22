@@ -367,6 +367,22 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
         self.assertIn("INITIAL_DEPLOY_API_HEALTH_RESULT=healthy", self.provision)
         self.assertIn('bash deploy/provision.sh --resume-after-allowlist "$DEPLOY_SHA"', self.runbook)
 
+    def test_initial_deploy_rechecks_api_health_after_migrations(self) -> None:
+        """Regression: pre-migration health cannot support terminal health evidence."""
+        migration = self.provision.index(
+            "docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head"
+        )
+        post_migration = self.provision.index('echo "--- Verifying post-migration API health ---"')
+        health = self.provision.index(
+            "docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api curl -sf",
+            post_migration,
+        )
+        evidence = self.provision.index('echo "INITIAL_DEPLOY_API_HEALTH_RESULT=healthy"')
+
+        self.assertLess(migration, post_migration)
+        self.assertLess(post_migration, health)
+        self.assertLess(health, evidence)
+
     def test_legacy_rollback_is_exact_revision_bound_and_monitored(self) -> None:
         """Regression: legacy rollback must bind state, revision, and health evidence."""
         for required in (
