@@ -57,23 +57,22 @@ This is a containerized system that enables ChatGPT-style assistants to analyze 
 
 ### Environment Setup
 ```bash
-# Option A: Conda (recommended)
-conda env create -f environment.yml
-conda activate spotify-mcp
-pre-commit install
-
-# Option B: venv + make
-python -m venv .venv && .venv\Scripts\activate  # Windows
-make setup
+# uv 0.12.3 and Python 3.14.7 are pinned by repository metadata.
+uv sync --locked --all-packages --all-extras --all-groups
+uv run --locked pre-commit install
 ```
 
-### Dependency Management (pip-tools)
+### Dependency Management
 ```bash
-# Regenerate pinned requirements.txt from pyproject.toml
-make compile-deps
+# Verify workspace metadata and uv.lock agree
+uv lock --check
 
-# Upgrade all pins
-make upgrade-deps
+# Intentionally update the development and CI lock
+uv lock
+
+# Keep the temporary Docker requirements path synchronized until SPM-4 decides its replacement
+uv run --locked python scripts/compile_docker_requirements.py
+uv run --locked python scripts/compile_docker_requirements.py --check
 ```
 
 ### Database
@@ -81,11 +80,11 @@ make upgrade-deps
 # Run migrations (inside Docker)
 docker-compose exec api alembic upgrade head
 
-# Run migrations (locally, from services/api/)
-alembic upgrade head
+# Run migrations locally
+uv --directory services/api run --locked alembic upgrade head
 
 # Create new migration
-cd services/api && alembic revision --autogenerate -m "description"
+uv --directory services/api run --locked alembic revision --autogenerate -m "description"
 ```
 
 ### Development
@@ -322,7 +321,8 @@ Custom GPT Actions (OpenAPI over HTTPS) with Bearer token auth.
 - **Python-only project** — no package.json, no TypeScript
 - All services use FastAPI, even the frontend (server-rendered with Jinja2 + HTMX recommended)
 - Root `pyproject.toml` has unified tool config (ruff, mypy, pytest); per-package pyproject.toml has package metadata + deps
-- `environment.yml` uses editable installs (`-e services/shared`, etc.) — pip resolves deps from pyproject.toml automatically
+- The root uv workspace installs all five service packages from their `pyproject.toml` metadata and
+  records the resolved development/CI environment in committed `uv.lock`
 - Docker build context for api/collector is `./services` (so they can COPY the shared package)
 - Frontend has no DB dependency — does NOT copy shared package
 
@@ -336,13 +336,18 @@ CI/CD via GitHub Actions: tests gate all deploys, manual dispatch supports branc
 
 - **JWT User Authentication (Phase 4)**: Full JWT auth flow — OAuth callback issues JWTs, cookie + Bearer support, refresh endpoint, RBAC role assignment. `JWTService` in `app/auth/jwt.py`, `JWTAuthMiddleware` in `app/auth/middleware.py`. Session `__aexit__` passes `sys.exc_info()` for proper rollback on errors.
 - **Playlist Track Pagination & 403 Fallback Chain** (PR #42): `SpotifyClient.get_playlist_all_tracks()` uses `/playlists/{id}/items` endpoint with pagination (not deprecated `/tracks`). On 403 (Spotify dev mode): token refresh → retry → use `pl.tracks.items` from metadata (up to ~100 tracks, `tracks_source: "api_metadata"`) → embed fallback → mark restricted. `_with_fidelity_metrics()` adds consistent `tracks_returned`/`tracks_mismatch_warning` on both live and cached paths. Cache validation detects repeated-page pagination bugs via `Counter`-based dedup (only on `api`-sourced caches). Stale metadata re-fetched after successful token refresh.
-- **pip-tools workflow**: When adding new dependencies to `pyproject.toml`, always run `make compile-deps` to regenerate `requirements.txt` files — Docker builds use these, not pyproject.toml directly. Forgetting this caused a deployment failure (missing pyjwt).
+- **Temporary Docker requirements workflow**: after package metadata changes, run `make compile-deps`
+  and `make docker-lock-check`. Docker builds continue to consume the committed requirements files;
+  SPM-4 owns the decision whether that path later uses `uv.lock` or exported requirements.
 
 ### Architecture Notes
 - **Shared code pattern**: Code needed by both api and collector goes in `services/shared/`. Docker build context is `./services` so both can COPY shared.
 - **Token management**: `app.auth.tokens.TokenManager` (API) and `collector.tokens.CollectorTokenManager` (collector) are intentionally separate. They share `shared.crypto.TokenEncryptor`.
 - **DB datetimes**: All columns use `DateTime(timezone=True)` (`TIMESTAMPTZ`). Always use `datetime.now(UTC)`. SQLite (tests) returns naive datetimes — use `.replace(tzinfo=None)` only in test assertions.
-- **Test isolation**: API and collector tests must be run separately (`pytest services/api/tests/` and `cd services/collector && pytest tests/`) due to conftest BigInteger-SQLite compilation conflicts.
+- **Test isolation**: Package suites must be run separately (for example,
+  `uv run --locked pytest services/api/tests/` and
+  `uv run --locked pytest services/collector/tests/`) due to conftest BigInteger-SQLite compilation
+  conflicts.
 - **PostgreSQL vs SQLite**: Heatmap query uses `EXTRACT(DOW/HOUR)` on PostgreSQL, `strftime` on SQLite. Dialect detection via `session.bind.dialect.name`.
 - **MCP registry**: Decorator-based `MCPToolRegistry` singleton. Tool modules self-register at import. Handlers receive `(args: dict, session: AsyncSession)`.
 
