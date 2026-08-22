@@ -254,6 +254,22 @@ def _check_conda_retirement(root: Path, issues: list[str]) -> None:
         issues.append(_issue("UV_PERMISSION_TOO_BROAD", "Bash(uv:*)"))
 
 
+def _check_current_state(root: Path, issues: list[str]) -> None:
+    current_state = _read_text(root, "docs/agent/current-state.md", issues)
+    if current_state is None:
+        return
+    for required_fragment in (
+        f"uv {UV_VERSION}",
+        f"Python {PYTHON_VERSION}",
+        LOCKED_SYNC,
+        "docker-requirements.lock",
+        "SPM-4",
+        "No production health",
+    ):
+        if required_fragment not in current_state:
+            issues.append(_issue("UV_CURRENT_STATE", required_fragment))
+
+
 def _check_production_boundary(root: Path, issues: list[str]) -> None:
     docker_expectations = {
         "services/api/Dockerfile": (
@@ -342,6 +358,7 @@ def validate_uv_workflow(root: Path) -> list[str]:
     _check_lock(root, issues)
     _check_commands(root, issues)
     _check_conda_retirement(root, issues)
+    _check_current_state(root, issues)
     _check_production_boundary(root, issues)
     return issues
 
