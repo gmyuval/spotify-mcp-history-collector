@@ -363,6 +363,97 @@ class AgentContractTests(unittest.TestCase):
             "per-ticket branch and PR isolation",
         )
 
+    def test_standing_repository_delivery_authority_is_explicit_and_bounded(self) -> None:
+        agents = self.read("AGENTS.md")
+        normalized_agents = " ".join(agents.split())
+        tool_policy = self.read("docs/agent/tool-policy.md")
+        end_session = self.read(".agents/skills/end-session/SKILL.md")
+        pr_lifecycle = self.read(".agents/skills/pr-lifecycle/SKILL.md")
+        review_checklist = self.read("docs/agent/review-checklist.md")
+        normalized_tool_policy = " ".join(tool_policy.split())
+        normalized_end_session = " ".join(end_session.split())
+        normalized_pr_lifecycle = " ".join(pr_lifecycle.split())
+        normalized_review_checklist = " ".join(review_checklist.split())
+
+        self.assert_terms(
+            normalized_agents,
+            (
+                "standing authority",
+                "local commits",
+                "non-force-push",
+                "create or update its pull request",
+                "merge a qualifying pull request",
+                "without asking for permission at each operation",
+                "never passes to a delegate",
+                "unauthorized production effect",
+                "cycle replanning remain separately authorized",
+                "Repository delivery and production delivery are distinct operations",
+                "accepted documented deployment procedure",
+                "monitor it to a terminal result",
+                "deployed revision",
+                "target environment",
+                "health evidence",
+                "rollback posture",
+            ),
+            "standing repository-delivery directive",
+        )
+        self.assert_terms(
+            normalized_tool_policy,
+            (
+                "standing repository-delivery authority",
+                "does not pass to delegates",
+                "unauthorized deployment or production effect",
+                "accepted documented deployment procedure",
+                "revision, environment, health, and rollback evidence",
+                "dispatch alone is not success",
+                "Never force-push",
+            ),
+            "tool authority boundary",
+        )
+        self.assert_terms(
+            normalized_pr_lifecycle,
+            (
+                "standing repository-delivery authority",
+                "qualifying pull request",
+                "Pushes to `main` currently trigger",
+                "separate authority for the resulting production effect",
+                "accepted documented deployment procedure",
+                "deployed revision",
+                "target environment",
+                "health or smoke evidence",
+                "rollback posture",
+                "successful dispatch or an older healthy run is not a successful deployment",
+            ),
+            "pull-request lifecycle authority",
+        )
+        self.assert_terms(
+            normalized_end_session,
+            (
+                "standing authority",
+                "concrete publication gate",
+                "This authority never passes to delegates",
+                "Do not merge when it would trigger",
+                "accepted documented deployment procedure",
+                "monitor the exact run to a terminal result",
+                "revision, environment, health, and rollback evidence",
+            ),
+            "end-session authority",
+        )
+        self.assert_terms(
+            normalized_review_checklist,
+            (
+                "Standing repository-delivery authority",
+                "accepted documented deployment procedure",
+                "exact revision",
+                "environment",
+                "health evidence",
+                "rollback posture",
+                "separately authorized",
+                "no gate was bypassed",
+            ),
+            "review authority evidence",
+        )
+
     def test_make_and_ci_run_the_cross_platform_contract(self) -> None:
         command = 'python -m unittest discover -s tests/contracts -p "test_*.py"'
         makefile = self.read("Makefile")

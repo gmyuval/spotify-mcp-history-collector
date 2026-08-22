@@ -76,8 +76,26 @@ safe eligible action.
 Session batching never combines delivery units: each delegate, implementation branch, pull
 request, review, and Linear reconciliation names one primary issue. Sequential execution is the
 default. Parallelize disjoint read-only work freely; parallel writers require isolated worktrees
-and disjoint surfaces. Publication, merge, deployment, production changes, and cycle replanning
-remain separately authorized per ticket.
+and disjoint surfaces.
+
+The root orchestrator has standing authority to create in-scope local commits, non-force-push an
+issue-linked branch, create or update its pull request, address review, and merge a qualifying pull
+request without asking for permission at each operation. A qualifying pull request satisfies the
+issue scope and linkage, required validation, current-head review, branch-protection rules, and has
+no unresolved findings or unauthorized downstream effect. This standing authority never passes to
+a delegate. A concrete user hold, missing credential, unsafe or ambiguous checkout, failed gate,
+unresolved plan-first decision, or unauthorized production effect blocks the affected operation;
+preserve the evidence and continue other eligible work. Force pushes, check or protection bypasses,
+deployment or production mutations, destructive or difficult-to-rollback actions, and cycle
+replanning remain separately authorized.
+
+Repository delivery and production delivery are distinct operations. A merge never implies
+deployment authority. Every deployment follows the accepted documented deployment procedure; do
+not improvise a production command from repository access. When an accepted plan authorizes a
+deployment, the root owns the exact run: start or identify it, monitor it to a terminal result,
+verify the deployed revision, target environment, health evidence, and rollback posture, exercise
+the documented rollback or stop conditions when needed, and reconcile the outcome. Do not report
+success from dispatch, an old healthy run, or an unverified environment.
 
 ## Branch and pull-request linkage
 

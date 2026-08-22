@@ -1,8 +1,8 @@
 ---
 name: pr-lifecycle
 description: >-
-  Take one SPM repository slice from a local branch through authorized PR review, merge, and
-  evidence reconciliation without assuming permission to publish or deploy.
+  Take one SPM repository slice from a local branch through standing-authority publication,
+  review, safe merge, and evidence reconciliation without assuming permission to deploy.
 ---
 # Claude Code adapter
 

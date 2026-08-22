@@ -1,17 +1,19 @@
 ---
 name: pr-lifecycle
 description: >-
-  Take one SPM repository slice from a local branch through authorized PR review, merge, and
-  evidence reconciliation without assuming permission to publish or deploy.
+  Take one SPM repository slice from a local branch through standing-authority publication,
+  review, safe merge, and evidence reconciliation without assuming permission to deploy.
 ---
 
 # Pull-request lifecycle
 
 Use the phase that matches the current state. `AGENTS.md` owns authority, plan-first boundaries,
 orchestration, and SPM linkage; [`docs/agent/review-checklist.md`](../../../docs/agent/review-checklist.md)
-owns review coverage. This skill does not imply authority to push, open a PR, merge, or deploy.
-Apply this lifecycle to one ticket inside the session batch. Every additional ticket uses a
-separate branch and pull request naming its own one primary issue.
+owns review coverage. The root uses the standing repository-delivery authority in `AGENTS.md` for
+normal commits, pushes, pull requests, review handling, and qualifying merges; it does not pass to
+delegates or imply authority to deploy or change production. Apply this lifecycle to one ticket
+inside the session batch. Every additional ticket uses a separate branch and pull request naming
+its own one primary issue.
 
 ## Phase 1 - local implementation
 
@@ -33,7 +35,8 @@ separate branch and pull request naming its own one primary issue.
    explicit in-scope paths and commit with a concise conventional subject naming `(SPM-N)`.
 7. Treat a clean local commit as **local-ready**. Report its SHA and gaps, preserve the branch or
    worktree, re-evaluate dependencies, and continue to the next eligible session-batch ticket.
-   Publication is a separate phase and requires authority.
+   Publication is a separate phase; the root proceeds under standing authority unless a concrete
+   gate blocks it.
 
 Pre-commit runs Ruff fixes/format and mypy in the current repository configuration. After a commit
 attempt, re-read status and the commit; a hook may modify files or reject the commit. Never use
@@ -41,7 +44,9 @@ attempt, re-read status and the commit; a hook may modify files or reject the co
 
 ## Phase 2 - publish and open the PR
 
-Proceed only when the user authorized both external writes:
+The root proceeds under standing repository-delivery authority after confirming that no concrete
+user hold, credential, safety, scope, plan-first, or validation gate blocks publication. A delegate
+stops and reports instead of exercising this authority.
 
 1. Re-run revision-matched validation and confirm the branch contains no unrelated commits.
 2. Push the branch normally and set its upstream. Never force-push without an explicit exceptional
@@ -75,9 +80,17 @@ unresolved finding may remain.
 
 ## Phase 4 - merge and post-merge
 
-Merging is separately authorized and has production impact in this repository: pushes to `main`
-trigger `.github/workflows/deploy.yml`. Before merging, confirm the accepted deployment posture,
-rollback, current GitHub settings, and user authority. Never bypass branch protection.
+The root has standing authority to merge a qualifying pull request, but a merge is not qualifying
+when it would cause an unauthorized downstream effect. Pushes to `main` currently trigger
+`.github/workflows/deploy.yml`; before merging, confirm the accepted deployment posture, rollback,
+current GitHub settings, and separate authority for the resulting production effect. Otherwise
+preserve the merge-ready pull request and report that concrete blocker. Never bypass branch
+protection.
+
+When the accepted plan authorizes the resulting deployment, the root follows the accepted
+documented deployment procedure and its exact workflow run through a terminal result. Verify the
+deployed revision, target environment, health or smoke evidence, and rollback posture. A successful
+dispatch or an older healthy run is not a successful deployment.
 
 After an authorized merge:
 

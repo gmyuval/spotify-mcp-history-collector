@@ -26,8 +26,16 @@ accepted ADR, a direct user instruction, or a plan-first stop.
 
 ## External systems
 
-- Linear, GitHub, cloud, deployment, and production writes require authority for the exact action.
-  Read access does not imply write access.
+- The root orchestrator has standing repository-delivery authority for in-scope local commits,
+  non-force pushes of issue-linked branches, pull-request creation and updates, review responses,
+  and qualifying merges. It does not pass to delegates and does not authorize a merge that would
+  cause an otherwise unauthorized deployment or production effect.
+- Other Linear, GitHub, cloud, deployment, and production writes require authority for the exact
+  action. Read access does not imply write access.
+- Treat merge and deployment as distinct operations. Every authorized deployment follows the
+  accepted documented deployment procedure. The root monitors its exact run to a terminal state
+  and verifies its revision, environment, health, and rollback evidence; dispatch alone is not
+  success.
 - Cloud, production, authentication, data movement, retention, and public MCP/API changes require
   an accepted plan before implementation.
 - Never force-push, bypass checks, weaken branch protection, or use a production deploy as an

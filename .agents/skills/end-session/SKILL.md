@@ -8,8 +8,9 @@ description: >-
 # End session
 
 Leave enough repository and tracker evidence for another session to resume without reconstructing
-the work from chat. The terminal state is the one the user authorized: a clean local commit on an
-unpushed branch is valid when publication was withheld; it must be reported, not silently pushed.
+the work from chat. The normal terminal state uses the root's standing repository-delivery
+authority. A clean local commit on an unpushed branch remains valid when a concrete publication
+gate or user hold exists; report the reason instead of silently treating it as complete.
 
 ## 1. Account for every local state
 
@@ -73,9 +74,16 @@ pre-commit working tree.
 
 ## 4. Preserve work under the granted authority
 
-- Commit only when authorized, staging explicit in-scope paths rather than the whole tree.
-- Push, open/update a PR, merge, deploy, change cloud state, and update shared services only when
-  separately authorized.
+- The root creates in-scope commits, non-force pushes issue-linked branches, opens or updates pull
+  requests, handles review, and merges qualifying pull requests under standing authority. Stage
+  explicit in-scope paths rather than the whole tree. This authority never passes to delegates.
+- Preserve a local or merge-ready state when a concrete user hold, missing credential, unsafe or
+  ambiguous checkout, failed gate, unresolved plan-first decision, or unauthorized downstream
+  effect blocks the next operation.
+- Deploy, change cloud or production state, and update shared services only when separately
+  authorized. Do not merge when it would trigger one of those unauthorized effects. When a
+  deployment is authorized, follow the accepted documented deployment procedure, monitor the exact
+  run to a terminal result, and verify its revision, environment, health, and rollback evidence.
 - Never use force push, `--no-verify`, check bypasses, or a destructive cleanup as a shortcut.
 - Do not delete a branch merely because its remote is absent. Prove its work landed or keep it.
 
@@ -120,7 +128,8 @@ Report all of the following:
 - branch, full commit SHA, clean/dirty state, upstream, remote branch, and PR state;
 - risks, plan-first decisions, unresolved review findings, and the exact next action/owner;
 - confirmation that no unauthorized push, PR, merge, deployment, cycle change, or production
-  mutation occurred.
+  mutation occurred; for an authorized deployment, name the exact monitored run, terminal result,
+  deployed revision, and verified health or rollback outcome.
 
 Include a concise copyable continuation prompt when another session is expected. State what cannot
 be recovered from the repository; do not repeat everything that the repository already records.

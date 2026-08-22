@@ -23,7 +23,7 @@ queue.
 ## Plan-first and authority
 Plan-first boundary: yes / no
 Accepted plan or owner decision: <link or n/a>
-External writes authorized: <exact systems/actions or none>
+External writes authorized: <standing repository delivery; exact additional systems/actions; or none>
 Destructive or difficult-to-rollback action: yes / no
 
 ## Dependencies and cycle

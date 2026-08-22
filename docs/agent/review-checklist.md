@@ -51,6 +51,11 @@ tool summary, green badge, or issue checkbox is only a claim until checked.
 - [ ] The current branch-protection rules were read live; every required check is green on that
       head and the required approving review targets that head.
 - [ ] No unresolved review thread or known review still in flight remains.
-- [ ] Push, PR creation, merge, and deployment were separately authorized; no gate was bypassed.
+- [ ] Standing repository-delivery authority covered commit, normal push, PR creation/update, and
+      any qualifying merge; deployment and production effects were separately authorized, and no
+      gate was bypassed.
+- [ ] Any authorized deployment followed the accepted documented deployment procedure, was
+      monitored to a terminal result, and had its exact revision, environment, health evidence,
+      and rollback posture verified; dispatch alone was not reported as success.
 - [ ] After merge, the landed revision and Linear issue/dependency state were read back rather than
       inferred from automation.
