@@ -103,6 +103,10 @@ measured invoice.
 - Managed PostgreSQL reports provider version 18; the live server reports 18.4.
   Provisioned storage is 61,440 MiB and measured database size is 3,390,977,727
   bytes. The only observed extension is `plpgsql`.
+- The sanitized schema baseline contains 26 public tables and 199 columns, with
+  10,214,372 estimated rows. Its SHA-256 hashes compact JSON for ordered
+  `(table_name, column_name, data_type, is_nullable)` tuples from
+  `information_schema.columns`.
 - Eight managed database backups were visible from 2026-08-16 through 2026-08-23.
   The configured retention policy, restore-test evidence, and agreed recovery
   objectives were unavailable; SPM-26 owns those gaps.

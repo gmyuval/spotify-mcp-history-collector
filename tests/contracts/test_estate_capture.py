@@ -1,7 +1,5 @@
 """Contract tests for the sanitized SPM-20 estate capture."""
 
-from __future__ import annotations
-
 import hashlib
 import importlib.util
 import json
@@ -11,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 CAPTURE_SCRIPT = ROOT / "scripts" / "capture_estate_baseline.py"
@@ -164,6 +163,8 @@ class EstateCaptureContractTests(unittest.TestCase):
         self.assertEqual(routes["/admin/*"], "frontend_with_google_forward_auth")
         self.assertEqual(application["database"]["configured_backup_retention"], "unavailable")
         self.assertRegex(application["durable_state"]["upload_manifest_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(application["database"]["schema_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(application["health"]["certificate_sha256"], r"^[0-9a-f]{64}$")
 
         azure = baseline["azure_readiness"]
         self.assertRegex(azure["tenant_sha256_12"], r"^[0-9a-f]{12}$")
@@ -497,6 +498,38 @@ class EstateCaptureContractTests(unittest.TestCase):
         for forbidden in ("raw-droplet-id", "raw-database-id", "raw-password"):
             self.assertNotIn(forbidden, serialized)
 
+    def test_provider_command_timeout_and_failures_are_bounded_and_private(self) -> None:
+        # Break caught: a provider CLI can hang forever or echo a credential into
+        # the capture error path.
+        module = self._load_capture_module()
+        runner = getattr(module, "_run_json_command", None)
+        self.assertIsNotNone(runner)
+
+        timeout = subprocess.TimeoutExpired(cmd=["provider"], timeout=120)
+        with (
+            mock.patch.object(module, "resolve_command", return_value=["provider"]),
+            mock.patch.object(module.subprocess, "run", side_effect=timeout) as run,
+        ):
+            with self.assertRaisesRegex(ValueError, r"digitalocean\.droplets timed out"):
+                runner("digitalocean", "droplets", ["provider"])
+        self.assertEqual(run.call_args.kwargs["timeout"], module.PROVIDER_READ_TIMEOUT_SECONDS)
+
+        failure = subprocess.CompletedProcess(
+            ["provider"],
+            7,
+            stdout="",
+            stderr="credential=private-value\nnetwork failed",
+        )
+        with (
+            mock.patch.object(module, "resolve_command", return_value=["provider"]),
+            mock.patch.object(module.subprocess, "run", return_value=failure),
+        ):
+            with self.assertRaisesRegex(ValueError, r"failed with exit 7") as raised:
+                runner("digitalocean", "droplets", ["provider"])
+        self.assertIn("stderr_bytes=", str(raised.exception))
+        self.assertNotIn("private-value", str(raised.exception))
+        self.assertNotIn("network failed", str(raised.exception))
+
     def test_windows_batch_cli_is_launched_through_comspec(self) -> None:
         # Break caught: live capture cannot start Azure CLI on Windows because
         # CreateProcess does not execute the az.cmd launcher directly.
@@ -511,7 +544,7 @@ class EstateCaptureContractTests(unittest.TestCase):
         )
         self.assertEqual(
             resolved,
-            ["cmd.exe", "/d", "/s", "/c", "az account show"],
+            ["cmd.exe", "/d", "/s", "/c", r"C:\tools\az.cmd account show"],
         )
         with self.assertRaisesRegex(ValueError, "unsafe batch argument"):
             resolver(

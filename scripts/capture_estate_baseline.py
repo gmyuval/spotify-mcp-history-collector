@@ -5,8 +5,6 @@ remain in memory; the script writes only validated aggregate counts, operational
 categories, and an evidence hash.
 """
 
-from __future__ import annotations
-
 import argparse
 import hashlib
 import json
@@ -213,23 +211,31 @@ def resolve_command(
     if windows and Path(executable).suffix.lower() in {".cmd", ".bat"}:
         if any(any(character in token for character in "&|<>^()%!\r\n") for token in command):
             raise ValueError("unsafe batch argument")
-        command_line = subprocess.list2cmdline(command)
+        command_line = subprocess.list2cmdline([executable, *command[1:]])
         return [comspec or "cmd.exe", "/d", "/s", "/c", command_line]
     return [executable, *command[1:]]
 
 
+PROVIDER_READ_TIMEOUT_SECONDS = 120
+
+
 def _run_json_command(provider: str, name: str, command: list[str]) -> object:
     resolved_command = resolve_command(command)
-    result = subprocess.run(
-        resolved_command,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    try:
+        result = subprocess.run(
+            resolved_command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=PROVIDER_READ_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise ValueError(f"{provider}.{name} timed out after {PROVIDER_READ_TIMEOUT_SECONDS} seconds") from error
     if result.returncode != 0:
-        raise ValueError(f"{provider}.{name} failed with exit {result.returncode}")
+        stderr_bytes = len((result.stderr or "").encode("utf-8", errors="replace"))
+        raise ValueError(f"{provider}.{name} failed with exit {result.returncode} (stderr_bytes={stderr_bytes})")
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as error:

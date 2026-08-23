@@ -235,7 +235,8 @@
       "live_columns": 199,
       "estimated_rows": 10214372,
       "database_bytes": 3390977727,
-      "schema_sha256": "291e0406e0921f56eb143e06848f3d679317589ac325427902d0a69fd9d7dd7",
+      "schema_sha256": "291e040641ed750a3a6ce89ed4549fa742740e7bf0f5c1e5e49f73d7d9cb7dd7",
+      "schema_hash_strategy": "SHA-256 of compact JSON for ordered public information_schema column tuples: table_name, column_name, data_type, is_nullable",
       "extensions": [
         "plpgsql"
       ],
