@@ -473,6 +473,24 @@ class AgentContractTests(unittest.TestCase):
         self.assertIn("uv run --locked", workflow)
         self.assertIn(command, workflow)
 
+    def test_pr_lifecycle_merge_default_is_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.contract_fixture(root)
+            lifecycle = root / ".agents" / "skills" / "pr-lifecycle" / "SKILL.md"
+            text = lifecycle.read_text(encoding="utf-8")
+            lifecycle.write_text(
+                text.replace(
+                    "Invoke the GitHub merge operation with the `merge` method explicitly; "
+                    "`merge` is this repository's\n"
+                    "default pull-request strategy.",
+                    "Invoke a permitted GitHub merge operation.",
+                ),
+                encoding="utf-8",
+            )
+
+            self.assert_reason(validate_contract(root), "PR_LIFECYCLE_MERGE_POLICY")
+
 
 if __name__ == "__main__":
     unittest.main()

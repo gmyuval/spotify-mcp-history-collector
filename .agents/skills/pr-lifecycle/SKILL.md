@@ -75,12 +75,21 @@ For every review round:
 4. Independently verify every delegate report from the actual diff, command output, or external
    object. Delegates do not arm watchers or mutate GitHub/Linear.
 
-Do not assume CodeRabbit, auto-merge, branch deletion, or a merge method. Query the repository's
-current settings and branch protection before relying on them. A review approval must target the
-current head, every required check must be green there, GitHub must report the PR mergeable, and no
-unresolved finding may remain.
+Do not assume CodeRabbit, auto-merge, or branch deletion. Query the repository's current settings
+and branch protection before relying on them. A review approval must target the current head, every
+required check must be green there, GitHub must report the PR mergeable, and no unresolved finding
+may remain.
 
 ## Phase 4 - merge and post-merge
+
+Invoke the GitHub merge operation with the `merge` method explicitly; `merge` is this repository's
+default pull-request strategy. Before invoking it, re-query the available merge methods, branch
+protection, and required linear history. If merge commits are unavailable or linear history is
+required, stop and reconcile the mismatch; do not silently substitute another method.
+
+Squash and rebase remain enabled as explicit alternatives, not defaults. Use one only when direct
+owner instruction or the issue's accepted scope names it and the PR records the rationale. Never
+mutate repository merge settings or branch protection as part of selecting a method.
 
 The root has standing authority to merge a qualifying pull request, but a merge is not qualifying
 when it would cause an unauthorized downstream effect. `.github/workflows/deploy.yml` is currently

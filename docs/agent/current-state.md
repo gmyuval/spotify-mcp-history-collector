@@ -59,6 +59,18 @@ development and production Compose configurations validated without starting ser
 branch adds agent-contract coverage; use its exact-head validation and GitHub checks rather than
 assuming the earlier counts are sufficient.
 
+## Pull-request merge strategy
+
+SPM-31 verified on 2026-08-23 that merge commits, squash merges, and rebase merges are enabled;
+`main` does not require linear history, and no repository ruleset adds another history rule. Main
+still requires a current branch, the six named CI checks, and one approval with stale reviews
+dismissed.
+
+[ADR 0001](../decisions/0001-pull-request-merge-method-policy.md) makes an explicitly selected
+`merge` operation the canonical default for qualifying pull requests. Squash and rebase remain
+available only as explicitly justified alternatives. Re-check the live settings, protection, and
+required linear history before every merge; do not mutate them while selecting a method.
+
 ## Production packaging boundary
 
 SPM-2 preserved the production packaging path. Production Dockerfiles still install committed

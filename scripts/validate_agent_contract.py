@@ -6,6 +6,13 @@ import sys
 from pathlib import Path
 
 EXPECTED_SKILLS = frozenset({"adr-new", "end-session", "pr-lifecycle", "session-start"})
+PR_LIFECYCLE_MERGE_POLICY_TERMS = (
+    "invoke the github merge operation with the `merge` method explicitly",
+    "`merge` is this repository's default pull-request strategy",
+    "squash and rebase remain enabled as explicit alternatives",
+    "required linear history",
+    "never mutate repository merge settings or branch protection",
+)
 REQUIRED_FILES = (
     "AGENTS.md",
     "CLAUDE.md",
@@ -239,6 +246,18 @@ def validate_contract(root: Path) -> list[str]:
         if text is not None and not text.strip():
             issues.append(_issue("AGENT_CONTRACT_FILE_EMPTY", relative_path))
 
+    lifecycle_path = root / ".agents" / "skills" / "pr-lifecycle" / "SKILL.md"
+    lifecycle = _read_text(lifecycle_path, "SKILL_CANONICAL_UNREADABLE", issues)
+    if lifecycle is not None:
+        normalized_lifecycle = " ".join(lifecycle.lower().split())
+        missing_policy_terms = [term for term in PR_LIFECYCLE_MERGE_POLICY_TERMS if term not in normalized_lifecycle]
+        if missing_policy_terms:
+            issues.append(
+                _issue(
+                    "PR_LIFECYCLE_MERGE_POLICY",
+                    f"missing terms: {', '.join(missing_policy_terms)}",
+                )
+            )
     claude_path = root / "CLAUDE.md"
     claude = _read_text(claude_path, "CLAUDE_ADAPTER_UNREADABLE", issues)
     if claude is not None:
