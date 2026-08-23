@@ -22,7 +22,7 @@ LOCKED_SYNC = "uv sync --locked --all-packages --all-extras --all-groups"
 TYPECHECK_PATHS = (
     "services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src"
 )
-CONDA_REFERENCE = re.compile(r"(?i)\b(?:(?:mini)?conda|anaconda3?)\b|(?<!\w)\.conda\b")
+CONDA_REFERENCE: re.Pattern[str] = re.compile(r"(?i)\b(?:(?:mini)?conda|anaconda3?)\b|(?<!\w)\.conda\b")
 
 
 def _issue(code: str, detail: str) -> str:
@@ -121,7 +121,10 @@ def _checkout_steps_missing_credentials(workflow: str) -> list[int]:
 
 def _elevated_permissions(workflow: str) -> list[str]:
     elevated: list[str] = []
-    for permissions in re.finditer(r"(?ms)^[ \t]*permissions:\s*\{(.*?)\}", workflow):
+    for permissions in re.finditer(
+        r"""(?ms)^[ \t]*(?:permissions|["']permissions["']):\s*\{(.*?)\}""",
+        workflow,
+    ):
         for entry in permissions.group(1).split(","):
             permission = re.fullmatch(
                 r"""\s*["']?([A-Za-z][A-Za-z0-9_-]*)["']?\s*:\s*["']?(write|write-all)["']?\s*""",
@@ -139,7 +142,7 @@ def _elevated_permissions(workflow: str) -> list[str]:
         indent = len(line) - len(line.lstrip())
         if permissions_indent is not None and indent > permissions_indent:
             permission = re.fullmatch(
-                r"([A-Za-z][A-Za-z0-9_-]*):\s*(write|write-all)(?:\s+#.*)?",
+                r"""["']?([A-Za-z][A-Za-z0-9_-]*)["']?\s*:\s*["']?(write|write-all)["']?(?:\s+#.*)?""",
                 stripped,
             )
             if permission is not None:
@@ -147,10 +150,15 @@ def _elevated_permissions(workflow: str) -> list[str]:
             continue
 
         permissions_indent = None
-        permissions = re.fullmatch(r"permissions:\s*([^#\s]+)?(?:\s+#.*)?", stripped)
+        permissions = re.fullmatch(
+            r"""(?:permissions|["']permissions["']):\s*([^#\s]+)?(?:\s+#.*)?""",
+            stripped,
+        )
         if permissions is None:
             continue
         access = permissions.group(1)
+        if access is not None:
+            access = access.strip("'\"")
         if access == "write-all":
             elevated.append("permissions: write-all")
         elif access is None:

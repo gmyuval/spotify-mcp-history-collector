@@ -128,6 +128,23 @@ jobs:
             uv_workflow._elevated_permissions(workflow),
         )
 
+    def test_ci_permissions_scan_rejects_quoted_keys_and_values(self) -> None:
+        workflow = """\
+jobs:
+  block:
+    "permissions":
+      "id-token": "write"
+  flow:
+    'permissions': {'contents': 'write'}
+  scalar:
+    "permissions": "write-all"
+"""
+
+        self.assertEqual(
+            ["contents: write", "id-token: write", "permissions: write-all"],
+            uv_workflow._elevated_permissions(workflow),
+        )
+
     def test_conda_scan_distinguishes_words_that_contain_conda(self) -> None:
         for text in ("secondary", "secondary-cache", "preconditionals"):
             with self.subTest(text=text):
