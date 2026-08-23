@@ -1,19 +1,17 @@
 # ADR 0001 - Use merge commits by default for pull requests
 
 Date: 2026-08-23 (UTC)
-Status: Accepted
+Status: Proposed
 Decision owners: Yuval Moran
 Linear issue: [SPM-31](https://linear.app/stratex/issue/SPM-31/make-merge-commits-the-default-pull-request-merge-strategy)
 
 ## Context
 
-GitHub currently allows merge commits, squash merges, and rebase merges for this repository. Main
-branch protection requires a current branch, six named checks, and one approval, dismisses stale
-reviews, and does not require linear history. No repository ruleset adds another merge-history rule.
-
-GitHub exposes which methods are available, but the repository settings do not select one as the
-workflow default. The canonical PR lifecycle previously required agents to query the available
-methods without resolving which one to use when several qualified.
+GitHub exposes which merge methods a repository permits, but does not select one as this
+repository's workflow default. The canonical PR lifecycle previously required agents to query the
+live settings and protection without resolving which method to use when several qualified. The
+dated configuration evidence for this decision belongs in `docs/agent/current-state.md` and must be
+rechecked before every merge.
 
 ## Decision drivers
 
