@@ -1,6 +1,53 @@
-# Root-level tool configuration for monorepo development.
-# Per-package pyproject.toml files remain the source of truth for package metadata
-# and dependencies. This file provides unified config for running tools from the repo root.
+[project]
+name = "spotify-mcp-workspace"
+version = "0.1.0"
+description = "Development workspace for the Spotify MCP services"
+requires-python = "==3.14.*"
+dependencies = [
+    "spotify-history-collector",
+    "spotify-mcp-api",
+    "spotify-mcp-explorer",
+    "spotify-mcp-frontend",
+    "spotify-mcp-shared",
+]
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.20.0",
+    "mypy>=1.13.0",
+    "pip==26.1.2",
+    "pip-tools==7.5.3",
+    "pre-commit>=4.3.0",
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "respx>=0.21.1",
+    "ruff==0.15.0",
+    "types-python-dateutil",
+]
+
+[tool.uv]
+required-version = "==0.12.3"
+package = false
+
+[tool.uv.sources]
+spotify-history-collector = { workspace = true }
+spotify-mcp-api = { workspace = true }
+spotify-mcp-explorer = { workspace = true }
+spotify-mcp-frontend = { workspace = true }
+spotify-mcp-shared = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+    "services/api",
+    "services/collector",
+    "services/explorer",
+    "services/frontend",
+    "services/shared",
+]
+
+# Root-level tool configuration for monorepo development. Per-package
+# pyproject.toml files remain the source of truth for package metadata.
 
 [tool.ruff]
 line-length = 120
@@ -42,6 +89,7 @@ mypy_path = [
     "services/api/src",
     "services/collector/src",
     "services/frontend/src",
+    "services/explorer/src",
 ]
 strict = true
 warn_return_any = true

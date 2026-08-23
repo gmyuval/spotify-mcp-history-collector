@@ -1,82 +1,79 @@
-.PHONY: setup compile-deps lint format typecheck test docker-up docker-down
+.PHONY: setup lock lock-check validate-uv uv-contract lint format typecheck precommit \
+	test test-shared test-api test-collector test-frontend test-explorer test-cov \
+	compile-deps upgrade-deps docker-lock-check compose-config check docker-up docker-down
 
-# ──────────────────────────────────────────────
-# Development environment setup
-# ──────────────────────────────────────────────
+# uv 0.12.3 is pinned by pyproject.toml. Keep command lines explicit so local
+# aliases and CI consume the same lock and fail on metadata drift.
 
-## Install all packages in editable mode, dev tools, and pre-commit hooks.
-## Use this when setting up without conda, or after conda env create.
 setup:
-	pip install pip-tools pre-commit
-	pip install -e services/shared
-	pip install -e "services/api[dev]"
-	pip install -e "services/collector[dev]"
-	pip install -e "services/frontend[dev]"
-	pre-commit install
+	uv sync --locked --all-packages --all-extras --all-groups
+	uv run --locked pre-commit install
 
-# ──────────────────────────────────────────────
-# Dependency management (pip-tools)
-# ──────────────────────────────────────────────
+lock:
+	uv lock
 
-## Compile pinned requirements.txt from pyproject.toml for all packages.
-## Commit the generated files -- Docker builds use them.
-compile-deps:
-	pip-compile --output-file=services/shared/requirements.txt services/shared/pyproject.toml
-	pip-compile --output-file=services/api/requirements.txt services/api/pyproject.toml
-	pip-compile --extra dev --output-file=services/api/requirements-dev.txt services/api/pyproject.toml
-	pip-compile --output-file=services/collector/requirements.txt services/collector/pyproject.toml
-	pip-compile --extra dev --output-file=services/collector/requirements-dev.txt services/collector/pyproject.toml
-	pip-compile --output-file=services/frontend/requirements.txt services/frontend/pyproject.toml
-	pip-compile --extra dev --output-file=services/frontend/requirements-dev.txt services/frontend/pyproject.toml
+lock-check:
+	uv lock --check
 
-## Upgrade all pinned dependencies to their latest allowed versions.
-upgrade-deps:
-	pip-compile --upgrade --output-file=services/shared/requirements.txt services/shared/pyproject.toml
-	pip-compile --upgrade --output-file=services/api/requirements.txt services/api/pyproject.toml
-	pip-compile --upgrade --extra dev --output-file=services/api/requirements-dev.txt services/api/pyproject.toml
-	pip-compile --upgrade --output-file=services/collector/requirements.txt services/collector/pyproject.toml
-	pip-compile --upgrade --extra dev --output-file=services/collector/requirements-dev.txt services/collector/pyproject.toml
-	pip-compile --upgrade --output-file=services/frontend/requirements.txt services/frontend/pyproject.toml
-	pip-compile --upgrade --extra dev --output-file=services/frontend/requirements-dev.txt services/frontend/pyproject.toml
+validate-uv:
+	uv run --locked python scripts/validate_uv_workflow.py
 
-# ──────────────────────────────────────────────
-# Code quality
-# ──────────────────────────────────────────────
+uv-contract:
+	uv run --locked python -m unittest discover -s tests/contracts -p "test_*.py"
 
-## Run ruff linter and format checker (no changes).
 lint:
-	ruff check .
-	ruff format --check .
+	uv run --locked ruff check .
+	uv run --locked ruff format --check .
 
-## Auto-fix lint issues and reformat.
 format:
-	ruff check --fix .
-	ruff format .
+	uv run --locked ruff check --fix .
+	uv run --locked ruff format .
 
-## Run mypy type checking across all packages.
 typecheck:
-	mypy services/shared/src services/api/src services/collector/src services/frontend/src
+	uv run --locked mypy services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src
 
-# ──────────────────────────────────────────────
-# Testing
-# ──────────────────────────────────────────────
+precommit:
+	uv run --locked pre-commit run --all-files
 
-## Run all tests.
-test:
-	pytest
+test-shared:
+	uv run --locked pytest services/shared/tests/
 
-## Run tests with coverage report.
+test-api:
+	uv run --locked pytest services/api/tests/
+
+test-collector:
+	uv run --locked pytest services/collector/tests/
+
+test-frontend:
+	uv run --locked pytest services/frontend/tests/
+
+test-explorer:
+	uv run --locked pytest services/explorer/tests/
+
+test: test-shared test-api test-collector test-frontend test-explorer
+
 test-cov:
-	pytest --cov=services --cov-report=html
+	uv run --locked pytest --cov=services --cov-report=html
 
-# ──────────────────────────────────────────────
-# Docker
-# ──────────────────────────────────────────────
+# Temporary SPM-4 boundary: Docker still consumes the committed pip-tools
+# requirements. These commands run pip-tools from uv.lock; they do not switch
+# Docker to uv.lock or widen a build context.
+compile-deps:
+	uv run --locked python scripts/compile_docker_requirements.py
 
-## Build and start all services.
+upgrade-deps:
+	uv run --locked python scripts/compile_docker_requirements.py --upgrade
+
+docker-lock-check:
+	uv run --locked python scripts/compile_docker_requirements.py --check
+
+compose-config:
+	uv run --locked python scripts/validate_compose.py
+
+check: lock-check validate-uv uv-contract lint typecheck precommit test docker-lock-check compose-config
+
 docker-up:
 	docker-compose up --build -d
 
-## Stop all services.
 docker-down:
 	docker-compose down
