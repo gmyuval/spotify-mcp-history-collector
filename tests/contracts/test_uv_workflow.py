@@ -145,6 +145,19 @@ jobs:
             uv_workflow._elevated_permissions(workflow),
         )
 
+    def test_ci_permissions_scan_rejects_block_scalar_values(self) -> None:
+        workflow = """\
+jobs:
+  unsafe:
+    permissions: >-
+      write-all
+"""
+
+        self.assertEqual(
+            ["permissions: block-scalar"],
+            uv_workflow._elevated_permissions(workflow),
+        )
+
     def test_conda_scan_distinguishes_words_that_contain_conda(self) -> None:
         for text in ("secondary", "secondary-cache", "preconditionals"):
             with self.subTest(text=text):

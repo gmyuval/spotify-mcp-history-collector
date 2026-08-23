@@ -162,7 +162,9 @@ def _elevated_permissions(workflow: str) -> list[str]:
         access = permissions.group(1)
         if access is not None:
             access = access.strip("'\"")
-        if access == "write-all":
+        if access in ("|", "|-", "|+", ">", ">-", ">+"):
+            elevated.append("permissions: block-scalar")
+        elif access == "write-all":
             elevated.append("permissions: write-all")
         elif access is None:
             permissions_indent = indent
