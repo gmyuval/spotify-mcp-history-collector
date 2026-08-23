@@ -22,7 +22,7 @@ LOCKED_SYNC = "uv sync --locked --all-packages --all-extras --all-groups"
 TYPECHECK_PATHS = (
     "services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src"
 )
-CONDA_REFERENCE = re.compile(r"(?i)\b(?:mini)?conda\b|(?<!\w)\.conda\b")
+CONDA_REFERENCE = re.compile(r"(?i)\b(?:(?:mini)?conda|anaconda3?)\b|(?<!\w)\.conda\b")
 
 
 def _issue(code: str, detail: str) -> str:
@@ -92,6 +92,15 @@ def _checkout_steps_missing_credentials(workflow: str) -> list[int]:
 
 def _elevated_permissions(workflow: str) -> list[str]:
     elevated: list[str] = []
+    for permissions in re.finditer(r"(?ms)^[ \t]*permissions:\s*\{(.*?)\}", workflow):
+        for entry in permissions.group(1).split(","):
+            permission = re.fullmatch(
+                r"""\s*["']?([A-Za-z][A-Za-z0-9_-]*)["']?\s*:\s*["']?(write|write-all)["']?\s*""",
+                entry,
+            )
+            if permission is not None:
+                elevated.append(f"{permission.group(1)}: {permission.group(2)}")
+
     permissions_indent: int | None = None
     for line in workflow.splitlines():
         stripped = line.strip()

@@ -85,11 +85,30 @@ jobs:
             uv_workflow._elevated_permissions(workflow),
         )
 
+    def test_ci_permissions_scan_rejects_flow_map_write_access(self) -> None:
+        workflow = """\
+jobs:
+  inline:
+    permissions: {contents: read, id-token: write}
+  multiline:
+    permissions: {
+      contents: write,
+      issues: read
+    }
+  quoted:
+    permissions: {"packages": "write-all"}
+"""
+
+        self.assertEqual(
+            ["id-token: write", "contents: write", "packages: write-all"],
+            uv_workflow._elevated_permissions(workflow),
+        )
+
     def test_conda_scan_distinguishes_words_that_contain_conda(self) -> None:
         for text in ("secondary", "secondary-cache", "preconditionals"):
             with self.subTest(text=text):
                 self.assertIsNone(uv_workflow.CONDA_REFERENCE.search(text))
-        for text in ("conda", "Miniconda", "C:/tools/.conda/envs"):
+        for text in ("conda", "Miniconda", "Anaconda", "Anaconda3", "C:/tools/.conda/envs"):
             with self.subTest(text=text):
                 self.assertIsNotNone(uv_workflow.CONDA_REFERENCE.search(text))
 
