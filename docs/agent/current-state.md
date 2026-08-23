@@ -1,7 +1,8 @@
 # Current repository state
 
 Last verified: 2026-08-23 (UTC), after integrating `origin/main` at
-`12d6198095eeeaa8a37ca8903e4694a1bb08d886` into `codex/spm-3-orchestration-contract`.
+`12d6198095eeeaa8a37ca8903e4694a1bb08d886` into `codex/spm-3-orchestration-contract`. The
+resulting reviewed integration merge is `25d8e4780bbadd1db9e5e80c8700ef69adb08676`.
 
 This is volatile orientation, not a work queue, architecture decision, or deployment record. Linear
 team **SPM**, project **Spotify MCP modernization**, is authoritative for planned work, ownership,
