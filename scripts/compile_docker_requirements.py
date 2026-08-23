@@ -232,6 +232,9 @@ def _write_project_input(specification: RequirementSet) -> Path:
 
 
 def _marked_requirements(output_path: Path) -> dict[str, str]:
+    if not output_path.exists():
+        return {}
+
     requirements: dict[str, str] = {}
     for line in output_path.read_text(encoding="utf-8").splitlines():
         match = re.fullmatch(

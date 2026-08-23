@@ -57,6 +57,7 @@ jobs:
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
         self.assertRegex(workflow, r"(?m)^permissions:\n  contents: read\s*$")
+        self.assertEqual([], uv_workflow._elevated_permissions(workflow))
         action_refs = uv_workflow._action_refs(workflow)
         self.assertGreater(len(action_refs), 0)
         for action_ref in action_refs:
@@ -65,6 +66,40 @@ jobs:
         checkout_count = sum(action_ref.startswith("actions/checkout@") for action_ref in action_refs)
         self.assertGreater(checkout_count, 0)
         self.assertEqual(checkout_count, workflow.count("persist-credentials: false"))
+
+    def test_ci_permissions_scan_rejects_job_level_write_access(self) -> None:
+        workflow = """\
+permissions:
+  contents: read
+jobs:
+  unsafe:
+    permissions:
+      contents: read
+      id-token: write
+  also-unsafe:
+    permissions: write-all
+"""
+
+        self.assertEqual(
+            ["id-token: write", "permissions: write-all"],
+            uv_workflow._elevated_permissions(workflow),
+        )
+
+    def test_conda_scan_distinguishes_words_that_contain_conda(self) -> None:
+        for text in ("secondary", "secondary-cache", "preconditionals"):
+            with self.subTest(text=text):
+                self.assertIsNone(uv_workflow.CONDA_REFERENCE.search(text))
+        for text in ("conda", "Miniconda", "C:/tools/.conda/envs"):
+            with self.subTest(text=text):
+                self.assertIsNotNone(uv_workflow.CONDA_REFERENCE.search(text))
+
+    def test_conda_retirement_reads_settings_once(self) -> None:
+        issues: list[str] = []
+        with mock.patch.object(uv_workflow, "_read_text", return_value="{}") as read_text:
+            uv_workflow._check_conda_retirement(ROOT, issues)
+
+        settings_calls = [call for call in read_text.call_args_list if call.args[1] == ".claude/settings.local.json"]
+        self.assertEqual(1, len(settings_calls))
 
     def test_repository_uv_workflow_is_valid(self) -> None:
         completed = subprocess.run(
@@ -242,6 +277,16 @@ jobs:
             },
             retained,
         )
+
+    def test_missing_requirement_outputs_have_no_retained_markers(self) -> None:
+        with tempfile.TemporaryDirectory(dir=ROOT) as temporary_directory:
+            root = Path(temporary_directory)
+            retained = docker_requirements._retained_marked_requirements(
+                output_path=root / "requirements-dev.txt",
+                runtime_constraint_path=root / "requirements.txt",
+            )
+
+        self.assertEqual({}, retained)
 
     def test_docker_requirements_exclude_known_vulnerable_pins(self) -> None:
         for specification in docker_requirements.REQUIREMENT_SETS:

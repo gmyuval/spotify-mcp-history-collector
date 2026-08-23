@@ -22,6 +22,7 @@ LOCKED_SYNC = "uv sync --locked --all-packages --all-extras --all-groups"
 TYPECHECK_PATHS = (
     "services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src"
 )
+CONDA_REFERENCE = re.compile(r"(?i)\b(?:mini)?conda\b|(?<!\w)\.conda\b")
 
 
 def _issue(code: str, detail: str) -> str:
@@ -87,6 +88,37 @@ def _checkout_steps_missing_credentials(workflow: str) -> list[int]:
         if not any(re.fullmatch(r"\s*persist-credentials:\s*false\s*", item) for item in step_lines):
             missing.append(checkout_count)
     return missing
+
+
+def _elevated_permissions(workflow: str) -> list[str]:
+    elevated: list[str] = []
+    permissions_indent: int | None = None
+    for line in workflow.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        indent = len(line) - len(line.lstrip())
+        if permissions_indent is not None and indent > permissions_indent:
+            permission = re.fullmatch(
+                r"([A-Za-z][A-Za-z0-9_-]*):\s*(write|write-all)(?:\s+#.*)?",
+                stripped,
+            )
+            if permission is not None:
+                elevated.append(f"{permission.group(1)}: {permission.group(2)}")
+            continue
+
+        permissions_indent = None
+        permissions = re.fullmatch(r"permissions:\s*([^#\s]+)?(?:\s+#.*)?", stripped)
+        if permissions is None:
+            continue
+        access = permissions.group(1)
+        if access == "write-all":
+            elevated.append("permissions: write-all")
+        elif access is None:
+            permissions_indent = indent
+
+    return elevated
 
 
 def _check_root_metadata(root: Path, issues: list[str]) -> None:
@@ -213,6 +245,8 @@ def _check_commands(root: Path, issues: list[str]) -> None:
 
         if re.search(r"(?m)^permissions:\n  contents: read\s*$", workflow) is None:
             issues.append(_issue("UV_CI_PERMISSIONS", "top-level contents: read"))
+        for permission in _elevated_permissions(workflow):
+            issues.append(_issue("UV_CI_PERMISSIONS_ELEVATED", permission))
 
         action_refs = _action_refs(workflow)
         for action_ref in action_refs:
@@ -222,9 +256,11 @@ def _check_commands(root: Path, issues: list[str]) -> None:
         for checkout_number in _checkout_steps_missing_credentials(workflow):
             issues.append(_issue("UV_CI_CHECKOUT_CREDENTIALS", f"checkout step {checkout_number}"))
 
-        for forbidden in ("actions/setup-python", "pip install", "conda"):
+        for forbidden in ("actions/setup-python", "pip install"):
             if forbidden.lower() in workflow.lower():
                 issues.append(_issue("UV_CI_BYPASS", forbidden))
+        if CONDA_REFERENCE.search(workflow):
+            issues.append(_issue("UV_CI_BYPASS", "conda"))
 
     precommit = _read_text(root, ".pre-commit-config.yaml", issues)
     if precommit is not None:
@@ -249,12 +285,14 @@ def _check_conda_retirement(root: Path, issues: list[str]) -> None:
         ".pre-commit-config.yaml",
         ".claude/settings.local.json",
     )
+    active_texts: dict[str, str | None] = {}
     for relative_path in active_paths:
         text = _read_text(root, relative_path, issues)
-        if text is not None and re.search(r"conda|miniconda|\.conda", text, re.IGNORECASE):
+        active_texts[relative_path] = text
+        if text is not None and CONDA_REFERENCE.search(text):
             issues.append(_issue("UV_CONDA_REFERENCE", relative_path))
 
-    settings_text = _read_text(root, ".claude/settings.local.json", issues)
+    settings_text = active_texts[".claude/settings.local.json"]
     if settings_text is None:
         return
     try:
