@@ -61,8 +61,9 @@ assuming the earlier counts are sufficient.
 
 ## Pull-request merge strategy
 
-SPM-31 verified on 2026-08-23 that repository settings enable merge commits, squash merges, rebase
-merges, and auto-merge. `main` protection requires a branch current with strict
+SPM-31 verified on 2026-08-23 that repository settings report `allow_merge_commit=true`,
+`allow_squash_merge=true`, `allow_rebase_merge=true`, and `allow_auto_merge=true`. `main`
+protection requires a branch current with strict
 status checks named `Lint`, `Type Check`, `Test API`, `Test Collector`, `Test Frontend`, and `Test
 Explorer`, plus one approval with stale reviews dismissed. It does not require code-owner or
 last-push approval, signed commits, conversation resolution, administrator enforcement, or linear
