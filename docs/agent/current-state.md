@@ -59,6 +59,24 @@ development and production Compose configurations validated without starting ser
 branch adds agent-contract coverage; use its exact-head validation and GitHub checks rather than
 assuming the earlier counts are sufficient.
 
+## Pull-request merge strategy
+
+SPM-31 verified on 2026-08-23 that repository settings report `allow_merge_commit=true`,
+`allow_squash_merge=true`, `allow_rebase_merge=true`, and `allow_auto_merge=true`. `main`
+protection requires a branch current with strict
+status checks named `Lint`, `Type Check`, `Test API`, `Test Collector`, `Test Frontend`, and `Test
+Explorer`, plus one approval with stale reviews dismissed. It does not require code-owner or
+last-push approval, signed commits, conversation resolution, administrator enforcement, or linear
+history; force pushes and branch deletion are blocked. Both repository rulesets and effective
+`main` branch rules were empty.
+
+[ADR 0001](../decisions/0001-pull-request-merge-method-policy.md) makes an explicitly selected
+`merge` operation the canonical default for qualifying pull requests. Squash and rebase remain
+available only as justified exceptions; an agent-proposed exception requires an owner prompt and
+explicit approval before use.
+Re-check the live settings, protection, and
+required linear history before every merge; do not mutate them while selecting a method.
+
 ## Production packaging boundary
 
 SPM-2 preserved the production packaging path. Production Dockerfiles still install committed
