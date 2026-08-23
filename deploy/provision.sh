@@ -12,13 +12,38 @@
 #
 # Usage:
 #   bash deploy/provision.sh
+#   bash deploy/provision.sh --resume-after-allowlist <full-commit-sha>
 #
 # Configuration is read from resources/.env.do:
 #   DOMAIN_NAME, SSH_KEY_NAME, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET,
 #   DROPLET_SIZE, DB_EXTERNAL_HOST, DB_PRIVATE_HOST, DB_PORT, DB_USER,
-#   DB_PASSWORD, DB_NAME, DB_CLUSTER_ID
+#   DB_PASSWORD, DB_NAME, DB_CLUSTER_ID, DROPLET_SSH_HOST_FINGERPRINT
 # =============================================================================
 set -euo pipefail
+
+RESUME_AFTER_ALLOWLIST=false
+RESUME_DEPLOY_SHA=""
+case "${1:-}" in
+    "")
+        [[ "$#" -eq 0 ]] || exit 2
+        ;;
+    --resume-after-allowlist)
+        if [[ "$#" -ne 2 ]]; then
+            echo "Usage: bash deploy/provision.sh --resume-after-allowlist <full-commit-sha>" >&2
+            exit 2
+        fi
+        RESUME_AFTER_ALLOWLIST=true
+        RESUME_DEPLOY_SHA="$2"
+        if ! [[ "$RESUME_DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "ERROR: resume revision must be a full 40-character commit SHA" >&2
+            exit 2
+        fi
+        ;;
+    *)
+        echo "Usage: bash deploy/provision.sh [--resume-after-allowlist <full-commit-sha>]" >&2
+        exit 2
+        ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -51,18 +76,80 @@ IMAGE="ubuntu-24-04-x64"
 PROJECT_PATH="/opt/spotify-mcp"
 GITHUB_REPO="gmyuval/spotify-mcp-history-collector"
 
+SSH_TRUST_DIR=$(mktemp -d)
+KNOWN_HOSTS_FILE="$SSH_TRUST_DIR/known_hosts"
+OFFERED_HOST_KEY_FILE="$SSH_TRUST_DIR/offered_ed25519_host_key"
+touch "$KNOWN_HOSTS_FILE" "$OFFERED_HOST_KEY_FILE"
+chmod 600 "$KNOWN_HOSTS_FILE" "$OFFERED_HOST_KEY_FILE"
+SSH_OPTIONS=(
+    -o StrictHostKeyChecking=yes
+    -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE"
+)
+
+cleanup_ssh_trust() {
+    rm -f -- "$KNOWN_HOSTS_FILE" "$OFFERED_HOST_KEY_FILE"
+    rmdir -- "$SSH_TRUST_DIR" 2>/dev/null || true
+}
+trap cleanup_ssh_trust EXIT
+
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
 log() { echo "=== $1 ==="; }
 err() { echo "ERROR: $1" >&2; exit 1; }
 
+require_trusted_fingerprint() {
+    if [[ -z "${DROPLET_SSH_HOST_FINGERPRINT:-}" ]]; then
+        if [[ -t 0 ]]; then
+            read -r -s -p "Trusted Droplet Ed25519 SHA256 fingerprint from the authenticated DigitalOcean console: " \
+                DROPLET_SSH_HOST_FINGERPRINT
+            echo ""
+        else
+            err "DROPLET_SSH_HOST_FINGERPRINT is required before the first SSH connection"
+        fi
+    fi
+    if ! [[ "$DROPLET_SSH_HOST_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+        err "trusted Droplet SSH host fingerprint is malformed"
+    fi
+}
+
+prepare_known_hosts() {
+    local ip="$1"
+    local discovered=false
+    local -a offered_fingerprints=()
+
+    require_trusted_fingerprint
+    for attempt in $(seq 1 30); do
+        if ssh-keyscan -T 5 -t ed25519 "$ip" > "$OFFERED_HOST_KEY_FILE" 2>/dev/null \
+            && [[ -s "$OFFERED_HOST_KEY_FILE" ]]; then
+            discovered=true
+            break
+        fi
+        echo "  Waiting for the Droplet Ed25519 host key... ($attempt/30)"
+        sleep 10
+    done
+    [[ "$discovered" == "true" ]] || err "Droplet Ed25519 host key was not offered"
+
+    mapfile -t offered_fingerprints < <(
+        ssh-keygen -lf "$OFFERED_HOST_KEY_FILE" -E sha256 | awk '{print $2}'
+    )
+    [[ "${#offered_fingerprints[@]}" -eq 1 ]] \
+        || err "Droplet did not offer exactly one Ed25519 host key"
+    OFFERED_HOST_FINGERPRINT="${offered_fingerprints[0]}"
+    [[ "$OFFERED_HOST_FINGERPRINT" == "$DROPLET_SSH_HOST_FINGERPRINT" ]] \
+        || err "Droplet SSH host fingerprint mismatch; stop and verify through DigitalOcean"
+
+    cp "$OFFERED_HOST_KEY_FILE" "$KNOWN_HOSTS_FILE"
+    chmod 600 "$KNOWN_HOSTS_FILE"
+    echo "  Droplet SSH host identity verified"
+}
+
 wait_for_ssh() {
     local ip="$1"
     local max_attempts=30
     log "Waiting for SSH on $ip"
     for i in $(seq 1 $max_attempts); do
-        if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "root@$ip" "echo ok" &>/dev/null; then
+        if ssh "${SSH_OPTIONS[@]}" -o ConnectTimeout=5 "root@$ip" "echo ok" &>/dev/null; then
             echo "SSH is ready"
             return 0
         fi
@@ -75,6 +162,7 @@ wait_for_ssh() {
 # ---------------------------------------------------------------------------
 # Step 1: Look up SSH key ID
 # ---------------------------------------------------------------------------
+if [[ "$RESUME_AFTER_ALLOWLIST" == "false" ]]; then
 log "Step 1: Looking up SSH key '$SSH_KEY_NAME'"
 SSH_KEY_ID=$(doctl compute ssh-key list --format ID,Name --no-header | grep "$SSH_KEY_NAME" | awk '{print $1}')
 if [[ -z "$SSH_KEY_ID" ]]; then
@@ -122,6 +210,7 @@ fi
 # Get public IP
 DROPLET_IP=$(doctl compute droplet get "$DROPLET_ID" --format PublicIPv4 --no-header)
 echo "  Public IP: $DROPLET_IP"
+prepare_known_hosts "$DROPLET_IP"
 
 # ---------------------------------------------------------------------------
 # Step 4: Configure DO Cloud Firewall
@@ -194,7 +283,7 @@ wait_for_ssh "$DROPLET_IP"
 
 log "Step 7: Setting up droplet via SSH"
 
-ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" bash -s <<'REMOTE_SETUP'
+ssh "${SSH_OPTIONS[@]}" "root@$DROPLET_IP" bash -s <<'REMOTE_SETUP'
 set -euo pipefail
 
 echo "--- System update ---"
@@ -224,6 +313,21 @@ if ! id "deploy" &>/dev/null; then
     echo "  Created deploy user"
 else
     echo "  deploy user already exists"
+fi
+
+echo "--- Configure external OAuth allowlist path ---"
+AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
+install -d -o deploy -g deploy -m 0750 /opt/spotify-mcp-config
+if [[ -e "$AUTHENTICATED_EMAILS_FILE" && ! -f "$AUTHENTICATED_EMAILS_FILE" ]]; then
+    echo "ERROR: $AUTHENTICATED_EMAILS_FILE exists but is not a regular file"
+    exit 1
+fi
+if [[ ! -e "$AUTHENTICATED_EMAILS_FILE" ]]; then
+    install -o deploy -g deploy -m 0644 /dev/null "$AUTHENTICATED_EMAILS_FILE"
+    echo "  Created empty $AUTHENTICATED_EMAILS_FILE; populate it before Step 10"
+else
+    chown deploy:deploy "$AUTHENTICATED_EMAILS_FILE"
+    chmod 0644 "$AUTHENTICATED_EMAILS_FILE"
 fi
 
 echo "--- Configure UFW ---"
@@ -277,7 +381,7 @@ REMOTE_SETUP
 # ---------------------------------------------------------------------------
 log "Step 8: Creating database '$DB_NAME'"
 
-ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" bash -s -- \
+ssh "${SSH_OPTIONS[@]}" "root@$DROPLET_IP" bash -s -- \
   "$DB_USER" "$DB_PASSWORD" "$DB_EXTERNAL_HOST" "$DB_PORT" "$DB_NAME" <<'REMOTE_DB'
 set -euo pipefail
 DB_USER="$1"
@@ -354,7 +458,7 @@ GOOGLE_OAUTH_CLIENT_SECRET=
 OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET}
 "
 
-echo "$ENV_PROD_CONTENT" | ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" \
+echo "$ENV_PROD_CONTENT" | ssh "${SSH_OPTIONS[@]}" "root@$DROPLET_IP" \
     "cat > $PROJECT_PATH/.env.prod && chown deploy:deploy $PROJECT_PATH/.env.prod && chmod 600 $PROJECT_PATH/.env.prod"
 
 echo "  .env.prod uploaded to droplet"
@@ -369,14 +473,115 @@ echo "  are left blank. You must fill them in on the droplet before oauth2-proxy
 echo "  See docs/google-oauth-setup.md for setup instructions."
 echo ""
 
+else
+    log "Resume: locating existing droplet and skipping Steps 1-9"
+    mapfile -t MATCHING_DROPLETS < <(
+        doctl compute droplet list --format ID,Name --no-header \
+            | awk -v name="$DROPLET_NAME" '$2 == name {print $1}'
+    )
+    if [[ "${#MATCHING_DROPLETS[@]}" -ne 1 ]]; then
+        err "resume requires exactly one existing '$DROPLET_NAME' droplet"
+    fi
+    DROPLET_ID="${MATCHING_DROPLETS[0]}"
+    DROPLET_IP=$(doctl compute droplet get "$DROPLET_ID" --format PublicIPv4 --no-header)
+    [[ -n "$DROPLET_IP" ]] || err "existing droplet has no public IPv4 address"
+    ADMIN_TOKEN="unchanged (resume mode does not read it)"
+    prepare_known_hosts "$DROPLET_IP"
+    wait_for_ssh "$DROPLET_IP"
+
+    RESUME_CAPTURE=$(ssh "${SSH_OPTIONS[@]}" "deploy@$DROPLET_IP" bash -s -- \
+        "$RESUME_DEPLOY_SHA" <<'REMOTE_RESUME'
+set -euo pipefail
+RESUME_DEPLOY_SHA="$1"
+cd /opt/spotify-mcp
+[[ -z "$(git status --porcelain --untracked-files=all)" ]] \
+    || { echo "ERROR: resume checkout has tracked or untracked changes" >&2; exit 1; }
+git fetch origin main:refs/remotes/origin/main
+git cat-file -e "$RESUME_DEPLOY_SHA^{commit}" \
+    || { echo "ERROR: resume revision does not exist" >&2; exit 1; }
+git merge-base --is-ancestor "$RESUME_DEPLOY_SHA" origin/main \
+    || { echo "ERROR: resume revision is not reachable from origin/main" >&2; exit 1; }
+ALLOWLIST_MOUNT="/opt/spotify-mcp-config/authenticated-emails.txt:/etc/oauth2-proxy/authenticated-emails.txt:ro"
+git show "${RESUME_DEPLOY_SHA}:docker-compose.prod.yml" \
+    | grep -Fqx "      - $ALLOWLIST_MOUNT" \
+    || { echo "ERROR: resume revision lacks the external OAuth allowlist contract" >&2; exit 1; }
+EXPECTED_RESUME_SHA=$(git rev-parse "$RESUME_DEPLOY_SHA^{commit}")
+git checkout --detach "$EXPECTED_RESUME_SHA"
+[[ "$(git rev-parse HEAD)" == "$EXPECTED_RESUME_SHA" ]] \
+    || { echo "ERROR: resume checkout did not land on the requested revision" >&2; exit 1; }
+[[ -z "$(git status --porcelain --untracked-files=all)" ]] \
+    || { echo "ERROR: exact resume checkout is not clean" >&2; exit 1; }
+echo "RESUME_DEPLOY_SHA=$EXPECTED_RESUME_SHA"
+REMOTE_RESUME
+    )
+    INITIAL_DEPLOY_SHA=$(printf '%s\n' "$RESUME_CAPTURE" | sed -n 's/^RESUME_DEPLOY_SHA=//p')
+    [[ "$INITIAL_DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] \
+        || err "resume did not return exactly one immutable revision"
+fi
+
+if [[ "$RESUME_AFTER_ALLOWLIST" == "false" ]]; then
+    INITIAL_DEPLOY_SHA=$(ssh "${SSH_OPTIONS[@]}" "deploy@$DROPLET_IP" \
+        "cd '$PROJECT_PATH' && git rev-parse --verify HEAD^{commit}")
+    [[ "$INITIAL_DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] \
+        || err "initial checkout is not an immutable revision"
+fi
+
+# ---------------------------------------------------------------------------
+# Pre-Step-10 operator checkpoint
+# ---------------------------------------------------------------------------
+log "Pre-Step-10: Verifying external OAuth allowlist"
+AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
+
+allowlist_ready() {
+    ssh "${SSH_OPTIONS[@]}" "deploy@$DROPLET_IP" \
+        "test -f '$AUTHENTICATED_EMAILS_FILE' && test -r '$AUTHENTICATED_EMAILS_FILE' && test -s '$AUTHENTICATED_EMAILS_FILE' && test \"\$(stat -c '%a:%U:%G' '${AUTHENTICATED_EMAILS_FILE%/*}')\" = '750:deploy:deploy' && test \"\$(stat -c '%a:%U:%G' '$AUTHENTICATED_EMAILS_FILE')\" = '644:deploy:deploy'"
+}
+
+if allowlist_ready; then
+    echo "  External OAuth allowlist is ready"
+else
+    echo "  External OAuth allowlist is missing, unreadable, or empty."
+    echo "  Populate $AUTHENTICATED_EMAILS_FILE in a separate SSH session without printing it."
+    if [[ -t 0 ]]; then
+        read -r -p "Press Enter after the allowlist is populated: "
+    else
+        err "populate the allowlist, then rerun with --resume-after-allowlist and the authorized full SHA"
+    fi
+fi
+
+allowlist_ready || err "external OAuth allowlist is still missing, unreadable, or empty"
+
 # ---------------------------------------------------------------------------
 # Step 10: Initial deployment
 # ---------------------------------------------------------------------------
 log "Step 10: Running initial deployment"
 
-ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" bash -s <<REMOTE_DEPLOY
+ssh "${SSH_OPTIONS[@]}" "deploy@$DROPLET_IP" bash -s -- "$INITIAL_DEPLOY_SHA" <<REMOTE_DEPLOY
 set -euo pipefail
+EXPECTED_INITIAL_SHA="\$1"
+AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
+if [[ ! -f "\$AUTHENTICATED_EMAILS_FILE" || ! -r "\$AUTHENTICATED_EMAILS_FILE" ]]; then
+    echo "ERROR: external OAuth allowlist is missing or unreadable"
+    exit 1
+fi
+if [[ ! -s "\$AUTHENTICATED_EMAILS_FILE" ]]; then
+    echo "ERROR: external OAuth allowlist is empty; configure it before starting services"
+    exit 1
+fi
+AUTHENTICATED_EMAILS_DIR="\${AUTHENTICATED_EMAILS_FILE%/*}"
+if [[ "\$(stat -c '%a:%U:%G' "\$AUTHENTICATED_EMAILS_DIR")" != "750:deploy:deploy" ]]; then
+    echo "ERROR: external OAuth allowlist directory must be deploy:deploy mode 0750"
+    exit 1
+fi
+if [[ "\$(stat -c '%a:%U:%G' "\$AUTHENTICATED_EMAILS_FILE")" != "644:deploy:deploy" ]]; then
+    echo "ERROR: external OAuth allowlist must be deploy:deploy mode 0644 for the non-root consumer"
+    exit 1
+fi
 cd $PROJECT_PATH
+[[ "\$(git rev-parse HEAD)" == "\$EXPECTED_INITIAL_SHA" ]] \
+    || { echo "ERROR: initial deployment revision changed before service mutation"; exit 1; }
+[[ -z "\$(git status --porcelain --untracked-files=all)" ]] \
+    || { echo "ERROR: initial deployment checkout is not clean"; exit 1; }
 
 echo "--- Building images ---"
 docker compose --env-file .env.prod -f docker-compose.prod.yml build --pull
@@ -402,8 +607,16 @@ done
 echo "--- Running migrations ---"
 docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api alembic upgrade head
 
+echo "--- Verifying post-migration API health ---"
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T api curl -sf http://localhost:8000/healthz > /dev/null
+
 echo "--- Service status ---"
 docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+FINAL_INITIAL_SHA=\$(git rev-parse --verify HEAD^{commit})
+[[ "\$FINAL_INITIAL_SHA" == "\$EXPECTED_INITIAL_SHA" ]] \
+    || { echo "ERROR: initial deployment revision changed during service mutation"; exit 1; }
+echo "INITIAL_DEPLOY_REVISION=\$FINAL_INITIAL_SHA"
+echo "INITIAL_DEPLOY_API_HEALTH_RESULT=healthy"
 REMOTE_DEPLOY
 
 # ---------------------------------------------------------------------------
@@ -422,7 +635,7 @@ fi
 
 # Add public key to deploy user's authorized_keys on the droplet
 DEPLOY_PUB_KEY=$(cat "${DEPLOY_KEY_PATH}.pub")
-ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" bash -s <<REMOTE_KEY
+ssh "${SSH_OPTIONS[@]}" "root@$DROPLET_IP" bash -s <<REMOTE_KEY
 if ! grep -q "github-actions-deploy" /home/deploy/.ssh/authorized_keys 2>/dev/null; then
     echo "$DEPLOY_PUB_KEY" >> /home/deploy/.ssh/authorized_keys
     echo "  Deploy key added to droplet"
@@ -432,16 +645,16 @@ fi
 REMOTE_KEY
 
 # ---------------------------------------------------------------------------
-# Step 12: Set GitHub Secrets
+# Step 12: Set GitHub repository secrets
 # ---------------------------------------------------------------------------
-log "Step 12: Setting GitHub Secrets"
+log "Step 12: Setting GitHub repository secrets"
 
 DEPLOY_PRIVATE_KEY=$(cat "$DEPLOY_KEY_PATH")
 
 gh secret set DROPLET_IP --repo "$GITHUB_REPO" --body "$DROPLET_IP"
 gh secret set SSH_PRIVATE_KEY --repo "$GITHUB_REPO" --body "$DEPLOY_PRIVATE_KEY"
 
-echo "  GitHub Secrets configured"
+echo "  GitHub repository deploy secrets configured"
 
 # ---------------------------------------------------------------------------
 # Done!
@@ -467,8 +680,11 @@ echo "     b. Set redirect URI: https://$DOMAIN_NAME/oauth2/callback"
 echo "     c. SSH to the droplet and edit $PROJECT_PATH/.env.prod:"
 echo "        - Set GOOGLE_OAUTH_CLIENT_ID"
 echo "        - Set GOOGLE_OAUTH_CLIENT_SECRET"
-echo "     d. Add your email to $PROJECT_PATH/deploy/authenticated-emails.txt"
+echo "     d. Add your email to /opt/spotify-mcp-config/authenticated-emails.txt"
 echo "     e. Restart: cd $PROJECT_PATH && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d"
 echo ""
-echo "  All future deploys are automatic via GitHub Actions on push to main."
+echo "  3. GitHub production environment — configure DROPLET_SSH_HOST_FINGERPRINT"
+echo "     from the authenticated DigitalOcean console. This script does not set it."
+echo ""
+echo "  Future deploys use the separately authorized manual GitHub Actions workflow."
 echo ""
