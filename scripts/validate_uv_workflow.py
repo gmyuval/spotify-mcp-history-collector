@@ -162,7 +162,10 @@ def _elevated_permissions(workflow: str) -> list[str]:
         access = permissions.group(1)
         if access is not None:
             access = access.strip("'\"")
-        if access in ("|", "|-", "|+", ">", ">-", ">+"):
+        if access is not None and re.fullmatch(
+            r"[|>](?:[1-9][+-]?|[+-][1-9]?)?",
+            access,
+        ):
             elevated.append("permissions: block-scalar")
         elif access == "write-all":
             elevated.append("permissions: write-all")

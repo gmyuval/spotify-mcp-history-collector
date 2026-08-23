@@ -148,13 +148,22 @@ jobs:
     def test_ci_permissions_scan_rejects_block_scalar_values(self) -> None:
         workflow = """\
 jobs:
-  unsafe:
+  plain:
     permissions: >-
+      write-all
+  indent:
+    permissions: |2
+      write-all
+  indent_then_chomp:
+    permissions: >2-
+      write-all
+  chomp_then_indent:
+    permissions: |-2
       write-all
 """
 
         self.assertEqual(
-            ["permissions: block-scalar"],
+            ["permissions: block-scalar"] * 4,
             uv_workflow._elevated_permissions(workflow),
         )
 
