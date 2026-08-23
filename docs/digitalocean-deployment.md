@@ -71,6 +71,8 @@ Docker Compose, Caddy (automatic HTTPS), and GitHub Actions CI/CD.
   ([dashboard](https://developer.spotify.com/dashboard))
 - A Google OAuth 2.0 application for oauth2-proxy
   (see [Google OAuth setup guide](./google-oauth-setup.md))
+- The Droplet's trusted Ed25519 `SHA256:` SSH host fingerprint, obtained from
+  an authenticated DigitalOcean console before the first SSH connection
 
 ## Quick Start (Automated with an authorization checkpoint)
 
@@ -80,11 +82,31 @@ The interactive provisioning script coordinates the full setup in one command:
 # 1. Fill in your parameters
 #    Edit resources/.env.do with:
 #      DOMAIN_NAME, SSH_KEY_NAME, SPOTIFY_CLIENT_ID,
-#      SPOTIFY_CLIENT_SECRET, DROPLET_SIZE
+#      SPOTIFY_CLIENT_SECRET, DROPLET_SIZE,
+#      DROPLET_SSH_HOST_FINGERPRINT
 
 # 2. Run the provisioning script
 bash deploy/provision.sh
 ```
+
+When the script creates or locates the Droplet, it requires the trusted
+Ed25519 host fingerprint before the first SSH connection. If the value is not
+already configured, it asks without echoing the input. In a separate
+authenticated DigitalOcean console for that Droplet, obtain it directly from
+the server:
+
+```bash
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
+```
+
+Enter the resulting `SHA256:` value at the prompt, or put the same value in the
+gitignored `resources/.env.do` file for a noninteractive run. The trust rule is:
+ssh-keyscan is discovery, not authentication. The provisioner accepts only the
+offered Ed25519 key whose computed fingerprint exactly matches that independently
+trusted value. A missing, malformed, or mismatched value stops the script
+before its first SSH connection. The temporary `known_hosts` file is mode
+`0600`, every provisioning SSH command requires strict host-key checking
+against that file, and the file is removed when the script exits.
 
 Before Step 10 starts any services, a fresh provision pauses at the external
 OAuth allowlist checkpoint. In a separate SSH session, populate
@@ -142,6 +164,7 @@ SSH_KEY_NAME=my-ssh-key        # Name from: doctl compute ssh-key list
 SPOTIFY_CLIENT_ID=abc123...
 SPOTIFY_CLIENT_SECRET=xyz789...
 DROPLET_SIZE=s-2vcpu-2gb       # $18/mo — sufficient for all services
+DROPLET_SSH_HOST_FINGERPRINT="SHA256:<trusted-ed25519-fingerprint>"
 
 # Database connection (existing managed PostgreSQL)
 DB_EXTERNAL_HOST=db-host.ondigitalocean.com
@@ -333,6 +356,11 @@ rollback authorization.
 - `/opt/spotify-mcp-config/authenticated-emails.txt` exists, is readable and
   non-empty, has a `deploy:deploy` mode-`0644` file behind a `deploy:deploy`
   mode-`0750` parent, and the production Git checkout is clean.
+- The GitHub `production` environment contains
+  `DROPLET_SSH_HOST_FINGERPRINT` with the same trusted Ed25519 `SHA256:` value
+  obtained from the authenticated DigitalOcean console. Configure this
+  protected environment secret out of band; never add its value to a pull
+  request, repository file, issue, log, or deployment command.
 
 Confirm the candidate before dispatching:
 
@@ -452,6 +480,13 @@ oauth2-proxy `/ping` response through the production service network before
 reporting terminal health. It preserves the existing firewall handling,
 Compose build, migration order, and collector restart sequence.
 
+Every production SSH action authenticates the offered host key against the
+`production` environment fingerprint. A missing or malformed secret fails
+before production SSH begins; a fingerprint mismatch is rejected by the SSH
+action. Stop and verify the server identity through the authenticated
+DigitalOcean console. Do not weaken host checking, replace the trusted value
+with `ssh-keyscan` output, or configure the secret in a pull request.
+
 Monitor the run to a terminal result. A successful deployment has all required
 GitHub jobs green and a job summary that records the requested SHA, previous
 production SHA, `production` environment, terminal health result, and rollback
@@ -490,7 +525,8 @@ a tag, or a local `git reset` as a rollback mechanism.
 
 ### GitHub Secrets
 
-Set automatically by `provision.sh`. To update manually:
+`provision.sh` configures the repository connection secrets below. To update
+them manually:
 
 | Secret | Description |
 |--------|-------------|
@@ -501,6 +537,13 @@ Set automatically by `provision.sh`. To update manually:
 gh secret set DROPLET_IP --repo gmyuval/spotify-mcp-history-collector --body "YOUR_IP"
 gh secret set SSH_PRIVATE_KEY --repo gmyuval/spotify-mcp-history-collector < deploy/.deploy-key
 ```
+
+Separately, configure `DROPLET_SSH_HOST_FINGERPRINT` as a protected secret on
+the repository's **Settings → Environments → production** page. Its value must
+be the trusted Ed25519 `SHA256:` fingerprint obtained through the authenticated
+DigitalOcean console, not output copied from an unauthenticated network scan.
+The provisioner and pull requests intentionally do not create or update this
+production-environment secret.
 
 ## File Reference
 
@@ -520,17 +563,18 @@ gh secret set SSH_PRIVATE_KEY --repo gmyuval/spotify-mcp-history-collector < dep
 ### SSH to the Droplet
 
 ```bash
+# These commands use the operator's independently verified default known_hosts.
 # As deploy user (for app operations)
-ssh deploy@DROPLET_IP
+ssh -o StrictHostKeyChecking=yes deploy@DROPLET_IP
 
 # As root (for system administration)
-ssh root@DROPLET_IP
+ssh -o StrictHostKeyChecking=yes root@DROPLET_IP
 ```
 
 ### View logs
 
 ```bash
-ssh deploy@DROPLET_IP
+ssh -o StrictHostKeyChecking=yes deploy@DROPLET_IP
 cd /opt/spotify-mcp
 
 # All services

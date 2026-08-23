@@ -102,6 +102,16 @@ def dependency_names(job: str) -> tuple[str, ...]:
     )
 
 
+def workflow_steps(job: str) -> tuple[str, ...]:
+    """Return top-level GitHub Actions step bodies from one job."""
+    lines = job.splitlines(keepends=True)
+    starts = [index for index, line in enumerate(lines) if line.startswith("      - ")]
+    return tuple(
+        "".join(lines[start : starts[offset + 1] if offset + 1 < len(starts) else len(lines)])
+        for offset, start in enumerate(starts)
+    )
+
+
 class DeploymentWorkflowContractTests(unittest.TestCase):
     workflow: ClassVar[str]
     runbook: ClassVar[str]
@@ -382,6 +392,60 @@ class DeploymentWorkflowContractTests(unittest.TestCase):
         self.assertLess(migration, post_migration)
         self.assertLess(post_migration, health)
         self.assertLess(health, evidence)
+
+    def test_production_ssh_authenticates_the_trusted_host_identity(self) -> None:
+        """Regression: discovered host keys must not silently become trusted keys."""
+        capture = self.job_body("capture-production-state")
+        deploy = self.job_body("deploy")
+        action_ref = f"appleboy/ssh-action@{REVIEWED_ACTIONS['appleboy/ssh-action']}"
+        ssh_steps = [step for job in (capture, deploy) for step in workflow_steps(job) if action_ref in step]
+
+        self.assertEqual(len(ssh_steps), 3)
+        for step in ssh_steps:
+            self.assertIn(
+                "fingerprint: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}",
+                step,
+            )
+        for job in (capture, deploy):
+            self.assertIn("Validate production SSH host fingerprint", job)
+            self.assertIn("DROPLET_SSH_HOST_FINGERPRINT", job)
+            self.assertIn(r"^SHA256:[A-Za-z0-9+/]{43}$", job)
+            self.assertLess(
+                job.index("Validate production SSH host fingerprint"),
+                job.index(action_ref),
+            )
+
+        self.assertNotIn("StrictHostKeyChecking=no", self.provision)
+        self.assertIn("ssh-keyscan -T 5 -t ed25519", self.provision)
+        self.assertIn('ssh-keygen -lf "$OFFERED_HOST_KEY_FILE" -E sha256', self.provision)
+        self.assertIn('[[ "$OFFERED_HOST_FINGERPRINT" == "$DROPLET_SSH_HOST_FINGERPRINT" ]]', self.provision)
+        self.assertIn("StrictHostKeyChecking=yes", self.provision)
+        self.assertIn("UserKnownHostsFile=$KNOWN_HOSTS_FILE", self.provision)
+        self.assertIn('chmod 600 "$KNOWN_HOSTS_FILE"', self.provision)
+        self.assertIn("trap cleanup_ssh_trust EXIT", self.provision)
+
+        ssh_invocations = [
+            line
+            for line in self.provision.splitlines()
+            if re.search(r"(?<![-\w])ssh\s", line) and not line.lstrip().startswith("#")
+        ]
+        self.assertGreater(len(ssh_invocations), 5)
+        for invocation in ssh_invocations:
+            self.assertIn('"${SSH_OPTIONS[@]}"', invocation)
+
+        execution = self.provision[self.provision.index("# Step 1:") :]
+        self.assertLess(
+            execution.index('prepare_known_hosts "$DROPLET_IP"'),
+            execution.index('wait_for_ssh "$DROPLET_IP"'),
+        )
+        resume = execution[execution.index('log "Resume:') :]
+        self.assertLess(
+            resume.index('prepare_known_hosts "$DROPLET_IP"'),
+            resume.index('wait_for_ssh "$DROPLET_IP"'),
+        )
+        self.assertIn("authenticated DigitalOcean console", self.runbook)
+        self.assertIn("DROPLET_SSH_HOST_FINGERPRINT", self.runbook)
+        self.assertIn("ssh-keyscan is discovery, not authentication", self.runbook)
 
     def test_legacy_rollback_is_exact_revision_bound_and_monitored(self) -> None:
         """Regression: legacy rollback must bind state, revision, and health evidence."""

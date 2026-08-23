@@ -185,6 +185,16 @@ jobs:
     outputs:
       previous_production_sha: ${{ steps.normalize.outputs.previous_production_sha }}
     steps:
+      - name: Validate production SSH host fingerprint
+        env:
+          DROPLET_SSH_HOST_FINGERPRINT: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$DROPLET_SSH_HOST_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+            echo "ERROR: production SSH host fingerprint secret is missing or malformed"
+            exit 1
+          fi
+
       - name: Capture clean production revision
         id: capture
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # reviewed current action commit
@@ -192,6 +202,7 @@ jobs:
           host: ${{ secrets.DROPLET_IP }}
           username: deploy
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
           capture_stdout: true
           script: |
             set -euo pipefail
@@ -256,12 +267,23 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Validate production SSH host fingerprint
+        env:
+          DROPLET_SSH_HOST_FINGERPRINT: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$DROPLET_SSH_HOST_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+            echo "ERROR: production SSH host fingerprint secret is missing or malformed"
+            exit 1
+          fi
+
       - name: Verify external OAuth allowlist
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # reviewed current action commit
         with:
           host: ${{ secrets.DROPLET_IP }}
           username: deploy
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
           script: |
             set -euo pipefail
             AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
@@ -321,6 +343,7 @@ jobs:
           host: ${{ secrets.DROPLET_IP }}
           username: deploy
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
           envs: DEPLOY_SHA,EXPECTED_PREVIOUS_SHA
           script: |
             set -euo pipefail

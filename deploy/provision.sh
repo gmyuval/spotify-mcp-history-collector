@@ -17,7 +17,7 @@
 # Configuration is read from resources/.env.do:
 #   DOMAIN_NAME, SSH_KEY_NAME, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET,
 #   DROPLET_SIZE, DB_EXTERNAL_HOST, DB_PRIVATE_HOST, DB_PORT, DB_USER,
-#   DB_PASSWORD, DB_NAME, DB_CLUSTER_ID
+#   DB_PASSWORD, DB_NAME, DB_CLUSTER_ID, DROPLET_SSH_HOST_FINGERPRINT
 # =============================================================================
 set -euo pipefail
 
@@ -76,18 +76,80 @@ IMAGE="ubuntu-24-04-x64"
 PROJECT_PATH="/opt/spotify-mcp"
 GITHUB_REPO="gmyuval/spotify-mcp-history-collector"
 
+SSH_TRUST_DIR=$(mktemp -d)
+KNOWN_HOSTS_FILE="$SSH_TRUST_DIR/known_hosts"
+OFFERED_HOST_KEY_FILE="$SSH_TRUST_DIR/offered_ed25519_host_key"
+touch "$KNOWN_HOSTS_FILE" "$OFFERED_HOST_KEY_FILE"
+chmod 600 "$KNOWN_HOSTS_FILE" "$OFFERED_HOST_KEY_FILE"
+SSH_OPTIONS=(
+    -o StrictHostKeyChecking=yes
+    -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE"
+)
+
+cleanup_ssh_trust() {
+    rm -f -- "$KNOWN_HOSTS_FILE" "$OFFERED_HOST_KEY_FILE"
+    rmdir -- "$SSH_TRUST_DIR" 2>/dev/null || true
+}
+trap cleanup_ssh_trust EXIT
+
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
 log() { echo "=== $1 ==="; }
 err() { echo "ERROR: $1" >&2; exit 1; }
 
+require_trusted_fingerprint() {
+    if [[ -z "${DROPLET_SSH_HOST_FINGERPRINT:-}" ]]; then
+        if [[ -t 0 ]]; then
+            read -r -s -p "Trusted Droplet Ed25519 SHA256 fingerprint from the authenticated DigitalOcean console: " \
+                DROPLET_SSH_HOST_FINGERPRINT
+            echo ""
+        else
+            err "DROPLET_SSH_HOST_FINGERPRINT is required before the first SSH connection"
+        fi
+    fi
+    if ! [[ "$DROPLET_SSH_HOST_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+        err "trusted Droplet SSH host fingerprint is malformed"
+    fi
+}
+
+prepare_known_hosts() {
+    local ip="$1"
+    local discovered=false
+    local -a offered_fingerprints=()
+
+    require_trusted_fingerprint
+    for attempt in $(seq 1 30); do
+        if ssh-keyscan -T 5 -t ed25519 "$ip" > "$OFFERED_HOST_KEY_FILE" 2>/dev/null \
+            && [[ -s "$OFFERED_HOST_KEY_FILE" ]]; then
+            discovered=true
+            break
+        fi
+        echo "  Waiting for the Droplet Ed25519 host key... ($attempt/30)"
+        sleep 10
+    done
+    [[ "$discovered" == "true" ]] || err "Droplet Ed25519 host key was not offered"
+
+    mapfile -t offered_fingerprints < <(
+        ssh-keygen -lf "$OFFERED_HOST_KEY_FILE" -E sha256 | awk '{print $2}'
+    )
+    [[ "${#offered_fingerprints[@]}" -eq 1 ]] \
+        || err "Droplet did not offer exactly one Ed25519 host key"
+    OFFERED_HOST_FINGERPRINT="${offered_fingerprints[0]}"
+    [[ "$OFFERED_HOST_FINGERPRINT" == "$DROPLET_SSH_HOST_FINGERPRINT" ]] \
+        || err "Droplet SSH host fingerprint mismatch; stop and verify through DigitalOcean"
+
+    cp "$OFFERED_HOST_KEY_FILE" "$KNOWN_HOSTS_FILE"
+    chmod 600 "$KNOWN_HOSTS_FILE"
+    echo "  Droplet SSH host identity verified"
+}
+
 wait_for_ssh() {
     local ip="$1"
     local max_attempts=30
     log "Waiting for SSH on $ip"
     for i in $(seq 1 $max_attempts); do
-        if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 "root@$ip" "echo ok" &>/dev/null; then
+        if ssh "${SSH_OPTIONS[@]}" -o ConnectTimeout=5 "root@$ip" "echo ok" &>/dev/null; then
             echo "SSH is ready"
             return 0
         fi
@@ -148,6 +210,7 @@ fi
 # Get public IP
 DROPLET_IP=$(doctl compute droplet get "$DROPLET_ID" --format PublicIPv4 --no-header)
 echo "  Public IP: $DROPLET_IP"
+prepare_known_hosts "$DROPLET_IP"
 
 # ---------------------------------------------------------------------------
 # Step 4: Configure DO Cloud Firewall
@@ -220,7 +283,7 @@ wait_for_ssh "$DROPLET_IP"
 
 log "Step 7: Setting up droplet via SSH"
 
-ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" bash -s <<'REMOTE_SETUP'
+ssh "${SSH_OPTIONS[@]}" "root@$DROPLET_IP" bash -s <<'REMOTE_SETUP'
 set -euo pipefail
 
 echo "--- System update ---"
@@ -318,7 +381,7 @@ REMOTE_SETUP
 # ---------------------------------------------------------------------------
 log "Step 8: Creating database '$DB_NAME'"
 
-ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" bash -s -- \
+ssh "${SSH_OPTIONS[@]}" "root@$DROPLET_IP" bash -s -- \
   "$DB_USER" "$DB_PASSWORD" "$DB_EXTERNAL_HOST" "$DB_PORT" "$DB_NAME" <<'REMOTE_DB'
 set -euo pipefail
 DB_USER="$1"
@@ -395,7 +458,7 @@ GOOGLE_OAUTH_CLIENT_SECRET=
 OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET}
 "
 
-echo "$ENV_PROD_CONTENT" | ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" \
+echo "$ENV_PROD_CONTENT" | ssh "${SSH_OPTIONS[@]}" "root@$DROPLET_IP" \
     "cat > $PROJECT_PATH/.env.prod && chown deploy:deploy $PROJECT_PATH/.env.prod && chmod 600 $PROJECT_PATH/.env.prod"
 
 echo "  .env.prod uploaded to droplet"
@@ -423,9 +486,10 @@ else
     DROPLET_IP=$(doctl compute droplet get "$DROPLET_ID" --format PublicIPv4 --no-header)
     [[ -n "$DROPLET_IP" ]] || err "existing droplet has no public IPv4 address"
     ADMIN_TOKEN="unchanged (resume mode does not read it)"
+    prepare_known_hosts "$DROPLET_IP"
     wait_for_ssh "$DROPLET_IP"
 
-    RESUME_CAPTURE=$(ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" bash -s -- \
+    RESUME_CAPTURE=$(ssh "${SSH_OPTIONS[@]}" "deploy@$DROPLET_IP" bash -s -- \
         "$RESUME_DEPLOY_SHA" <<'REMOTE_RESUME'
 set -euo pipefail
 RESUME_DEPLOY_SHA="$1"
@@ -456,7 +520,7 @@ REMOTE_RESUME
 fi
 
 if [[ "$RESUME_AFTER_ALLOWLIST" == "false" ]]; then
-    INITIAL_DEPLOY_SHA=$(ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" \
+    INITIAL_DEPLOY_SHA=$(ssh "${SSH_OPTIONS[@]}" "deploy@$DROPLET_IP" \
         "cd '$PROJECT_PATH' && git rev-parse --verify HEAD^{commit}")
     [[ "$INITIAL_DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] \
         || err "initial checkout is not an immutable revision"
@@ -469,7 +533,7 @@ log "Pre-Step-10: Verifying external OAuth allowlist"
 AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
 
 allowlist_ready() {
-    ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" \
+    ssh "${SSH_OPTIONS[@]}" "deploy@$DROPLET_IP" \
         "test -f '$AUTHENTICATED_EMAILS_FILE' && test -r '$AUTHENTICATED_EMAILS_FILE' && test -s '$AUTHENTICATED_EMAILS_FILE' && test \"\$(stat -c '%a:%U:%G' '${AUTHENTICATED_EMAILS_FILE%/*}')\" = '750:deploy:deploy' && test \"\$(stat -c '%a:%U:%G' '$AUTHENTICATED_EMAILS_FILE')\" = '644:deploy:deploy'"
 }
 
@@ -492,7 +556,7 @@ allowlist_ready || err "external OAuth allowlist is still missing, unreadable, o
 # ---------------------------------------------------------------------------
 log "Step 10: Running initial deployment"
 
-ssh -o StrictHostKeyChecking=no "deploy@$DROPLET_IP" bash -s -- "$INITIAL_DEPLOY_SHA" <<REMOTE_DEPLOY
+ssh "${SSH_OPTIONS[@]}" "deploy@$DROPLET_IP" bash -s -- "$INITIAL_DEPLOY_SHA" <<REMOTE_DEPLOY
 set -euo pipefail
 EXPECTED_INITIAL_SHA="\$1"
 AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
@@ -571,7 +635,7 @@ fi
 
 # Add public key to deploy user's authorized_keys on the droplet
 DEPLOY_PUB_KEY=$(cat "${DEPLOY_KEY_PATH}.pub")
-ssh -o StrictHostKeyChecking=no "root@$DROPLET_IP" bash -s <<REMOTE_KEY
+ssh "${SSH_OPTIONS[@]}" "root@$DROPLET_IP" bash -s <<REMOTE_KEY
 if ! grep -q "github-actions-deploy" /home/deploy/.ssh/authorized_keys 2>/dev/null; then
     echo "$DEPLOY_PUB_KEY" >> /home/deploy/.ssh/authorized_keys
     echo "  Deploy key added to droplet"
@@ -581,16 +645,16 @@ fi
 REMOTE_KEY
 
 # ---------------------------------------------------------------------------
-# Step 12: Set GitHub Secrets
+# Step 12: Set GitHub repository secrets
 # ---------------------------------------------------------------------------
-log "Step 12: Setting GitHub Secrets"
+log "Step 12: Setting GitHub repository secrets"
 
 DEPLOY_PRIVATE_KEY=$(cat "$DEPLOY_KEY_PATH")
 
 gh secret set DROPLET_IP --repo "$GITHUB_REPO" --body "$DROPLET_IP"
 gh secret set SSH_PRIVATE_KEY --repo "$GITHUB_REPO" --body "$DEPLOY_PRIVATE_KEY"
 
-echo "  GitHub Secrets configured"
+echo "  GitHub repository deploy secrets configured"
 
 # ---------------------------------------------------------------------------
 # Done!
@@ -618,6 +682,9 @@ echo "        - Set GOOGLE_OAUTH_CLIENT_ID"
 echo "        - Set GOOGLE_OAUTH_CLIENT_SECRET"
 echo "     d. Add your email to /opt/spotify-mcp-config/authenticated-emails.txt"
 echo "     e. Restart: cd $PROJECT_PATH && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d"
+echo ""
+echo "  3. GitHub production environment — configure DROPLET_SSH_HOST_FINGERPRINT"
+echo "     from the authenticated DigitalOcean console. This script does not set it."
 echo ""
 echo "  Future deploys use the separately authorized manual GitHub Actions workflow."
 echo ""
