@@ -232,7 +232,7 @@ def _write_project_input(specification: RequirementSet) -> Path:
 
 
 def _marked_requirements(output_path: Path) -> dict[str, str]:
-    if not output_path.exists():
+    if not output_path.is_file():
         return {}
 
     requirements: dict[str, str] = {}

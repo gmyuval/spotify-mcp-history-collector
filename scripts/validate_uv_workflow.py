@@ -85,7 +85,28 @@ def _checkout_steps_missing_credentials(workflow: str) -> list[int]:
             if following_indent == step_indent and following_line.lstrip().startswith("- "):
                 break
             step_lines.append(following_line)
-        if not any(re.fullmatch(r"\s*persist-credentials:\s*false\s*", item) for item in step_lines):
+        with_indent: int | None = None
+        input_indent: int | None = None
+        credentials_disabled = False
+        for step_line in step_lines:
+            stripped = step_line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            indent = len(step_line) - len(step_line.lstrip())
+            if with_indent is None:
+                if re.fullmatch(r"with:\s*(?:#.*)?", stripped):
+                    with_indent = indent
+                continue
+            if indent <= with_indent:
+                with_indent = None
+                input_indent = None
+                continue
+            if input_indent is None:
+                input_indent = indent
+            if indent == input_indent and re.fullmatch(r"persist-credentials:\s*false\s*", stripped):
+                credentials_disabled = True
+                break
+        if not credentials_disabled:
             missing.append(checkout_count)
     return missing
 

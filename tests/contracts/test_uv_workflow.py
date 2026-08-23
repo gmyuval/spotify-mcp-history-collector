@@ -53,6 +53,24 @@ jobs:
 """
         self.assertEqual([1], uv_workflow._checkout_steps_missing_credentials(workflow))
 
+    def test_checkout_credentials_scan_ignores_nested_block_scalar_text(self) -> None:
+        workflow = f"""\
+jobs:
+  safe:
+    steps:
+      - uses: {uv_workflow.CHECKOUT_ACTION}
+        with:
+          persist-credentials: false
+  unsafe:
+    steps:
+      - uses: {uv_workflow.CHECKOUT_ACTION}
+        with:
+          sparse-checkout: |
+            persist-credentials: false
+"""
+
+        self.assertEqual([2], uv_workflow._checkout_steps_missing_credentials(workflow))
+
     def test_ci_uses_read_only_checkout_and_immutable_action_refs(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
@@ -297,15 +315,19 @@ jobs:
             retained,
         )
 
-    def test_missing_requirement_outputs_have_no_retained_markers(self) -> None:
+    def test_missing_or_non_file_requirement_outputs_have_no_retained_markers(self) -> None:
         with tempfile.TemporaryDirectory(dir=ROOT) as temporary_directory:
             root = Path(temporary_directory)
             retained = docker_requirements._retained_marked_requirements(
                 output_path=root / "requirements-dev.txt",
                 runtime_constraint_path=root / "requirements.txt",
             )
+            directory_output = root / "directory-requirements.txt"
+            directory_output.mkdir()
+            marked_directory = docker_requirements._marked_requirements(directory_output)
 
         self.assertEqual({}, retained)
+        self.assertEqual({}, marked_directory)
 
     def test_docker_requirements_exclude_known_vulnerable_pins(self) -> None:
         for specification in docker_requirements.REQUIREMENT_SETS:
