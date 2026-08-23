@@ -11,6 +11,8 @@ PR_LIFECYCLE_MERGE_POLICY_TERMS = (
     "`merge` is this repository's default pull-request strategy",
     "squash and rebase remain enabled as explicit alternatives",
     "if an agent proposes either exception, it must prompt the owner with the requested method and rationale",
+    # Enforce approval independently from the preceding owner-prompt requirement.
+    "then obtain explicit approval before using it",
     "required linear history",
     "never mutate repository merge settings or branch protection",
 )
