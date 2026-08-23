@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Spotify MCP API - OAuth, MCP tool endpoints, admin APIs"
 requires-python = ">=3.14"
 dependencies = [
+    "spotify-mcp-shared",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "sqlalchemy>=2.0.35",
@@ -15,7 +16,7 @@ dependencies = [
     "cryptography>=44.0.0",
     "python-multipart>=0.0.17",
     "pyjwt>=2.11.0",
-    "mcp>=1.8.0",
+    "mcp==1.26.0",
 ]
 
 [project.optional-dependencies]

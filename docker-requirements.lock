@@ -1,0 +1,23 @@
+{
+  "files": {
+    "services/api/pyproject.toml": "76592c5f50a4886ee64f04bbb9466078f8749965231d30448236e9666d7fb2a6",
+    "services/api/requirements-dev.txt": "f9e246e9ed88b56658b6b88f728422329ac4096c04f9035fa3a3d7328a13c01d",
+    "services/api/requirements.txt": "7feb522689ad07dd416c42818e28a7b6556636b37ae6ad859d36ef26e1ef7a35",
+    "services/collector/pyproject.toml": "d3204f748d89eb9c37a35fed4f9017311087886a60a2a7ec39838171fcbb52c0",
+    "services/collector/requirements-dev.txt": "43fa7fd87069aeb70fcdd1acca9535344f98ec26f0e2f1c180a120c5ab83314e",
+    "services/collector/requirements.txt": "3662f3ac5c0ebe3f29967e45143b1e431beb39fad90eb482085e21c03c61c2fc",
+    "services/explorer/pyproject.toml": "3cac4e8c2a4f282f5ae81615c36f58e4b7c1843409af3e68f4e6a4e1930c08f9",
+    "services/explorer/requirements-dev.txt": "2260149331043386ad9a0fc15b973acfc6f4835f5f8ed2c3ba0a2e05b2d2f1df",
+    "services/explorer/requirements.txt": "f378950305a2db3d840ebaa0e830737b4e9502fc1f26c6a981a98e36cf79829e",
+    "services/frontend/pyproject.toml": "aff13c6d42fbd81e16b8eef3891504727d8b8515ca1cbd81d901177cc47a1396",
+    "services/frontend/requirements-dev.txt": "654c417332960fb04868a9d5b1f386292265a1dd4ae3debf5881331fd32fcab0",
+    "services/frontend/requirements.txt": "0d14fc8fea8db16f321c466f8c9e0c737de84a6eb1e3e86195906165c351bb53",
+    "services/shared/pyproject.toml": "e226280957d57269f9e7ef8886e32e651b75fcb57e1e1c97924491d88834c257",
+    "services/shared/requirements.txt": "fb26f04af70e4533cf05f944d4b5d2ededffaab8e66084f94ecfc53da52d12e9",
+    "uv.lock": "3ee304aa7a6d0d050b6f3c242a7a73e553648a436d1ee234abd598aaa795f192"
+  },
+  "format": 1,
+  "generator": "pip-tools 7.5.3 via uv.lock",
+  "known-direct-gaps": [],
+  "python": "3.14.7"
+}

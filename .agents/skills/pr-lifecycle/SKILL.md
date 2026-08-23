@@ -55,7 +55,9 @@ stops and reports instead of exercising this authority.
    criterion will be satisfied by the PR; otherwise use `Part of SPM-N`. Include Summary,
    acceptance-to-evidence mapping, Validation, environment gaps, Risk/plan-first impact, Review
    focus, Rollback, deployment impact, and Follow-ups.
-4. Read the PR back and attach its URL to Linear. Move the issue to review only after the PR exists.
+4. Read the PR back. Before attaching its URL to Linear or moving the issue to review, verify that
+   the user or active harness authorized those exact Linear mutations. If not, report the intended
+   linkage and transition for an authorized owner. Move the issue to review only after the PR exists.
 
 The linkage wording is a repository convention; automation effects must be read back rather than
 assumed. Do not create a disposable linkage PR during discovery.
@@ -81,11 +83,13 @@ unresolved finding may remain.
 ## Phase 4 - merge and post-merge
 
 The root has standing authority to merge a qualifying pull request, but a merge is not qualifying
-when it would cause an unauthorized downstream effect. Pushes to `main` currently trigger
-`.github/workflows/deploy.yml`; before merging, confirm the accepted deployment posture, rollback,
-current GitHub settings, and separate authority for the resulting production effect. Otherwise
-preserve the merge-ready pull request and report that concrete blocker. Never bypass branch
-protection.
+when it would cause an unauthorized downstream effect. `.github/workflows/deploy.yml` is currently
+manual-only: a merge or push to `main` does not dispatch production. Verify that posture and current
+GitHub settings before merging; a merge never authorizes a later workflow dispatch. Any deployment
+still requires an accepted plan, separate authority, an immutable full SHA, a deployment ID, the
+configured production SSH host fingerprint, and the completed external allowlist migration.
+Otherwise preserve the merge-ready pull request and report the concrete blocker. Never bypass
+branch protection.
 
 When the accepted plan authorizes the resulting deployment, the root follows the accepted
 documented deployment procedure and its exact workflow run through a terminal result. Verify the

@@ -168,6 +168,12 @@ For changes to this operating contract, run:
 make agent-contract
 ```
 
+If GNU Make is unavailable, run the exact dependency-free fallback:
+
+```text
+python -m unittest discover -s tests/contracts -p "test_*.py"
+```
+
 Every handoff states the files changed, commands actually run and their results, risks or gaps, and
 the relevant Linear issue. The stop and evidence formats are defined in
 `docs/agent/orchestration.md`.

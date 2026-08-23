@@ -240,7 +240,9 @@ class AgentContractTests(unittest.TestCase):
                 "plan-first and decision stops",
                 "reporting and evidence",
                 "not-yours list",
-                "shared-machine context",
+                "harness and isolation context",
+                "delegation and filesystem-isolation",
+                "required fallback",
                 "measured",
                 "inferred",
                 "conjectural",
@@ -257,6 +259,7 @@ class AgentContractTests(unittest.TestCase):
                 "only one writer",
                 "isolated Git worktree",
                 "one-writer fallback",
+                "filesystem-sharing and isolation model",
                 "STOP 1",
                 "implementation-ready",
                 "local-ready",
@@ -415,8 +418,11 @@ class AgentContractTests(unittest.TestCase):
             (
                 "standing repository-delivery authority",
                 "qualifying pull request",
-                "Pushes to `main` currently trigger",
-                "separate authority for the resulting production effect",
+                "manual-only",
+                "does not dispatch production",
+                "merge never authorizes a later workflow dispatch",
+                "exact Linear mutations",
+                "active harness authorized",
                 "accepted documented deployment procedure",
                 "deployed revision",
                 "target environment",
@@ -460,8 +466,11 @@ class AgentContractTests(unittest.TestCase):
         workflow = self.read(".github/workflows/ci.yml")
         self.assertIn("agent-contract:", makefile)
         self.assertIn(command, makefile)
-        self.assertIn("agent-contract:", workflow)
-        self.assertIn("name: Agent Contract", workflow)
+        self.assertIn("uv-contract:", makefile)
+        self.assertIn("uv-contract:", workflow)
+        self.assertIn("name: UV Workflow and Lock Drift", workflow)
+        self.assertIn("uv run --locked", makefile)
+        self.assertIn("uv run --locked", workflow)
         self.assertIn(command, workflow)
 
 

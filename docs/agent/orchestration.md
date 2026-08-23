@@ -59,8 +59,9 @@ The briefing is the delegate's complete contract. It includes all of the followi
    unresolved questions, and whether each claim is measured, inferred, or conjectural.
 8. **Not-yours list** - tracker changes, unrelated cleanup, external writes, watchers, merges,
    credentials, deployment, or any other root-owned activity.
-9. **Shared-machine context** - checkout/worktree path, branch and starting revision, dirty state,
-   concurrent agents, shared services, and resources the delegate must not disturb.
+9. **Harness and isolation context** - the active harness's delegation and filesystem-isolation
+   capabilities, checkout/worktree path, branch and starting revision, dirty state, concurrent
+   agents, shared services, protected resources, and the required fallback when isolation is absent.
 10. **Stops and progress** - when to report, when to stop, and the meaning of STOP 1 and STOP 2.
 
 A claim in a briefing has the same evidence burden as a claim in a report:
@@ -74,10 +75,11 @@ a finding to report, not an instruction to suppress.
 
 ## Checkout and writer isolation
 
-Codex sub-agents in this environment share the same filesystem. Read-only delegates may share a
-checkout when they do not change branches or files. **Only one writer may use a checkout.** If two
-delegates need to write concurrently, the root must give each an isolated Git worktree with a named
-path, branch, starting revision, and ownership boundary.
+The root must establish the active harness's filesystem-sharing and isolation model in every
+briefing. Read-only delegates may share a checkout only when they do not change branches or files.
+**Only one writer may use a checkout.** If two delegates need to write concurrently, the root must
+give each an isolated Git worktree with a named path, branch, starting revision, and ownership
+boundary.
 
 If isolated worktrees are unavailable, use the one-writer fallback: one delegate writes while the
 root and all other delegates remain read-only, then the root verifies and releases the writer lane.

@@ -1,12 +1,12 @@
 # Current repository state
 
-Last verified: 2026-08-21 (UTC), from repository revision
-`d0c8107eb8126e705c5b5852e39563d05e35f6a1` plus the local SPM-3 working tree.
+Last verified: 2026-08-23 (UTC), after integrating `origin/main` at
+`12d6198095eeeaa8a37ca8903e4694a1bb08d886` into `codex/spm-3-orchestration-contract`.
 
-This is volatile orientation, not a work queue or an architecture decision. Linear team **SPM**,
-project **Spotify MCP modernization**, is authoritative for planned work, ownership, status,
-estimates, dependencies, milestones, and weekly-cycle scope. Re-check every fact here against the
-named source before using it for a consequential decision.
+This is volatile orientation, not a work queue, architecture decision, or deployment record. Linear
+team **SPM**, project **Spotify MCP modernization**, is authoritative for planned work, ownership,
+status, estimates, dependencies, milestones, and weekly-cycle scope. Re-check every fact here
+against the named source before using it for a consequential decision.
 
 ## Modernization posture
 
@@ -14,11 +14,11 @@ named source before using it for a consequential decision.
   system. Existing deployment documents and workflows are evidence about that estate, not an
   automatically binding future architecture.
 - `AGENTS.md` and `docs/agent/orchestration.md` define the vendor-neutral operating contract.
-- Canonical repository skills live in `.agents/skills/`; `.claude/skills/` contains exact
-  discovery adapters only.
-- Azure, deployment, infrastructure, cloud retirement, secrets/auth/OAuth, database schema or
-  data movement, public MCP/API compatibility, Spotify account data, retention, and broad
-  framework changes remain plan-first boundaries.
+- Canonical repository skills live in `.agents/skills/`; `.claude/skills/` contains exact discovery
+  adapters only.
+- Azure, deployment, infrastructure, cloud retirement, secrets/auth/OAuth, database schema or data
+  movement, public MCP/API compatibility, Spotify account data, retention, and broad framework
+  changes remain plan-first boundaries.
 
 ## Observed service layout
 
@@ -33,49 +33,62 @@ Caddy while using externally supplied database and cache configuration. The Pyth
 - `services/frontend` - administrative FastAPI/Jinja application;
 - `services/explorer` - listening-history Explorer FastAPI/Jinja application.
 
-Product and integration detail belongs in the code, `README.md`, and the topic documents under
-`docs/`; do not recreate the MCP tool catalog or a future-work list here.
+Detailed product and integration behaviour remains documented in the code, `README.md`, and topic
+documents under `docs/`; do not recreate the MCP tool catalog or a future-work list here.
 
-## Validation surface
+## Reproducible development and CI baseline
 
-The CI workflow runs these independent gates:
+SPM-2 established the root uv workspace, pinned uv 0.12.3, Python 3.14.7, and committed `uv.lock`.
+The clean-checkout setup command is:
 
 ```text
-python -m unittest discover -s tests/contracts -p "test_*.py"
-ruff check .
-ruff format --check .
-mypy services/shared/src services/api/src services/collector/src services/frontend/src services/explorer/src
-pytest services/api/tests/
-(from services/collector) pytest tests/
-pytest services/frontend/tests/
-pytest services/explorer/tests/
+uv sync --locked --all-packages --all-extras --all-groups
 ```
 
-Run `pytest services/shared/tests/` when shared code changes; it is not currently a separate CI
-job. Do not treat `make test` as proof that every package-specific suite ran: the root pytest
-configuration does not include Explorer or shared tests, and collector has a separate invocation
-because the suites' fixtures conflict.
+Pull-request CI runs lock and workflow drift checks, the dependency-free contract suite, Ruff check
+and format validation, strict mypy across all five source trees, pre-commit, and one isolated pytest
+job for each workspace package. Keep package suites separate because their fixtures can conflict.
+The same commands are exposed through the root `Makefile`; Make is an optional convenience, and the
+exact Python contract fallback is documented in `AGENTS.md`.
 
-On the host used for the SPM-3 implementation session, `make`, Ruff, pytest, pre-commit, and mypy
-were not available on `PATH`; the mypy environment gap is tracked by SPM-2. An unavailable tool is
-an explicit gap, never a passing result. The dependency-free agent contract can be run with any
-suitable Python 3 interpreter when the `python` launcher itself is unavailable.
+On the published SPM-2 head, Windows verification passed 45 workflow contract tests, 24 shared
+tests, 618 API tests with 7 integration tests deselected, 53 collector tests, 66 frontend tests,
+and 102 Explorer tests. Ruff validated 272 files and strict mypy validated 157 source files. Both
+development and production Compose configurations validated without starting services. The SPM-3
+branch adds agent-contract coverage; use its exact-head validation and GitHub checks rather than
+assuming the earlier counts are sufficient.
 
-## Deployment evidence and cautions
+## Production packaging boundary
 
-`.github/workflows/deploy.yml`, `docker-compose.prod.yml`, `deploy/`, and the deployment guides
-describe a DigitalOcean production path. That workflow can change the database firewall, replace
-the server checkout, rebuild and restart services, run Alembic migrations, recreate Caddy, and
-prune images. Reading those files is orientation; executing or changing that path requires an
-accepted plan and explicit authority.
+SPM-2 preserved the production packaging path. Production Dockerfiles still install committed
+pip-tools `requirements*.txt` files through their existing Compose build contexts, and the manual
+deploy workflow retains its pip-based pre-deployment gates. `docker-requirements.lock` records
+package metadata and requirement-file digests so this temporary boundary fails closed on drift.
 
-No production health, deployment freshness, live database state, user account state, or secret
-configuration is asserted by this document.
+Normal runtime requirement regeneration self-constrains the committed production pins and carries
+forward explicit environment markers. Development requirement generation is constrained by each
+service's runtime output. SPM-4 owns the accepted-plan decision between direct `uv.lock`
+consumption and pip-compatible exports; do not change Docker or deployment consumption before that
+decision.
+
+## Manual production deployment posture
+
+SPM-30 changed `.github/workflows/deploy.yml` to manual `workflow_dispatch`. A merge or push to
+`main` does not dispatch production. A separately authorized dispatch must identify an immutable
+full commit SHA reachable from `origin/main` and a fresh deployment UUID, then be monitored through
+a terminal result with revision, environment, health, and rollback evidence.
+
+The workflow can mutate the database firewall, production checkout, containers, services, and
+schema. It requires an accepted plan and separate deployment authority. Before any authorized
+production deployment, configure `DROPLET_SSH_HOST_FINGERPRINT` and complete the documented external
+OAuth allowlist migration. This repository integration neither performs nor authorizes those
+steps. No production health, deployment freshness, live database state, account state, or secret
+configuration is asserted here.
 
 ## Known documentation drift
 
 Some pre-modernization files mix historical plans, implementation snapshots, and operational
 commands. In particular, treat `docs/current-phase-plan.md`, `docs/prd-dev-step2.md`, and older
-deployment/integration instructions as evidence to verify, not as current agent policy. Durable
-work remains in Linear; accepted decisions belong under `docs/decisions/`; non-obvious lessons
-belong under `docs/agent/memory/`.
+integration instructions as evidence to verify, not as current agent policy. Durable work remains
+in Linear; accepted decisions belong under `docs/decisions/`; non-obvious lessons belong under
+`docs/agent/memory/`.
