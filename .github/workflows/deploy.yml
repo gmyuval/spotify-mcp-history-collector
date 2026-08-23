@@ -1,28 +1,76 @@
 name: Deploy to DigitalOcean
+run-name: "Deploy ${{ inputs.commit_sha }} to production [${{ inputs.deployment_id }}]"
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
-      ref:
-        description: 'Branch to deploy (default: main)'
-        required: false
-        default: 'main'
+      commit_sha:
+        description: 'Full 40-character commit SHA reachable from origin/main'
+        required: true
+        type: string
+      deployment_id:
+        description: 'Canonical lowercase UUID v4 syntax for this dispatch identifier'
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 env:
   PYTHON_VERSION: '3.14'
 
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
 jobs:
-  lint:
-    name: Lint
+  validate-deploy-sha:
+    name: Validate deployment SHA
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
-      - uses: actions/setup-python@v6
+          ref: main
+          fetch-depth: 0
+      - name: Verify immutable SHA is reachable from origin/main
+        env:
+          DEPLOY_SHA: ${{ inputs.commit_sha }}
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$DEPLOYMENT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
+            echo "ERROR: deployment_id must use canonical lowercase UUID v4 format"
+            exit 1
+          fi
+          if ! [[ "$DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "ERROR: commit_sha must be a full 40-character hexadecimal commit SHA"
+            exit 1
+          fi
+          git fetch origin main:refs/remotes/origin/main
+          git cat-file -e "$DEPLOY_SHA^{commit}" \
+            || { echo "ERROR: requested commit does not exist"; exit 1; }
+          git merge-base --is-ancestor "$DEPLOY_SHA" origin/main \
+            || { echo "ERROR: requested commit is not reachable from origin/main"; exit 1; }
+          ALLOWLIST_MOUNT="/opt/spotify-mcp-config/authenticated-emails.txt:/etc/oauth2-proxy/authenticated-emails.txt:ro"
+          if ! git show "${DEPLOY_SHA}:docker-compose.prod.yml" \
+            | grep -Fqx "      - $ALLOWLIST_MOUNT"; then
+            echo "ERROR: selected revision predates the external OAuth allowlist contract"
+            echo "Use the separately authorized legacy rollback procedure; generic workflow deployment is blocked"
+            exit 1
+          fi
+
+  lint:
+    name: Lint
+    needs: validate-deploy-sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: pip install ruff
@@ -31,13 +79,15 @@ jobs:
 
   typecheck:
     name: Type Check
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
-      - uses: actions/setup-python@v6
+          ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
@@ -51,13 +101,15 @@ jobs:
 
   test-api:
     name: Test API
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
-      - uses: actions/setup-python@v6
+          ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
@@ -68,13 +120,15 @@ jobs:
 
   test-collector:
     name: Test Collector
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
-      - uses: actions/setup-python@v6
+          ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
@@ -86,13 +140,15 @@ jobs:
 
   test-frontend:
     name: Test Frontend
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
-      - uses: actions/setup-python@v6
+          ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
@@ -103,13 +159,15 @@ jobs:
 
   test-explorer:
     name: Test Explorer
+    needs: validate-deploy-sha
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
-      - uses: actions/setup-python@v6
+          ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install dependencies
@@ -118,24 +176,134 @@ jobs:
           pip install -e "services/explorer[dev]"
       - run: pytest services/explorer/tests/
 
+  capture-production-state:
+    name: Capture production state
+    needs: [lint, typecheck, test-api, test-collector, test-frontend, test-explorer]
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    outputs:
+      previous_production_sha: ${{ steps.normalize.outputs.previous_production_sha }}
+    steps:
+      - name: Validate production SSH host fingerprint
+        env:
+          DROPLET_SSH_HOST_FINGERPRINT: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$DROPLET_SSH_HOST_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+            echo "ERROR: production SSH host fingerprint secret is missing or malformed"
+            exit 1
+          fi
+
+      - name: Capture clean production revision
+        id: capture
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # reviewed current action commit
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: deploy
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
+          capture_stdout: true
+          script: |
+            set -euo pipefail
+            AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
+
+            if [[ ! -f "$AUTHENTICATED_EMAILS_FILE" || ! -r "$AUTHENTICATED_EMAILS_FILE" ]]; then
+              echo "ERROR: external OAuth allowlist is missing or unreadable"
+              exit 1
+            fi
+            if [[ ! -s "$AUTHENTICATED_EMAILS_FILE" ]]; then
+              echo "ERROR: external OAuth allowlist is empty"
+              exit 1
+            fi
+            AUTHENTICATED_EMAILS_DIR="${AUTHENTICATED_EMAILS_FILE%/*}"
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_DIR")" != "750:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist directory must be deploy:deploy mode 0750"
+              exit 1
+            fi
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_FILE")" != "644:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist must be deploy:deploy mode 0644 for the non-root consumer"
+              exit 1
+            fi
+            cd /opt/spotify-mcp
+
+            echo "=== Fixing repo ownership ==="
+            sudo -n chown -R deploy:deploy /opt/spotify-mcp/.git \
+              || { echo "ERROR: sudo requires a password for deploy"; exit 1; }
+
+            if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+              echo "ERROR: production repository has tracked or untracked changes"
+              exit 1
+            fi
+            PREVIOUS_PRODUCTION_SHA=$(git rev-parse --verify HEAD^{commit})
+            if ! [[ "$PREVIOUS_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "ERROR: production HEAD is not an immutable commit SHA"
+              exit 1
+            fi
+            git fetch origin main:refs/remotes/origin/main
+            git merge-base --is-ancestor "$PREVIOUS_PRODUCTION_SHA" origin/main \
+              || { echo "ERROR: production HEAD is not reachable from origin/main"; exit 1; }
+            echo "PREVIOUS_PRODUCTION_SHA=$PREVIOUS_PRODUCTION_SHA"
+
+      - name: Normalize captured production revision
+        id: normalize
+        env:
+          CAPTURE_STDOUT: ${{ steps.capture.outputs.stdout }}
+        run: |
+          set -euo pipefail
+          PREVIOUS_PRODUCTION_SHA=$(printf '%s\n' "$CAPTURE_STDOUT" \
+            | sed -n 's/^PREVIOUS_PRODUCTION_SHA=//p')
+          if ! [[ "$PREVIOUS_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: state capture did not return exactly one production commit SHA"
+            exit 1
+          fi
+          echo "previous_production_sha=$PREVIOUS_PRODUCTION_SHA" >> "$GITHUB_OUTPUT"
+
   deploy:
     name: Deploy
-    needs: [lint, typecheck, test-api, test-collector, test-frontend, test-explorer]
+    needs: capture-production-state
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 15
 
     steps:
-      - name: Determine deploy ref
-        id: ref
+      - name: Validate production SSH host fingerprint
+        env:
+          DROPLET_SSH_HOST_FINGERPRINT: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            REF="${{ github.event.inputs.ref }}"
-          else
-            REF="main"
+          set -euo pipefail
+          if ! [[ "$DROPLET_SSH_HOST_FINGERPRINT" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]; then
+            echo "ERROR: production SSH host fingerprint secret is missing or malformed"
+            exit 1
           fi
-          echo "deploy_ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "Deploying ref: $REF"
+
+      - name: Verify external OAuth allowlist
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # reviewed current action commit
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: deploy
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
+          script: |
+            set -euo pipefail
+            AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
+            if [[ ! -f "$AUTHENTICATED_EMAILS_FILE" || ! -r "$AUTHENTICATED_EMAILS_FILE" ]]; then
+              echo "ERROR: external OAuth allowlist is missing or unreadable"
+              exit 1
+            fi
+            if [[ ! -s "$AUTHENTICATED_EMAILS_FILE" ]]; then
+              echo "ERROR: external OAuth allowlist is empty"
+              exit 1
+            fi
+            AUTHENTICATED_EMAILS_DIR="${AUTHENTICATED_EMAILS_FILE%/*}"
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_DIR")" != "750:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist directory must be deploy:deploy mode 0750"
+              exit 1
+            fi
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_FILE")" != "644:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist must be deploy:deploy mode 0644 for the non-root consumer"
+              exit 1
+            fi
 
       - name: Ensure DB firewall allows spotify-mcp droplets
         env:
@@ -166,35 +334,72 @@ jobs:
           fi
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+        id: deploy
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # reviewed current action commit
         env:
-          DEPLOY_REF: ${{ steps.ref.outputs.deploy_ref }}
+          DEPLOY_SHA: ${{ inputs.commit_sha }}
+          EXPECTED_PREVIOUS_SHA: ${{ needs.capture-production-state.outputs.previous_production_sha }}
         with:
           host: ${{ secrets.DROPLET_IP }}
           username: deploy
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: DEPLOY_REF
+          fingerprint: ${{ secrets.DROPLET_SSH_HOST_FINGERPRINT }}
+          envs: DEPLOY_SHA,EXPECTED_PREVIOUS_SHA
           script: |
             set -euo pipefail
+            AUTHENTICATED_EMAILS_FILE="/opt/spotify-mcp-config/authenticated-emails.txt"
+
+            if [[ ! -f "$AUTHENTICATED_EMAILS_FILE" || ! -r "$AUTHENTICATED_EMAILS_FILE" ]]; then
+              echo "ERROR: external OAuth allowlist is missing or unreadable"
+              exit 1
+            fi
+            if [[ ! -s "$AUTHENTICATED_EMAILS_FILE" ]]; then
+              echo "ERROR: external OAuth allowlist is empty"
+              exit 1
+            fi
+            AUTHENTICATED_EMAILS_DIR="${AUTHENTICATED_EMAILS_FILE%/*}"
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_DIR")" != "750:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist directory must be deploy:deploy mode 0750"
+              exit 1
+            fi
+            if [[ "$(stat -c '%a:%U:%G' "$AUTHENTICATED_EMAILS_FILE")" != "644:deploy:deploy" ]]; then
+              echo "ERROR: external OAuth allowlist must be deploy:deploy mode 0644 for the non-root consumer"
+              exit 1
+            fi
             cd /opt/spotify-mcp
 
             echo "=== Fixing repo ownership ==="
             sudo -n chown -R deploy:deploy /opt/spotify-mcp/.git \
               || { echo "ERROR: sudo requires a password for deploy"; exit 1; }
 
-            echo "=== Deploying ref: $DEPLOY_REF ==="
-            git fetch origin "$DEPLOY_REF"
-            git checkout "$DEPLOY_REF"
-            git reset --hard "origin/$DEPLOY_REF"
-
-            if [ "$DEPLOY_REF" != "main" ]; then
-              echo ""
-              echo "============================================"
-              echo "  WARNING: Deployed non-main branch"
-              echo "  Branch: $DEPLOY_REF"
-              echo "  To rollback: re-run workflow with ref=main"
-              echo "============================================"
-              echo ""
+            if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+              echo "ERROR: production repository changed after state capture"
+              exit 1
+            fi
+            CURRENT_PRODUCTION_SHA=$(git rev-parse --verify HEAD^{commit})
+            if [ "$CURRENT_PRODUCTION_SHA" != "$EXPECTED_PREVIOUS_SHA" ]; then
+              echo "ERROR: production HEAD changed after state capture"
+              exit 1
+            fi
+            git fetch origin main:refs/remotes/origin/main
+            if ! [[ "$DEPLOY_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "ERROR: commit_sha must be a full 40-character hexadecimal commit SHA"
+              exit 1
+            fi
+            git cat-file -e "$DEPLOY_SHA^{commit}" \
+              || { echo "ERROR: requested commit does not exist"; exit 1; }
+            git merge-base --is-ancestor "$DEPLOY_SHA" origin/main \
+              || { echo "ERROR: requested commit is not reachable from origin/main"; exit 1; }
+            EXPECTED_DEPLOY_SHA=$(git rev-parse "$DEPLOY_SHA^{commit}")
+            echo "=== Deploying immutable SHA: $DEPLOY_SHA ==="
+            git checkout --detach "$DEPLOY_SHA"
+            if [ "$(git rev-parse HEAD)" != "$EXPECTED_DEPLOY_SHA" ]; then
+              echo "ERROR: checkout did not land on the requested commit"
+              exit 1
+            fi
+            if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+              echo "ERROR: exact checkout is not clean"
+              exit 1
             fi
 
             echo "=== Building and deploying ==="
@@ -261,6 +466,23 @@ jobs:
             echo "=== Caddy logs (last 20 lines) ==="
             docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=20 caddy
 
+            echo "=== Waiting for oauth2-proxy health ==="
+            for i in $(seq 1 30); do
+              if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T caddy \
+                wget -q -O /dev/null http://oauth2-proxy:4180/ping; then
+                echo "oauth2-proxy is healthy"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "ERROR: oauth2-proxy health failed after 30 attempts"
+                docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail=100 oauth2-proxy
+                exit 1
+              fi
+              echo "Waiting for oauth2-proxy... ($i/30)"
+              sleep 5
+            done
+            echo "OAUTH2_PROXY_HEALTH_RESULT=healthy"
+
             echo "=== Waiting for Explorer health ==="
             for i in $(seq 1 30); do
               if docker compose --env-file .env.prod -f docker-compose.prod.yml exec -T explorer curl -sf http://localhost:8002/healthz > /dev/null 2>&1; then
@@ -286,15 +508,48 @@ jobs:
             echo "=== Cleaning up old images ==="
             docker image prune -af --filter "until=24h"
             echo ""
-            echo "=== Deployment complete: $DEPLOY_REF ==="
+            echo "TERMINAL_HEALTH_RESULT=healthy"
+            echo "=== Deployment complete: $DEPLOY_SHA ==="
 
+  summary:
+    name: Summarize production deployment
+    if: always()
+    needs: [validate-deploy-sha, lint, typecheck, test-api, test-collector, test-frontend, test-explorer, capture-production-state, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
       - name: Write summary
+        env:
+          DEPLOY_SHA: ${{ inputs.commit_sha }}
+          CAPTURE_OUTCOME: ${{ needs.capture-production-state.result }}
+          DEPLOY_OUTCOME: ${{ needs.deploy.result }}
+          CAPTURED_PRODUCTION_SHA: ${{ needs.capture-production-state.outputs.previous_production_sha }}
         run: |
-          REF="${{ steps.ref.outputs.deploy_ref }}"
-          if [ "$REF" = "main" ]; then
-            echo "### Deployed \`main\` to production" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          PREVIOUS_PRODUCTION_SHA="$CAPTURED_PRODUCTION_SHA"
+          if [[ "$PREVIOUS_PRODUCTION_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            ROLLBACK_POSTURE="The captured previous SHA is available for rollback evaluation; do not redispatch it until the conditions below are satisfied."
+          elif [ "$CAPTURE_OUTCOME" = "skipped" ]; then
+            PREVIOUS_PRODUCTION_SHA="not captured; production was never contacted"
+            ROLLBACK_POSTURE="No rollback SHA was captured; do not guess a revision."
           else
-            echo "### Deployed branch \`$REF\` to production" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "To rollback, re-run this workflow with \`ref=main\`." >> "$GITHUB_STEP_SUMMARY"
+            PREVIOUS_PRODUCTION_SHA="not captured; production state capture did not succeed"
+            ROLLBACK_POSTURE="Do not guess a revision; resolve state capture before authorizing a retry or rollback."
           fi
+          DATABASE_ROLLBACK_CAUTION="Any captured SHA is only an application-code rollback candidate, never a complete rollback. If migrations may have started or applied, stop and obtain a separately accepted database compatibility or recovery decision or procedure before redispatching older code."
+          ROLLBACK_POSTURE="$ROLLBACK_POSTURE $DATABASE_ROLLBACK_CAUTION"
+
+          if [ "$DEPLOY_OUTCOME" = "success" ]; then
+            TERMINAL_HEALTH_RESULT="healthy (API, frontend, explorer, oauth2-proxy /ping)"
+          else
+            TERMINAL_HEALTH_RESULT="not confirmed (deploy job result: $DEPLOY_OUTCOME)"
+          fi
+
+          {
+            echo "### Production deployment summary"
+            echo "- Environment: production"
+            echo "- Requested SHA: \`$DEPLOY_SHA\`"
+            echo "- Previous production SHA: \`$PREVIOUS_PRODUCTION_SHA\`"
+            echo "- Terminal health result: $TERMINAL_HEALTH_RESULT"
+            echo "- Rollback posture: $ROLLBACK_POSTURE"
+          } >> "$GITHUB_STEP_SUMMARY"
