@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: {uv_workflow.CHECKOUT_ACTION}
         with:
-          persist-credentials: false
+          persist-credentials: false # keep the checkout token out of later steps
   unsafe:
     steps:
       - uses: {uv_workflow.CHECKOUT_ACTION}
