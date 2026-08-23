@@ -1,7 +1,7 @@
 # ADR 0001 - Use merge commits by default for pull requests
 
 Date: 2026-08-23 (UTC)
-Status: Proposed
+Status: Accepted
 Decision owners: Yuval Moran
 Linear issue: [SPM-31](https://linear.app/stratex/issue/SPM-31/make-merge-commits-the-default-pull-request-merge-strategy)
 
@@ -34,9 +34,10 @@ linear history. If merge commits are unavailable or linear history is required, 
 reconciles the mismatch rather than substituting another method or changing protection.
 
 Squash and rebase remain enabled as explicit alternatives. Use one only when direct owner
-instruction or the issue's accepted scope names it and the pull request records the rationale.
-Selecting a method never authorizes repository-settings, branch-protection, deployment, or
-production mutations.
+instruction or the issue's accepted scope names it. Every exception must be justified in the pull
+request. If an agent proposes either exception, it must prompt the owner with the requested method
+and rationale, then obtain explicit approval before using it. Selecting a method never authorizes
+repository-settings, branch-protection, deployment, or production mutations.
 
 ## Consequences
 
@@ -49,8 +50,8 @@ production mutations.
 ## Validation
 
 The dependency-free agent-contract validator requires the explicit merge default, alternative
-boundary, live-setting check, and no-mutation rule. Its test mutates the canonical lifecycle and
-proves the validator reports `PR_LIFECYCLE_MERGE_POLICY`.
+boundary, agent-proposed exception owner prompt, live-setting check, and no-mutation rule. Its tests
+mutate the canonical lifecycle and prove the validator reports `PR_LIFECYCLE_MERGE_POLICY`.
 
 ## Rollback / revisit trigger
 

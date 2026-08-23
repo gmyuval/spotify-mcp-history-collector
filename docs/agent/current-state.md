@@ -70,9 +70,10 @@ last-push approval, signed commits, conversation resolution, administrator enfor
 history; force pushes and branch deletion are blocked. Both repository rulesets and effective
 `main` branch rules were empty.
 
-[Proposed ADR 0001](../decisions/0001-pull-request-merge-method-policy.md) would make an
-explicitly selected `merge` operation the canonical default for qualifying pull requests.
-Squash and rebase remain available only as explicitly justified alternatives.
+[ADR 0001](../decisions/0001-pull-request-merge-method-policy.md) makes an explicitly selected
+`merge` operation the canonical default for qualifying pull requests. Squash and rebase remain
+available only as justified exceptions; an agent-proposed exception requires an owner prompt and
+explicit approval before use.
 Re-check the live settings, protection, and
 required linear history before every merge; do not mutate them while selecting a method.
 

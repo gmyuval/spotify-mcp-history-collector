@@ -88,8 +88,10 @@ protection, and required linear history. If merge commits are unavailable or lin
 required, stop and reconcile the mismatch; do not silently substitute another method.
 
 Squash and rebase remain enabled as explicit alternatives, not defaults. Use one only when direct
-owner instruction or the issue's accepted scope names it and the PR records the rationale. Never
-mutate repository merge settings or branch protection as part of selecting a method.
+owner instruction or the issue's accepted scope names it. Every exception must be justified in the
+PR. If an agent proposes either exception, it must prompt the owner with the requested method and
+rationale, then obtain explicit approval before using it. Never mutate repository merge settings or
+branch protection as part of selecting a method.
 
 The root has standing authority to merge a qualifying pull request, but a merge is not qualifying
 when it would cause an unauthorized downstream effect. `.github/workflows/deploy.yml` is currently

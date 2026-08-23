@@ -10,6 +10,7 @@ PR_LIFECYCLE_MERGE_POLICY_TERMS = (
     "invoke the github merge operation with the `merge` method explicitly",
     "`merge` is this repository's default pull-request strategy",
     "squash and rebase remain enabled as explicit alternatives",
+    "if an agent proposes either exception, it must prompt the owner with the requested method and rationale",
     "required linear history",
     "never mutate repository merge settings or branch protection",
 )

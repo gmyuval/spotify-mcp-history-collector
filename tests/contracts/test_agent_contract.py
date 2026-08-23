@@ -491,6 +491,22 @@ class AgentContractTests(unittest.TestCase):
 
             self.assert_reason(validate_contract(root), "PR_LIFECYCLE_MERGE_POLICY")
 
+    def test_agent_proposed_merge_exception_requires_owner_prompt(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.contract_fixture(root)
+            lifecycle = root / ".agents" / "skills" / "pr-lifecycle" / "SKILL.md"
+            text = lifecycle.read_text(encoding="utf-8")
+            mutated = text.replace(
+                "If an agent proposes either exception, it must prompt the owner with the requested method and\n"
+                "rationale, then obtain explicit approval before using it.",
+                "An agent may choose either exception when it records a rationale.",
+            )
+            self.assertNotEqual(text, mutated, "owner-prompt mutation fixture must change the lifecycle")
+            lifecycle.write_text(mutated, encoding="utf-8")
+
+            self.assert_reason(validate_contract(root), "PR_LIFECYCLE_MERGE_POLICY")
+
 
 if __name__ == "__main__":
     unittest.main()
