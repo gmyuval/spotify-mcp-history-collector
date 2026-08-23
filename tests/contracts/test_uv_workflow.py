@@ -67,9 +67,15 @@ jobs:
         with:
           sparse-checkout: |
             persist-credentials: false
+  nested-with:
+    steps:
+      - uses: {uv_workflow.CHECKOUT_ACTION}
+        env:
+          with:
+            persist-credentials: false
 """
 
-        self.assertEqual([2], uv_workflow._checkout_steps_missing_credentials(workflow))
+        self.assertEqual([2, 3], uv_workflow._checkout_steps_missing_credentials(workflow))
 
     def test_ci_uses_read_only_checkout_and_immutable_action_refs(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

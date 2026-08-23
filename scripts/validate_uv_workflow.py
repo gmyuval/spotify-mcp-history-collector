@@ -85,6 +85,14 @@ def _checkout_steps_missing_credentials(workflow: str) -> list[int]:
             if following_indent == step_indent and following_line.lstrip().startswith("- "):
                 break
             step_lines.append(following_line)
+        step_key_indent = min(
+            (
+                len(step_line) - len(step_line.lstrip())
+                for step_line in step_lines
+                if step_line.strip() and not step_line.lstrip().startswith("#")
+            ),
+            default=None,
+        )
         with_indent: int | None = None
         input_indent: int | None = None
         credentials_disabled = False
@@ -94,7 +102,7 @@ def _checkout_steps_missing_credentials(workflow: str) -> list[int]:
                 continue
             indent = len(step_line) - len(step_line.lstrip())
             if with_indent is None:
-                if re.fullmatch(r"with:\s*(?:#.*)?", stripped):
+                if indent == step_key_indent and re.fullmatch(r"with:\s*(?:#.*)?", stripped):
                     with_indent = indent
                 continue
             if indent <= with_indent:
