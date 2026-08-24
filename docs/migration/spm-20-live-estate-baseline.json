@@ -1,0 +1,589 @@
+{
+  "schema_version": 1,
+  "issue": "SPM-20",
+  "captured_at": "2026-08-23T22:59:22.967447Z",
+  "repository_revision": "6cd855e0c7162443fe6e22996b1398a826770ae3",
+  "deployed_revision": "67d85e5a60a2d1a35a8bb156d8555bb77c9ec99e",
+  "capture_policy": {
+    "read_only": true,
+    "raw_provider_payload_persisted": false,
+    "identifier_strategy": "counts, operational enums, stable truncated hashes, and repository revisions only",
+    "production_mutation_performed": false
+  },
+  "capture_scope": {
+    "aggregate_collector_digitalocean_collections": 19,
+    "aggregate_collector_azure_collections": 3,
+    "dependent_product_linkage": "read-only correlated probes with raw selectors retained only in memory",
+    "raw_selectors_persisted": false,
+    "post_cutover_recapture_owner": "SPM-27"
+  },
+  "provider_capture": {
+    "azure": {
+      "counts": {
+        "resource_groups": 11,
+        "resources": 67,
+        "subscriptions": 1
+      },
+      "resource_group_locations": {
+        "francecentral": 3,
+        "israelcentral": 6,
+        "westeurope": 2
+      },
+      "resource_locations": {
+        "francecentral": 14,
+        "global": 19,
+        "israelcentral": 31,
+        "northeurope": 1,
+        "westeurope": 2
+      },
+      "resource_types": {
+        "Microsoft.App/containerApps": 1,
+        "Microsoft.App/jobs": 1,
+        "Microsoft.App/managedEnvironments": 1,
+        "Microsoft.Cache/redisEnterprise": 1,
+        "Microsoft.Compute/disks": 2,
+        "Microsoft.Compute/virtualMachines": 1,
+        "Microsoft.Compute/virtualMachines/extensions": 1,
+        "Microsoft.ContainerRegistry/registries": 2,
+        "Microsoft.DBforPostgreSQL/flexibleServers": 2,
+        "Microsoft.Dashboard/dashboards": 1,
+        "Microsoft.Insights/actiongroups": 1,
+        "Microsoft.Insights/components": 2,
+        "Microsoft.Insights/dataCollectionRules": 1,
+        "Microsoft.Insights/metricalerts": 2,
+        "Microsoft.Insights/scheduledqueryrules": 1,
+        "Microsoft.KeyVault/vaults": 2,
+        "Microsoft.ManagedIdentity/userAssignedIdentities": 4,
+        "Microsoft.Network/dnszones": 3,
+        "Microsoft.Network/loadBalancers": 1,
+        "Microsoft.Network/networkInterfaces": 5,
+        "Microsoft.Network/networkSecurityGroups": 1,
+        "Microsoft.Network/networkWatchers": 2,
+        "Microsoft.Network/privateDnsZones": 6,
+        "Microsoft.Network/privateDnsZones/virtualNetworkLinks": 6,
+        "Microsoft.Network/privateEndpoints": 4,
+        "Microsoft.Network/publicIPAddresses": 2,
+        "Microsoft.Network/virtualNetworks": 2,
+        "Microsoft.OperationalInsights/workspaces": 2,
+        "Microsoft.Storage/storageAccounts": 4,
+        "Microsoft.Web/staticSites": 2,
+        "microsoft.insights/actiongroups": 1
+      },
+      "subscription_states": {
+        "Enabled": 1
+      }
+    },
+    "captured_at": "2026-08-23T22:59:22.967447Z",
+    "digitalocean": {
+      "counts": {
+        "alerts": 15,
+        "apps": 0,
+        "cdns": 1,
+        "certificates": 1,
+        "custom_images": 40,
+        "databases": 4,
+        "domains": 18,
+        "droplets": 9,
+        "firewalls": 9,
+        "kubernetes_clusters": 0,
+        "load_balancers": 0,
+        "projects": 5,
+        "registry_repositories": 2,
+        "reserved_ips": 1,
+        "snapshots": 14,
+        "tags": 27,
+        "uptime": 3,
+        "volumes": 0,
+        "vpcs": 4
+      },
+      "database_engines": {
+        "mysql": 1,
+        "pg": 2,
+        "valkey": 1
+      },
+      "database_regions": {
+        "fra1": 4
+      },
+      "database_states": {
+        "online": 4
+      },
+      "domain_ttls": {
+        "1800": 18
+      },
+      "droplet_regions": {
+        "fra1": 9
+      },
+      "droplet_sizes": {
+        "s-1vcpu-1gb": 2,
+        "s-1vcpu-2gb": 3,
+        "s-2vcpu-2gb": 1,
+        "s-2vcpu-2gb-amd": 1,
+        "s-2vcpu-4gb": 2
+      },
+      "droplet_states": {
+        "active": 9
+      }
+    },
+    "evidence_sha256": "67f4f5f0d3db5de1cc3a40a0a04f786faca1abc777209327574dd1759b63aaee",
+    "schema_version": 1
+  },
+  "production_application": {
+    "repository": {
+      "branch": "main",
+      "clean": true,
+      "commits_behind_origin_main": 41,
+      "deployment_trigger": "manual_only",
+      "last_matching_successful_deployment_date": "2026-04-04"
+    },
+    "compose": {
+      "services": 6,
+      "named_volumes": 3,
+      "running_services": 6,
+      "compose_healthy_services": 3,
+      "services_without_compose_health": [
+        "caddy",
+        "collector",
+        "oauth2-proxy"
+      ]
+    },
+    "ingress_route_map": {
+      "/healthz": "api_without_forward_auth",
+      "/oauth2/*": "oauth2_proxy",
+      "/mcp/*": "api_without_google_forward_auth",
+      "/auth/*": "api_without_google_forward_auth",
+      "/api/*": "api_without_google_forward_auth",
+      "/admin/*": "frontend_with_google_forward_auth",
+      "explorer_public": ["/", "/login", "/static/*"],
+      "explorer_other": "explorer_with_google_forward_auth"
+    },
+    "contract": {
+      "migration_revisions": 13,
+      "expected_head": "013",
+      "expected_tables": 25,
+      "packaging_source": "service-scoped requirements.txt and requirements-dev.txt files",
+      "target_built_images": true,
+      "product_registry_repositories": 0
+    },
+    "dependency_and_image_provenance": {
+      "current_developer_environment": {
+        "environment_yml_present": false,
+        "uv_version": "0.12.3",
+        "python_version": "3.14.7",
+        "lockfile": "uv.lock"
+      },
+      "historical_conda_reference": {
+        "revision": "bf4758bfa113106db135175d2c6cf90bfa8ceb56",
+        "python_version": "3.14",
+        "pip_tools_present": true,
+        "pre_commit_present": true,
+        "editable_workspace_packages": 5
+      },
+      "current_ci": {
+        "locked_workspace_sync": true,
+        "editable_pip_installs": false,
+        "isolated_package_test_jobs": 5
+      },
+      "manual_deployment_gates": {
+        "editable_pip_packages": 5,
+        "ruff_install_pinned": false
+      },
+      "docker_requirements": {
+        "compiler": "pip-tools 7.5.3",
+        "python_version": "3.14.7",
+        "recorded_files": 15,
+        "exact_version_pins": true,
+        "package_hashes_present": false,
+        "lock_git_sha1": "d90689bcbcb405d4973f4b2a9419b95a7e1a9d41"
+      },
+      "dockerfile_git_sha1": {
+        "api": "877d01f8e701fbfb18fdd81fc72292e7800f0bd1",
+        "collector": "ac9006ef5a28599cfc01041be31c693b55ebed2a",
+        "frontend": "929d53b404c8e5569bd2f8736c36c130b5be146b",
+        "explorer": "08ab1fa58ad911adc3141b5b9f87a944b656dbda"
+      },
+      "base_image_references": {
+        "api": "python:3.14-slim",
+        "collector": "python:3.14-slim",
+        "frontend": "python:3.14-slim",
+        "explorer": "python:3.14-slim"
+      },
+      "compose_runtime_image_references": {
+        "oauth2_proxy": "quay.io/oauth2-proxy/oauth2-proxy:v7.14.2",
+        "caddy": "caddy:2-alpine"
+      },
+      "production_compose_git_sha1": "29a9694dd64ee2bcb5b47431d1a586196fbc4818",
+      "service_requirement_inputs": {
+        "api": ["services/api/requirements-dev.txt", "services/shared/requirements.txt"],
+        "collector": ["services/collector/requirements-dev.txt", "services/shared/requirements.txt"],
+        "frontend": ["services/frontend/requirements-dev.txt"],
+        "explorer": ["services/explorer/requirements.txt"]
+      },
+      "base_image_digests": "unavailable",
+      "live_application_image_identity": "unavailable",
+      "unavailable_owner": "SPM-23",
+      "packaging_decision_owner": "SPM-4"
+    },
+    "database": {
+      "engine": "postgresql",
+      "provider_version": "18",
+      "live_version": "18.4",
+      "plan": "db-amd-2vcpu-4gb",
+      "provisioned_storage_mib": 61440,
+      "nodes": 1,
+      "live_head": "013",
+      "live_tables": 26,
+      "live_columns": 199,
+      "estimated_rows": 10214372,
+      "database_bytes": 3390977727,
+      "schema_sha256": "291e040641ed750a3a6ce89ed4549fa742740e7bf0f5c1e5e49f73d7d9cb7dd7",
+      "schema_hash_strategy": "SHA-256 of compact JSON for ordered public information_schema column tuples: table_name, column_name, data_type, is_nullable",
+      "extensions": [
+        "plpgsql"
+      ],
+      "provider_backups": 8,
+      "backup_observed_range": [
+        "2026-08-16",
+        "2026-08-23"
+      ],
+      "trusted_sources": {
+        "droplet": 1,
+        "address_rule": 1,
+        "tag": 2
+      },
+      "restore_test_evidence": "unavailable",
+      "configured_backup_retention": "unavailable"
+    },
+    "durable_state": {
+      "upload_files": 1,
+      "upload_bytes": 2606440,
+      "upload_manifest_sha256": "ced4f764f7b6d0d4ef44d3645181f14b9518ee8cb89c607bb4c71a3aa7e78981",
+      "upload_retention_policy": "unavailable",
+      "caddy_data_kib": 76,
+      "caddy_config_kib": 16,
+      "external_allowlist_present": false,
+      "legacy_allowlist_present": true,
+      "legacy_allowlist_lines": 2,
+      "legacy_allowlist_bytes": 93
+    },
+    "health": {
+      "tls_verified": true,
+      "public_status": 200,
+      "direct_origin_status": 200,
+      "certificate_sha256": "8ce350cc4868e4c2880564b97242ab5b47fe02b1371061423b567506f53cf7eb",
+      "certificate_expiry": "2026-10-22T20:44:00Z",
+      "issuer_sha256_12": "c1ef1a2b9380"
+    },
+    "monthly_cost_usd": {
+      "billing_period": "2026-07",
+      "droplet_and_backups": 20.1,
+      "postgresql": 72.9,
+      "valkey": 15,
+      "total": 108,
+      "unbilled_control_plane_resources": 0
+    }
+  },
+  "resource_classifications": [
+    {
+      "resource_alias": "do-droplet-primary",
+      "provider": "digitalocean",
+      "resource_type": "droplet",
+      "identity_sha256_12": "f41a75306cc2",
+      "classification": "retain_temporarily",
+      "evidence": "active fra1 s-2vcpu-2gb; retire after Azure rollback window"
+    },
+    {
+      "resource_alias": "do-firewall-primary",
+      "provider": "digitalocean",
+      "resource_type": "firewall",
+      "identity_sha256_12": "9254468cd702",
+      "classification": "retain_temporarily",
+      "evidence": "one linked firewall with three inbound and three outbound rules"
+    },
+    {
+      "resource_alias": "do-vpc-default",
+      "provider": "digitalocean",
+      "resource_type": "vpc",
+      "identity_sha256_12": "31f97364025a",
+      "classification": "explicit_exception",
+      "evidence": "regional default VPC; exclusive product ownership not established"
+    },
+    {
+      "resource_alias": "do-project-production",
+      "provider": "digitalocean",
+      "resource_type": "project",
+      "identity_sha256_12": "c73b8e7ab713",
+      "classification": "explicit_exception",
+      "evidence": "shared project contains product and unrelated databases"
+    },
+    {
+      "resource_alias": "do-postgresql-primary",
+      "provider": "digitalocean",
+      "resource_type": "managed-postgresql",
+      "identity_sha256_12": "e382fda06b02",
+      "classification": "migrate",
+      "evidence": "endpoint-matched online PostgreSQL cluster; retain source for rollback then retire"
+    },
+    {
+      "resource_alias": "do-valkey-primary",
+      "provider": "digitalocean",
+      "resource_type": "managed-valkey",
+      "identity_sha256_12": "28b0ddf8b614",
+      "classification": "replace",
+      "evidence": "endpoint-matched online Valkey node; SPM-4 owns target decision"
+    },
+    {
+      "resource_alias": "do-dns-zone-shared",
+      "provider": "digitalocean",
+      "resource_type": "dns-zone",
+      "identity_sha256_12": "e87a8a7ad7ea",
+      "classification": "explicit_exception",
+      "evidence": "product record shares a zone with 20 other records"
+    },
+    {
+      "resource_alias": "do-dns-record-primary",
+      "provider": "digitalocean",
+      "resource_type": "dns-a-record",
+      "identity_sha256_12": "e87a8a7ad7ea",
+      "classification": "replace",
+      "evidence": "direct-origin record with TTL 300; change only under SPM-27"
+    },
+    {
+      "resource_alias": "do-uptime-check-primary",
+      "provider": "digitalocean",
+      "resource_type": "uptime-check",
+      "identity_sha256_12": "e50a286cc882",
+      "classification": "replace",
+      "evidence": "one enabled HTTPS check; replace with accepted Azure monitoring"
+    },
+    {
+      "resource_alias": "do-provider-certificate-primary",
+      "provider": "digitalocean",
+      "resource_type": "provider-certificate",
+      "classification": "explicit_exception",
+      "evidence": "domain-linked certificate; actual runtime use unverified"
+    },
+    {
+      "resource_alias": "do-droplet-backup-set",
+      "provider": "digitalocean",
+      "resource_type": "droplet-backups",
+      "classification": "retain_temporarily",
+      "evidence": "backups enabled; five provider objects; retire after rollback window"
+    },
+    {
+      "resource_alias": "do-trusted-source-tags",
+      "provider": "digitalocean",
+      "resource_type": "database-access-tags",
+      "classification": "retain_temporarily",
+      "evidence": "two tag rules; shared consumers not disproved"
+    },
+    {
+      "resource_alias": "droplet-upload-data",
+      "provider": "application",
+      "resource_type": "named-volume",
+      "classification": "migrate",
+      "evidence": "one retained archive with no implemented cleanup or retention contract"
+    },
+    {
+      "resource_alias": "droplet-caddy-data",
+      "provider": "application",
+      "resource_type": "named-volume",
+      "classification": "replace",
+      "evidence": "runtime ingress state; recreate from accepted Azure ingress design"
+    },
+    {
+      "resource_alias": "droplet-caddy-config",
+      "provider": "application",
+      "resource_type": "named-volume",
+      "classification": "replace",
+      "evidence": "runtime ingress config; repository Caddyfile remains declarative source"
+    },
+    {
+      "resource_alias": "droplet-legacy-allowlist",
+      "provider": "application",
+      "resource_type": "bind-mounted-access-file",
+      "classification": "migrate",
+      "evidence": "external path absent; migrate legacy file before any authorized deployment"
+    }
+  ],
+  "azure_readiness": {
+    "tenant_count": 1,
+    "tenant_sha256_12": "4f116b141f93",
+    "enabled_subscriptions": 1,
+    "subscription_sha256_12": "c560ebbf4f76",
+    "authenticated_identity_type": "user",
+    "subscription_scope_role_assignments": 4,
+    "intended_environment": "production",
+    "product_resource_group_boundary": "not_established",
+    "product_resource_groups": 0,
+    "permissions": [
+      "Owner",
+      "Key Vault Secrets Officer",
+      "Storage Blob Data Contributor"
+    ],
+    "candidate_regions": {
+      "germanywestcentral": {
+        "vcpu_used": 0,
+        "vcpu_limit": 10,
+        "container_apps": true,
+        "container_apps_profile_count": 25,
+        "representative_container_apps_profiles": ["Consumption", "Flex", "D", "E", "DC", "EC"],
+        "postgresql_editions": 0,
+        "postgresql_versions": 0,
+        "postgresql_tiers": [],
+        "posture": "reject unless availability changes"
+      },
+      "westeurope": {
+        "vcpu_used": 0,
+        "vcpu_limit": 10,
+        "container_apps": true,
+        "container_apps_profile_count": 11,
+        "representative_container_apps_profiles": ["Consumption", "Flex", "D", "E", "GPU"],
+        "postgresql_editions": 3,
+        "postgresql_versions": 8,
+        "postgresql_tiers": ["Burstable", "GeneralPurpose", "MemoryOptimized"],
+        "posture": "candidate"
+      },
+      "northeurope": {
+        "vcpu_used": 0,
+        "vcpu_limit": 10,
+        "container_apps": true,
+        "container_apps_profile_count": 13,
+        "representative_container_apps_profiles": ["Consumption", "Flex", "D", "E", "A100"],
+        "postgresql_editions": 3,
+        "postgresql_versions": 8,
+        "postgresql_tiers": ["Burstable", "GeneralPurpose", "MemoryOptimized"],
+        "posture": "candidate"
+      }
+    },
+    "required_provider_types_registered": true,
+    "redis_enterprise_sku_probe": "unavailable; optional preview extension not installed",
+    "mutation_performed": false
+  },
+  "external_couplings": {
+    "github": {
+      "production_environment": true,
+      "repository_secret_names": [
+        "DROPLET_IP",
+        "SSH_PRIVATE_KEY"
+      ],
+      "workflow_required_secret_names": [
+        "DO_API_TOKEN",
+        "DO_DB_CLUSTER_ID",
+        "DROPLET_IP",
+        "DROPLET_SSH_HOST_FINGERPRINT",
+        "SSH_PRIVATE_KEY"
+      ],
+      "repository_variables": 0,
+      "production_environment_secrets": 0,
+      "production_environment_variables": 0,
+      "required_fingerprint_present": false
+    },
+    "dns": {
+      "provider": "digitalocean",
+      "public_hostname": "music.praxiscode.dev",
+      "record_ttl_seconds": 300,
+      "tls_automation": "caddy",
+      "direct_origin_record": true,
+      "registrar_ownership": "unavailable"
+    },
+    "oauth": {
+      "spotify_callback": "https path /auth/callback",
+      "google_callback": "https path /oauth2/callback",
+      "google_proxy_provider": true,
+      "control_plane_ownership": "unavailable"
+    },
+    "integrations": {
+      "spotify_accounts_and_web_api": "required OAuth and playback-history dependency",
+      "musicbrainz": "public metadata dependency",
+      "soundcharts": "optional credential-backed audio-feature dependency",
+      "external_valkey": "required production cache dependency"
+    },
+    "mcp_client_paths": ["/mcp/v1", "/mcp/tools", "/mcp/call"],
+    "operational_access": ["root SSH for initial provisioning", "deploy SSH for routine workflow"],
+    "images": {
+      "target_built": true,
+      "product_registry_repositories": 0,
+      "dependency_source": "service-scoped requirements files",
+      "mutable_base_tags": true,
+      "packaging_owner": "SPM-4"
+    }
+  },
+  "measured_drift": [
+    {
+      "finding": "INTERNAL_API_KEY omitted from example and generated provisioning block while required by production Compose",
+      "follow_up_owner": "SPM-34"
+    },
+    {
+      "finding": "documented route table differs from current Caddy configuration",
+      "follow_up_owner": "SPM-34"
+    },
+    {
+      "finding": "upload archive lacks cleanup retention checksum and backup contract",
+      "follow_up_owner": "SPM-25"
+    },
+    {
+      "finding": "target-built images and mutable base tags make image rollback non-reproducible",
+      "follow_up_owner": "SPM-23"
+    },
+    {
+      "finding": "initial provisioner migrates without first stopping collector",
+      "follow_up_owner": "SPM-34"
+    },
+    {
+      "finding": "deployment summary overstates measured health evidence",
+      "follow_up_owner": "SPM-34"
+    }
+  ],
+  "unavailable_evidence": [
+    {
+      "evidence": "DigitalOcean access-principal scopes rotation and service-account ownership",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-35"
+    },
+    {
+      "evidence": "registrar ownership and DNS change authority",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-35"
+    },
+    {
+      "evidence": "Spotify and Google OAuth control-plane ownership",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-35"
+    },
+    {
+      "evidence": "production SSH fingerprint and external allowlist migration",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-24"
+    },
+    {
+      "evidence": "PostgreSQL restore test and recovery objectives",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-26"
+    },
+    {
+      "evidence": "configured managed PostgreSQL backup retention policy",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-26"
+    },
+    {
+      "evidence": "base-image digests resulting application image identities and build timestamps",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-23"
+    },
+    {
+      "evidence": "Azure Redis Enterprise SKU detail for accepted cache target",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-4"
+    },
+    {
+      "evidence": "cutover-time recapture and rollback validation",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-27"
+    },
+    {
+      "evidence": "accepted resolution of deployment-contract drift",
+      "status": "unavailable",
+      "follow_up_owner": "SPM-34"
+    }
+  ]
+}
