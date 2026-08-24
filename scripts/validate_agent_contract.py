@@ -5,7 +5,17 @@ import stat
 import sys
 from pathlib import Path
 
-EXPECTED_SKILLS = frozenset({"adr-new", "end-session", "pr-lifecycle", "session-start"})
+EXPECTED_SKILLS = frozenset(
+    {
+        "adr-new",
+        "coderabbit-review",
+        "end-session",
+        "gate-oracle",
+        "pr-lifecycle",
+        "retro",
+        "session-start",
+    }
+)
 PR_LIFECYCLE_MERGE_POLICY_TERMS = (
     "invoke the github merge operation with the `merge` method explicitly",
     "`merge` is this repository's default pull-request strategy",

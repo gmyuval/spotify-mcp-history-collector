@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "expected_head_sha": "0000000000000000000000000000000000000000",
+  "observed_head_sha": "0000000000000000000000000000000000000000",
+  "pull_request": {
+    "number": 1,
+    "mergeable": "MERGEABLE",
+    "review_decision": "APPROVED",
+    "review_in_flight": false
+  },
+  "populations": {
+    "reviews": {
+      "total_count": 0,
+      "pages": [
+        {
+          "request_cursor": null,
+          "items": [],
+          "page_info": {
+            "has_next_page": false,
+            "end_cursor": null
+          }
+        }
+      ]
+    },
+    "issue_comments": {
+      "total_count": 0,
+      "pages": [
+        {
+          "request_cursor": null,
+          "items": [],
+          "page_info": {
+            "has_next_page": false,
+            "end_cursor": null
+          }
+        }
+      ]
+    },
+    "review_threads": {
+      "total_count": 1,
+      "pages": [
+        {
+          "request_cursor": null,
+          "items": [
+            {
+              "node_id": "thread-node-1",
+              "is_resolved": false,
+              "comments": {
+                "total_count": 1,
+                "pages": [
+                  {
+                    "request_cursor": null,
+                    "items": [
+                      {
+                        "node_id": "review-comment-node-1",
+                        "database_id": 101,
+                        "reply_to_node_id": null,
+                        "body_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      }
+                    ],
+                    "page_info": {
+                      "has_next_page": false,
+                      "end_cursor": null
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "page_info": {
+            "has_next_page": false,
+            "end_cursor": null
+          }
+        }
+      ]
+    },
+    "check_runs": {
+      "total_count": 1,
+      "pages": [
+        {
+          "request_cursor": null,
+          "items": [
+            {
+              "node_id": "check-run-node-1",
+              "name": "Lint",
+              "status": "COMPLETED",
+              "conclusion": "SUCCESS",
+              "head_sha": "0000000000000000000000000000000000000000"
+            }
+          ],
+          "page_info": {
+            "has_next_page": false,
+            "end_cursor": null
+          }
+        }
+      ]
+    }
+  },
+  "source_audit": [
+    {
+      "source_population": "review_thread_comments",
+      "source_node_id": "review-comment-node-1",
+      "body_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "finding_count": 0
+    }
+  ],
+  "findings": [],
+  "mutations": [
+    {
+      "expected_head_sha": "0000000000000000000000000000000000000000",
+      "observed_head_before": "0000000000000000000000000000000000000000",
+      "operations": [
+        {
+          "sequence": 1,
+          "kind": "reply",
+          "thread_node_id": "thread-node-1",
+          "target_comment": {
+            "node_id": "review-comment-node-1",
+            "database_id": 101
+          },
+          "created_comment": {
+            "node_id": "review-comment-node-2",
+            "database_id": 102
+          },
+          "expected_body_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "readback": {
+            "node_id": "review-comment-node-2",
+            "database_id": 102,
+            "reply_to_node_id": "review-comment-node-1",
+            "thread_node_id": "thread-node-1",
+            "body_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        },
+        {
+          "sequence": 2,
+          "kind": "resolve",
+          "thread_node_id": "thread-node-1",
+          "response": {
+            "thread_node_id": "thread-node-1",
+            "is_resolved": true
+          },
+          "readback": {
+            "thread_node_id": "thread-node-1",
+            "is_resolved": true
+          }
+        }
+      ]
+    }
+  ]
+}

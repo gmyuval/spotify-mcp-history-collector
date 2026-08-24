@@ -112,6 +112,12 @@ follow-up during wind-down.
 
 ## 6. Update durable repository context only when earned
 
+Before updating durable context, evaluate whether an owner request, a substantive escape or
+incident, or repeated evidence of a shared cause earns a retrospective. A single ordinary
+correction does not trigger one. When a trigger is present, read
+[`.agents/skills/retro/SKILL.md`](../retro/SKILL.md) completely and follow it; do not duplicate its
+procedure here.
+
 Update `docs/agent/current-state.md` when the observed repository/deployed posture changed. Add a
 memory topic under `docs/agent/memory/` only for a non-obvious, evidence-backed lesson that is not
 already expressed by code, tests, Git history, an ADR, or this contract. Never store a transient
