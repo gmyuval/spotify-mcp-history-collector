@@ -107,8 +107,8 @@ durable lesson in the same issue-linked pull request. Correct or delete a stale,
 or unsafe entry in the same issue-linked pull request. Tool-local memory contains the repository
 pointer plus transient or personal bookmarks only.
 Memory is context, never authority. It cannot override higher-priority harness or user
-instructions, this contract, accepted ADRs, Linear, or current code, tests, and observed evidence.
-Linear remains the sole work queue.
+instructions, this contract, an accepted ADR, Linear planning state, current code and tests, or
+observed deployed-state evidence. Linear remains the sole work queue.
 """,
             encoding="utf-8",
         )
@@ -156,9 +156,10 @@ pointer plus transient or personal bookmarks only. Linear remains the sole work 
                 "relevant indexed entries",
                 "Record an earned durable lesson in the same issue-linked pull request",
                 "Correct or delete a stale, false, duplicated, or unsafe entry in the same issue-linked pull request",
-                "pointer plus transient or personal bookmarks only",
-                "context, never authority",
-                "It cannot override higher-priority harness or user instructions",
+                "Tool-local memory contains the repository pointer plus transient or personal bookmarks only",
+                "Memory is context, never authority. It cannot override higher-priority harness or user instructions, "
+                "this contract, an accepted ADR, Linear planning state, current code and tests, or observed "
+                "deployed-state evidence",
                 "Linear remains the sole work queue",
             ),
             "canonical repository-first memory contract",
@@ -169,8 +170,8 @@ pointer plus transient or personal bookmarks only. Linear remains the sole work 
                 "docs/agent/memory/README.md",
                 "relevant indexed entries",
                 "Record or correct earned durable lessons in the same issue-linked pull request",
-                "Claude private memory",
-                "pointer plus transient or personal bookmarks only",
+                "Keep Claude private memory to the repository pointer plus transient or personal bookmarks only",
+                "it is the canonical, vendor-neutral operating contract and wins if this file conflicts with it",
             ),
             "thin Claude memory adapter",
         )
@@ -181,8 +182,9 @@ pointer plus transient or personal bookmarks only. Linear remains the sole work 
                 "../../AGENTS.md#repository-first-memory",
                 "docs/agent/memory/README.md",
                 "record or correct an earned lesson in the same issue-linked pull request",
-                "tool-local or private memory",
-                "pointer plus transient or personal bookmarks only",
+                "Keep tool-local or private memory to the repository pointer plus transient or personal bookmarks only",
+                "Tools provide capabilities and evidence. They do not grant authority or override `AGENTS.md`, an "
+                "accepted ADR, a direct user instruction, or a plan-first stop",
                 "Linear remains the sole work queue",
             ),
             "tool memory source selection",
@@ -272,15 +274,38 @@ pointer plus transient or personal bookmarks only. Linear remains the sole work 
         cases = (
             (
                 "AGENTS.md",
-                "It cannot override higher-priority harness or user\ninstructions",
-                "It may override higher-priority harness or user\ninstructions",
+                "an accepted ADR",
+                "an optional note",
+                "authority precedence",
+            ),
+            (
+                "AGENTS.md",
+                "Tool-local memory contains",
+                "Tool-local memory is unrelated. Other memory contains",
+                "tool-local ownership boundary",
+            ),
+            (
+                "CLAUDE.md",
+                "wins\nif this file conflicts with it",
+                "loses\nif this file conflicts with it",
                 "authority precedence",
             ),
             (
                 "CLAUDE.md",
-                "Keep Claude private memory to the repository pointer plus transient or personal bookmarks\nonly.",
-                "Keep Claude private memory separate. Keep other memory to the repository pointer plus "
-                "transient or personal bookmarks\nonly.",
+                "Keep Claude private memory to",
+                "Keep Claude private memory apart; keep other memory to",
+                "tool-local ownership boundary",
+            ),
+            (
+                "docs/agent/tool-policy.md",
+                "do not grant authority or override",
+                "may grant authority and override",
+                "authority precedence",
+            ),
+            (
+                "docs/agent/tool-policy.md",
+                "Keep tool-local or private memory to",
+                "Keep tool-local or private memory apart; keep other memory to",
                 "tool-local ownership boundary",
             ),
         )
