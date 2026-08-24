@@ -60,6 +60,10 @@ tool summary, green badge, or issue checkbox is only a claim until checked.
 - [ ] The current branch-protection rules were read live; every required check is green on that
       head and the required approving review targets that head.
 - [ ] No unresolved review thread or known review still in flight remains.
+- [ ] `gate-oracle` produced the final current-head readiness verdict from a known-good control,
+      its motivating negative mutation, complete validated review evidence, and distinct live
+      check-run and commit-status populations; its technical result was not treated as merge or
+      deployment authority.
 - [ ] Standing repository-delivery authority covered commit, normal push, PR creation/update, and
       any qualifying merge; deployment and production effects were separately authorized, and no
       gate was bypassed.

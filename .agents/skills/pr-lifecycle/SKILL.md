@@ -70,6 +70,10 @@ the canonical collection, finding-adjudication, mutation, and convergence proced
 verify every delegate report from the actual diff, command output, or external object. Delegates do
 not arm watchers or mutate GitHub/Linear, and the root retains every authority decision.
 
+After CodeRabbit convergence, read and invoke
+[`gate-oracle`](../../../.agents/skills/gate-oracle/SKILL.md) for the final current-head readiness
+verdict. Its technical result is necessary but never grants merge or deployment authority.
+
 Do not assume CodeRabbit, auto-merge, or branch deletion. Query the repository's current settings
 and branch protection before relying on them. A review approval must target the current head, every
 required check must be green there, GitHub must report the PR mergeable, and no unresolved finding

@@ -76,9 +76,10 @@ the finding resolved.
 
 Batch review fixes into one normal push when practical. Every fix push changes the head and
 invalidates prior approval, review, and check evidence. Rerun affected gates, collect and validate
-a complete new bundle, and require a fresh CodeRabbit/current-head verdict with no review in
-flight, no open finding, complete required checks, current mergeability, and live branch-protection
-reconciliation.
+a complete new bundle, and require a fresh CodeRabbit/current-head verdict. Then read and invoke
+[`gate-oracle`](../gate-oracle/SKILL.md) for the final current-head readiness verdict; it independently
+requires no review in flight, no open finding, complete required checks, current mergeability, and
+live branch-protection reconciliation without granting merge or deployment authority.
 
 Stop and preserve evidence when the head drifts during mutation, evidence cannot be completed,
 the same cause repeats without convergence, a fresh current-head verdict is unavailable, or an
