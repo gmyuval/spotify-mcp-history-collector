@@ -123,6 +123,11 @@ memory topic under `docs/agent/memory/` only for a non-obvious, evidence-backed 
 already expressed by code, tests, Git history, an ADR, or this contract. Never store a transient
 resume bookmark or action-bearing instruction as durable memory.
 
+Read [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md) before relevant indexed
+entries. Distinguish an earned durable lesson from a transient or personal bookmark. Record any
+earned entry and index change in the same issue-linked pull request as its evidence. Remove a landed
+bookmark and any bookmark whose state is recoverable from Git, GitHub, Linear, or the repository.
+
 ## 7. Hand off
 
 Report all of the following:

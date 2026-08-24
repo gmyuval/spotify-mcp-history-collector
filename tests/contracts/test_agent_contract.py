@@ -134,6 +134,30 @@ pointer plus transient or personal bookmarks only. Linear remains the sole work 
 """,
             encoding="utf-8",
         )
+        lifecycle_instructions = {
+            ".agents/skills/session-start/SKILL.md": """Read
+`docs/agent/memory/README.md` first, then only topic entries relevant to this task.
+""",
+            ".agents/skills/pr-lifecycle/SKILL.md": """Read
+`docs/agent/memory/README.md` before relevant indexed entries. Assess whether the change affects
+repository memory. Correct or delete any stale repository-memory entry in the same issue-linked
+pull request; never preserve a contradictory private note.
+""",
+            ".agents/skills/end-session/SKILL.md": """Read
+`docs/agent/memory/README.md` before relevant indexed entries. Distinguish an earned durable lesson
+from a transient or personal bookmark. Remove a landed bookmark and any bookmark whose state is
+recoverable from Git, GitHub, Linear, or the repository.
+""",
+            "docs/agent/review-checklist.md": """Repository memory was considered. Durable context
+is placed at the correct source of truth and updated only when earned. Any repository-memory entry
+and `docs/agent/memory/README.md` index change preserve index integrity. No transient, personal, or
+private content was committed.
+""",
+        }
+        for relative, content in lifecycle_instructions.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
         return readme, entry
 
     def test_live_memory_contract_passes_validator(self) -> None:
@@ -189,6 +213,71 @@ pointer plus transient or personal bookmarks only. Linear remains the sole work 
             ),
             "tool memory source selection",
         )
+
+    def test_memory_lifecycle_integration(self) -> None:
+        session_start = " ".join(self.read(".agents/skills/session-start/SKILL.md").split())
+        pr_lifecycle = " ".join(self.read(".agents/skills/pr-lifecycle/SKILL.md").split())
+        end_session = " ".join(self.read(".agents/skills/end-session/SKILL.md").split())
+        review_checklist = " ".join(self.read("docs/agent/review-checklist.md").split())
+
+        self.assert_terms(
+            session_start,
+            (
+                "docs/agent/memory/README.md",
+                "first, then only topic entries relevant to this task",
+            ),
+            "session-start repository-memory retrieval",
+        )
+        self.assert_terms(
+            pr_lifecycle,
+            (
+                "docs/agent/memory/README.md",
+                "Assess whether the change affects repository memory",
+                "Correct or delete any stale repository-memory entry in the same issue-linked pull request",
+                "never preserve a contradictory private note",
+            ),
+            "pull-request repository-memory reconciliation",
+        )
+        self.assert_terms(
+            end_session,
+            (
+                "docs/agent/memory/README.md",
+                "Distinguish an earned durable lesson from a transient or personal bookmark",
+                "Remove a landed bookmark",
+                "bookmark whose state is recoverable from Git, GitHub, Linear, or the repository",
+            ),
+            "end-session repository-memory wind-down",
+        )
+        self.assert_terms(
+            review_checklist,
+            (
+                "Repository memory was considered",
+                "correct source of truth",
+                "updated only when earned",
+                "docs/agent/memory/README.md",
+                "index integrity",
+                "No transient, personal, or private content",
+            ),
+            "repository-memory review coverage",
+        )
+
+    def test_memory_lifecycle_pointer_mutation_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            lifecycle = root / ".agents" / "skills" / "pr-lifecycle" / "SKILL.md"
+            text = lifecycle.read_text(encoding="utf-8")
+            mutated = text.replace(
+                "docs/agent/memory/README.md",
+                "docs/agent/memory/private-index.md",
+            )
+            self.assertNotEqual(text, mutated, "lifecycle pointer mutation fixture must change the skill")
+            lifecycle.write_text(mutated, encoding="utf-8")
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: .agents/skills/pr-lifecycle/SKILL.md: repository memory index"],
+                agent_memory.validate_memory(root),
+            )
 
     def test_memory_instruction_pointer_mutation_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -124,6 +124,51 @@ INSTRUCTION_POINTER_RULES = {
         ),
         ("Linear-only work queue", re.escape("linear remains the sole work queue")),
     ),
+    Path(".agents/skills/session-start/SKILL.md"): (
+        ("repository memory index", re.escape("docs/agent/memory/readme.md")),
+        (
+            "relevant indexed retrieval",
+            re.escape("first, then only topic entries relevant to this task"),
+        ),
+    ),
+    Path(".agents/skills/pr-lifecycle/SKILL.md"): (
+        ("repository memory index", re.escape("docs/agent/memory/readme.md")),
+        (
+            "memory impact assessment",
+            re.escape("assess whether the change affects repository memory"),
+        ),
+        (
+            "same-PR stale correction",
+            re.escape("correct or delete any stale repository-memory entry in the same issue-linked pull request"),
+        ),
+        (
+            "private contradiction prohibition",
+            re.escape("never preserve a contradictory private note"),
+        ),
+    ),
+    Path(".agents/skills/end-session/SKILL.md"): (
+        ("repository memory index", re.escape("docs/agent/memory/readme.md")),
+        (
+            "durable or transient classification",
+            re.escape("distinguish an earned durable lesson from a transient or personal bookmark"),
+        ),
+        ("landed bookmark cleanup", re.escape("remove a landed bookmark")),
+        (
+            "recoverable bookmark cleanup",
+            re.escape("bookmark whose state is recoverable from git, github, linear, or the repository"),
+        ),
+    ),
+    Path("docs/agent/review-checklist.md"): (
+        ("memory consideration", re.escape("repository memory was considered")),
+        ("source-of-truth placement", re.escape("correct source of truth")),
+        ("earned updates only", re.escape("updated only when earned")),
+        ("repository memory index", re.escape("docs/agent/memory/readme.md")),
+        ("index integrity", re.escape("index integrity")),
+        (
+            "transient or private exclusion",
+            re.escape("no transient, personal, or private content"),
+        ),
+    ),
 }
 
 
