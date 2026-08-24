@@ -317,6 +317,25 @@ class ReviewEvidenceTests(unittest.TestCase):
             any(issue.startswith("FINDING_KEY_DUPLICATE:") for issue in validate_evidence(document, "0" * 40))
         )
 
+    def test_finding_key_may_be_reused_by_distinct_audited_sources(self) -> None:
+        document = full_domain_bundle()
+        issue_audit = next(
+            audit for audit in document["source_audit"] if audit["source_population"] == "issue_comments"
+        )
+        issue_audit["finding_count"] = 1
+        document["findings"].append(
+            {
+                "source_population": "issue_comments",
+                "source_node_id": "issue-comment-node-1",
+                "ordinal": 1,
+                "key": "finding-1",
+                "disposition": "fixed",
+                "evidence_reference": "synthetic-issue-reference",
+            }
+        )
+
+        self.assertEqual([], validate_evidence(document, "0" * 40))
+
     def test_invalid_finding_disposition_fails_closed(self) -> None:
         document = deepcopy(complete_bundle())
         document["source_audit"][0]["finding_count"] = 1

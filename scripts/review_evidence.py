@@ -412,7 +412,7 @@ def validate_evidence(document: object, expected_head: str) -> list[str]:
         issues.append("EVIDENCE_TYPE_INVALID: root.findings")
         findings_value = []
     findings_by_source: dict[tuple[str, str], list[dict[object, object]]] = {}
-    finding_keys: set[str] = set()
+    finding_keys: set[tuple[str, str, str]] = set()
     for finding_index, value in enumerate(findings_value):
         path = f"root.findings[{finding_index}]"
         finding = _exact_object(
@@ -432,10 +432,11 @@ def validate_evidence(document: object, expected_head: str) -> list[str]:
         _require_string(source_node_id, f"{path}.source_node_id", issues, nonempty=True)
         _require_positive_integer(finding.get("ordinal"), f"{path}.ordinal", issues)
         _require_string(key_value, f"{path}.key", issues, nonempty=True)
-        if isinstance(key_value, str):
-            if key_value in finding_keys:
+        if isinstance(source_population, str) and isinstance(source_node_id, str) and isinstance(key_value, str):
+            local_key = (source_population, source_node_id, key_value)
+            if local_key in finding_keys:
                 issues.append("FINDING_KEY_DUPLICATE: root.findings")
-            finding_keys.add(key_value)
+            finding_keys.add(local_key)
         disposition = finding.get("disposition")
         if not isinstance(disposition, str) or disposition not in FINDING_DISPOSITIONS:
             issues.append("FINDING_DISPOSITION_INVALID: root.findings")
