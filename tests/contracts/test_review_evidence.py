@@ -1,6 +1,8 @@
 """Contract tests for the complete SPM-32 review-evidence bundle."""
 
 import json
+import subprocess
+import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
@@ -12,6 +14,7 @@ from tempfile import TemporaryDirectory
 from scripts.review_evidence import main, validate_evidence
 
 FIXTURES = Path(__file__).parent / "fixtures" / "review-evidence"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "review_evidence.py"
 
 
 def complete_bundle() -> dict[str, object]:
@@ -125,6 +128,17 @@ class ReviewEvidenceTests(unittest.TestCase):
         self.assertTrue(any(issue.startswith("ITEM_ID_DUPLICATE:") for issue in issues))
         self.assertTrue(any(issue.startswith("COUNT_MISMATCH:") for issue in issues))
 
+    def test_duplicate_valid_record_cannot_satisfy_total_count(self) -> None:
+        document = full_domain_bundle()
+        reviews = document["populations"]["reviews"]
+        reviews["pages"][0]["items"].append(deepcopy(reviews["pages"][0]["items"][0]))
+        reviews["total_count"] = 2
+
+        issues = validate_evidence(document, "0" * 40)
+
+        self.assertIn("ITEM_ID_DUPLICATE: root.populations.reviews", issues)
+        self.assertIn("COUNT_MISMATCH: root.populations.reviews", issues)
+
     def test_unknown_keys_and_missing_record_fields_fail_closed(self) -> None:
         with self.subTest("unknown key"):
             document = deepcopy(complete_bundle())
@@ -229,6 +243,77 @@ class ReviewEvidenceTests(unittest.TestCase):
         self.assertTrue(
             any(issue.startswith("SOURCE_BODY_HASH_MISMATCH:") for issue in validate_evidence(document, "0" * 40))
         )
+
+    def test_json_escaped_lone_surrogate_direct_validation_fails_closed(self) -> None:
+        document = deepcopy(complete_bundle())
+        comment = document["populations"]["review_threads"]["pages"][0]["items"][0]["comments"]["pages"][0]["items"][0]
+        comment["body"] = json.loads(r'"\ud800"')
+
+        issues = validate_evidence(document, "0" * 40)
+
+        self.assertIn(
+            "SOURCE_BODY_ENCODING_INVALID: "
+            "root.populations.review_threads.pages[0].items[0].comments.pages[0].items[0].body",
+            issues,
+        )
+
+    def test_cli_json_escaped_lone_surrogate_fails_closed_without_traceback_or_echo(self) -> None:
+        sentinel = r"\ud800"
+        document = deepcopy(complete_bundle())
+        comment = document["populations"]["review_threads"]["pages"][0]["items"][0]["comments"]["pages"][0]["items"][0]
+        comment["body"] = json.loads(f'"{sentinel}"')
+        with TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "evidence.json"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT), str(path), "--expected-head", "0" * 40],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertNotEqual(0, completed.returncode)
+        self.assertIn("SOURCE_BODY_ENCODING_INVALID:", completed.stderr)
+        self.assertNotIn("Traceback", completed.stderr)
+        self.assertNotIn(sentinel, completed.stderr)
+
+    def test_duplicate_json_members_at_root_and_nested_depth_fail_before_schema_validation(self) -> None:
+        cases = (
+            '{"schema_version": 1, "schema_version": 2}',
+            '{"outer": {"synthetic-secret-key": 1, "synthetic-secret-key": 2}}',
+        )
+        for raw_document in cases:
+            with self.subTest(raw_document=raw_document), TemporaryDirectory() as temporary_directory:
+                path = Path(temporary_directory) / "evidence.json"
+                path.write_text(raw_document, encoding="utf-8")
+                stderr = StringIO()
+                with redirect_stderr(stderr):
+                    result = main([str(path), "--expected-head", "0" * 40])
+
+                self.assertNotEqual(0, result)
+                self.assertEqual("EVIDENCE_JSON_DUPLICATE_KEY: input\n", stderr.getvalue())
+                self.assertNotIn("synthetic-secret", stderr.getvalue())
+
+    def test_cli_duplicate_json_members_at_root_and_nested_depth_fail_without_traceback_or_echo(self) -> None:
+        cases = (
+            '{"schema_version": 1, "schema_version": 2}',
+            '{"outer": {"synthetic-secret-key": 1, "synthetic-secret-key": 2}}',
+        )
+        for raw_document in cases:
+            with self.subTest(raw_document=raw_document), TemporaryDirectory() as temporary_directory:
+                path = Path(temporary_directory) / "evidence.json"
+                path.write_text(raw_document, encoding="utf-8")
+                completed = subprocess.run(
+                    [sys.executable, str(SCRIPT), str(path), "--expected-head", "0" * 40],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+
+                self.assertNotEqual(0, completed.returncode)
+                self.assertEqual("EVIDENCE_JSON_DUPLICATE_KEY: input\n", completed.stderr)
+                self.assertNotIn("Traceback", completed.stderr)
+                self.assertNotIn("synthetic-secret", completed.stderr)
 
     def test_source_finding_counts_reconcile(self) -> None:
         document = deepcopy(complete_bundle())
@@ -396,6 +481,73 @@ class ReviewEvidenceTests(unittest.TestCase):
 
         self.assertTrue(
             any(issue.startswith("MUTATION_THREAD_UNKNOWN:") for issue in validate_evidence(document, "0" * 40))
+        )
+
+    def test_mutation_unknown_target_comment_fails_closed(self) -> None:
+        document = deepcopy(complete_bundle())
+        document["mutations"][0]["operations"][0]["target_comment"] = {
+            "node_id": "unknown-review-comment",
+            "database_id": 999,
+        }
+
+        self.assertIn(
+            "MUTATION_TARGET_UNKNOWN: root.mutations.operations",
+            validate_evidence(document, "0" * 40),
+        )
+
+    def test_mutation_target_comment_from_another_thread_fails_closed(self) -> None:
+        document = deepcopy(complete_bundle())
+        threads = document["populations"]["review_threads"]
+        other_thread = deepcopy(threads["pages"][0]["items"][0])
+        other_thread["node_id"] = "thread-node-2"
+        other_comment = other_thread["comments"]["pages"][0]["items"][0]
+        other_comment["node_id"] = "review-comment-node-3"
+        other_comment["database_id"] = 103
+        other_comment["body_sha256"] = "c" * 64
+        threads["total_count"] = 2
+        threads["pages"][0]["items"].append(other_thread)
+        document["source_audit"].append(
+            {
+                "source_population": "review_thread_comments",
+                "source_node_id": "review-comment-node-3",
+                "body_sha256": "c" * 64,
+                "finding_count": 0,
+            }
+        )
+        reply = document["mutations"][0]["operations"][0]
+        reply["target_comment"] = {"node_id": "review-comment-node-3", "database_id": 103}
+        reply["readback"]["reply_to_node_id"] = "review-comment-node-3"
+
+        self.assertIn(
+            "MUTATION_TARGET_THREAD_MISMATCH: root.mutations.operations",
+            validate_evidence(document, "0" * 40),
+        )
+
+    def test_mutation_target_comment_database_id_drift_fails_closed(self) -> None:
+        document = deepcopy(complete_bundle())
+        document["mutations"][0]["operations"][0]["target_comment"]["database_id"] = 999
+
+        self.assertIn(
+            "MUTATION_TARGET_DATABASE_ID_MISMATCH: root.mutations.operations",
+            validate_evidence(document, "0" * 40),
+        )
+
+    def test_mutation_reply_parent_drift_fails_closed(self) -> None:
+        document = deepcopy(complete_bundle())
+        document["mutations"][0]["operations"][0]["readback"]["reply_to_node_id"] = "other-comment-node"
+
+        self.assertIn(
+            "MUTATION_REPLY_PARENT_MISMATCH: root.mutations.operations",
+            validate_evidence(document, "0" * 40),
+        )
+
+    def test_mutation_reply_thread_drift_fails_closed(self) -> None:
+        document = deepcopy(complete_bundle())
+        document["mutations"][0]["operations"][0]["readback"]["thread_node_id"] = "other-thread"
+
+        self.assertIn(
+            "MUTATION_REPLY_THREAD_MISMATCH: root.mutations.operations",
+            validate_evidence(document, "0" * 40),
         )
 
     def test_mutation_local_expected_and_observed_heads_must_match(self) -> None:
@@ -720,9 +872,10 @@ class ReviewEvidenceTests(unittest.TestCase):
             ("audit", ("source_audit", 0), "finding_count"),
             ("finding", ("findings", 0), "evidence_reference"),
             ("mutation", ("mutations", 0), "observed_head_before"),
-            ("reply", ("mutations", 0, "operations", 0), "created_comment"),
+            ("reply", ("mutations", 0, "operations", 0), "target_comment"),
+            ("target comment", ("mutations", 0, "operations", 0, "target_comment"), "database_id"),
             ("created comment", ("mutations", 0, "operations", 0, "created_comment"), "database_id"),
-            ("reply readback", ("mutations", 0, "operations", 0, "readback"), "body_sha256"),
+            ("reply readback", ("mutations", 0, "operations", 0, "readback"), "thread_node_id"),
             ("resolve", ("mutations", 0, "operations", 1), "response"),
             ("resolve response", ("mutations", 0, "operations", 1, "response"), "is_resolved"),
             ("resolve readback", ("mutations", 0, "operations", 1, "readback"), "is_resolved"),
@@ -801,10 +954,14 @@ class ReviewEvidenceTests(unittest.TestCase):
             ("operations type", ("mutations", 0, "operations"), {}),
             ("reply sequence", ("mutations", 0, "operations", 0, "sequence"), True),
             ("reply thread", ("mutations", 0, "operations", 0, "thread_node_id"), ""),
+            ("target node", ("mutations", 0, "operations", 0, "target_comment", "node_id"), ""),
+            ("target database", ("mutations", 0, "operations", 0, "target_comment", "database_id"), 0),
             ("created node", ("mutations", 0, "operations", 0, "created_comment", "node_id"), ""),
             ("created database", ("mutations", 0, "operations", 0, "created_comment", "database_id"), 0),
             ("expected body hash", ("mutations", 0, "operations", 0, "expected_body_sha256"), "A" * 64),
             ("readback database", ("mutations", 0, "operations", 0, "readback", "database_id"), True),
+            ("readback parent", ("mutations", 0, "operations", 0, "readback", "reply_to_node_id"), ""),
+            ("readback thread", ("mutations", 0, "operations", 0, "readback", "thread_node_id"), ""),
             ("resolve sequence", ("mutations", 0, "operations", 1, "sequence"), 1),
             ("response resolved", ("mutations", 0, "operations", 1, "response", "is_resolved"), 1),
         )
@@ -920,6 +1077,23 @@ class ReviewEvidenceTests(unittest.TestCase):
                 document = full_domain_bundle()
                 nested_value(document, path[:-1])[path[-1]] = value
                 self.assertTrue(any(issue.startswith(f"{code}:") for issue in validate_evidence(document, "0" * 40)))
+
+    def test_mutation_target_and_reply_association_fields_are_required(self) -> None:
+        paths = (
+            ("mutations", 0, "operations", 0, "target_comment"),
+            ("mutations", 0, "operations", 0, "target_comment", "node_id"),
+            ("mutations", 0, "operations", 0, "target_comment", "database_id"),
+            ("mutations", 0, "operations", 0, "readback", "reply_to_node_id"),
+            ("mutations", 0, "operations", 0, "readback", "thread_node_id"),
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                document = full_domain_bundle()
+                del nested_value(document, path[:-1])[path[-1]]
+
+                self.assertTrue(
+                    any(issue.startswith("EVIDENCE_FIELD_MISSING:") for issue in validate_evidence(document, "0" * 40))
+                )
 
     def test_validate_evidence_never_raises_or_echoes_arbitrary_untrusted_input(self) -> None:
         sentinel = "synthetic-secret-value"

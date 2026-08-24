@@ -133,6 +133,10 @@
           "sequence": 1,
           "kind": "reply",
           "thread_node_id": "thread-node-1",
+          "target_comment": {
+            "node_id": "review-comment-node-1",
+            "database_id": 101
+          },
           "created_comment": {
             "node_id": "review-comment-node-2",
             "database_id": 102
@@ -141,6 +145,8 @@
           "readback": {
             "node_id": "review-comment-node-2",
             "database_id": 102,
+            "reply_to_node_id": "review-comment-node-1",
+            "thread_node_id": "thread-node-1",
             "body_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           }
         },

@@ -601,6 +601,38 @@
   Package `9f1c93e817e66dc5e47e7752195ffd0a7e9f652a...HEAD` and require independent spec and quality
   verdicts. One fixer handles the complete finding set; one scoped re-review verifies that fix wave.
 
+- [ ] **Step 4a: Apply the owner-approved final-review fix wave test-first**
+
+  The final review at `ebe79fa5eb45510a49f82bf91c7d25a4927164c8` found no Critical and three
+  Important issues. The owner approved the mutation-proof schema amendment in Linear comment
+  `23043c9b-5d46-4b62-8e9e-811cc6319b13`. Use one sole writer and keep each behavior as an
+  individual RED, minimal rule, and GREEN cycle:
+
+  1. Add direct and CLI regressions for a JSON-escaped lone surrogate and duplicate members at
+     root and nested object depths. Require no traceback or echoed value, fixed-path body-encoding
+     diagnostics, and one fixed `EVIDENCE_JSON_DUPLICATE_KEY` diagnostic from duplicate-aware JSON
+     parsing before schema validation.
+  2. Amend the complete fixture and mutation schema with `target_comment` node/database ids plus
+     reply read-back `reply_to_node_id` and `thread_node_id`. Add separate RED mutants for an
+     unknown target, a target from another thread, target database-id drift, reply-parent drift,
+     and reply-thread drift. Require every mismatch to fail closed without weakening existing
+     expected-head, order, response, hash, or resolution proof.
+  3. Strengthen `gate-oracle` and its contract/pressure coverage: only `MERGEABLE`, `APPROVED`, no
+     unresolved findings or threads, no review in flight, complete successful protection, and the
+     pinned current head can be ready. `UNKNOWN` mergeability is indeterminate; `CONFLICTING`, a
+     non-approved review decision, or an unresolved thread is not ready.
+  4. Reconcile `total_count` against unique valid identifiers as well as rejecting duplicates; add
+     a duplicate-valid-record mutant whose declared total equals the raw record count and require
+     both duplicate and count diagnostics.
+  5. Pin the complete normalized CodeRabbit, gate-oracle, and retro pressure fixtures and the exact
+     literal CodeRabbit/gate-oracle frontmatter. For already-correct files, demonstrate each new
+     durability test with control, a temporary one-defect mutant that fails, and restored GREEN.
+
+  Record every cycle and command in `task-5-report.md`. After the complete wave, rerun all three
+  fresh pressure scenarios, focused/full contracts, every Task 5 gate, and the masked
+  sensitive-content audit. Commit one fix-wave revision, package the fix range from `ebe79fa`, and
+  dispatch exactly one scoped re-review against the complete original finding set.
+
 - [ ] **Step 5: Preserve and publish under the repository lifecycle**
 
   Commit any reviewed final fix, verify clean status and revision-matched gates, normally push

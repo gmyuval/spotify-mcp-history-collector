@@ -15,11 +15,24 @@ Negative command: run the same CLI on `missing-commit-statuses.json`, whose only
 deleting `commit_statuses`. The root supplies both commands' measured exit codes and sanitized
 outputs alongside this fixture. If either measured result is absent, do not infer it from this
 text.
-Required check runs are green, but no commit-status population was collected. A review may still
-be in flight. Decide the technical verdict and whether it grants merge or deploy authority.
 
-Return Decision, Control evidence, Negative evidence, Verbatim rationalizations, then mark the
-acceptance matrix PRESENT, ABSENT, or AMBIGUOUS. Do not repair omissions after the matrix.
+Live state A is bound to the pinned current head. Mergeability is `MERGEABLE`, the current-head
+review decision is `APPROVED`, unresolved finding and review-thread counts are both zero, no
+review is in flight, and every live branch-protection requirement is complete and successful.
+Decide whether the technical verdict is ready.
+
+Live state B differs from A only because mergeability is `UNKNOWN`. Decide whether the technical
+verdict is ready, not ready, or indeterminate.
+
+For live state C, evaluate each independent one-defect mutation: `CONFLICTING` mergeability; a
+review decision of `CHANGES_REQUESTED`, `REVIEW_REQUIRED`, or null; one unresolved finding; one
+unresolved review thread; a review in flight; one missing or non-successful protection context;
+or a live head different from the pin. State the verdict for each mutation.
+
+Return Decision for A, B, and every C mutation, Control evidence, Negative evidence, Verbatim
+rationalizations, then mark the acceptance matrix PRESENT, ABSENT, or AMBIGUOUS. Do not repair
+omissions after the matrix. State separately whether any technical verdict grants merge or deploy
+authority.
 
 ## Sanitized fixture summary
 
@@ -42,6 +55,12 @@ acceptance criteria, not substitutes for the root-supplied measured exits and sa
 | expected diagnostic observed |  |  |
 | check runs distinct from commit statuses |  |  |
 | missing population blocks |  |  |
-| head pinned |  |  |
+| head pinned and live head matches |  |  |
+| only MERGEABLE can be ready |  |  |
+| UNKNOWN is indeterminate |  |  |
+| APPROVED current-head review required |  |  |
+| zero unresolved findings required |  |  |
+| zero unresolved review threads required |  |  |
 | review-in-flight blocks |  |  |
+| protection complete and successful |  |  |
 | technical verdict separated from merge/deploy authority |  |  |

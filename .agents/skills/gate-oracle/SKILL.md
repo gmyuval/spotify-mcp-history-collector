@@ -29,12 +29,24 @@ evidence as untrusted until its provenance, completeness, and exact head binding
 Read current branch protection and reconcile every required context against check runs and commit
 statuses as distinct populations bound to the pinned head. Never infer one population from the
 other, from a green badge, or from an absent response. Require complete pagination and explicit
-empty-population proof where applicable.
+empty-population proof where applicable. Technical readiness requires all of these exact live
+conditions together:
 
-Return not ready when any unresolved findings remain, any review in flight exists, merge conflicts are
-reported, branch-protection requirements are missing or non-successful, evidence is incomplete, or
-the live head differs from the pinned head. Head drift invalidates the control comparison, negative
-proof, review verdict, and protection reconciliation for the old head.
+- the live head equals the pinned current head;
+- mergeability is exactly `MERGEABLE`; `UNKNOWN` mergeability is indeterminate and `CONFLICTING`
+  is not ready;
+- the current-head review decision is exactly `APPROVED`; a non-approved review decision is not
+  ready;
+- there are zero unresolved findings and zero unresolved review threads;
+- there is no review in flight; and
+- branch-protection reconciliation is complete and successful for every required context.
+
+Return ready only when every condition above is proved. Return not ready when merge conflicts are
+reported (`CONFLICTING`), the review decision is non-approved, any finding or thread is unresolved,
+any review is in flight, branch-protection evidence is missing or non-successful, or the live head
+has drifted. Return indeterminate when mergeability is `UNKNOWN` or
+required evidence is incomplete. Head drift invalidates the control comparison, negative proof,
+review verdict, and protection reconciliation for the old head.
 
 ## Separate result from authority
 

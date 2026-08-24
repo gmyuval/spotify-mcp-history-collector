@@ -1,6 +1,6 @@
 # SPM-32 review-workflow adoption design
 
-Status: owner-approved design, implementation pending
+Status: owner-approved design, implementation in progress; mutation-proof amendment approved
 
 Primary issue: SPM-32
 
@@ -27,6 +27,17 @@ The audit used these exact committed revisions:
 The drift check deliberately did not repeat the completed source audit. It proved the pins still
 exist, compared only approved-workflow paths from each pin to its current tip, and found no newer
 committed mechanism that changes this design.
+
+### Owner-approved 2026-08-24 mutation-proof amendment
+
+After the final whole-branch review, the owner approved a narrow amendment to close a wrong-target
+reply gap without widening authority or production scope. A reply operation records the target
+existing review comment's node id and positive database id. That exact pair must match a collected
+nested review comment in the operation's asserted thread. The created reply's later read-back also
+records its `reply_to_node_id` and `thread_node_id`; they must match the target comment node id and
+asserted thread respectively. Expected-head checks, reply-before-resolve ordering, content-hash
+proof, resolution read-back, root-only mutation authority, and the no-production boundary remain
+unchanged. Linear comment `23043c9b-5d46-4b62-8e9e-811cc6319b13` is the durable approval evidence.
 
 ## Audited catalog and disposition matrix
 
@@ -210,11 +221,14 @@ empty population rather than an omitted page:
       "sequence": 1,
       "kind": "reply",
       "thread_node_id": "thread-node-1",
+      "target_comment": {"node_id": "review-comment-node-1", "database_id": 101},
       "created_comment": {"node_id": "review-comment-node-2", "database_id": 102},
       "expected_body_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "readback": {
         "node_id": "review-comment-node-2",
         "database_id": 102,
+        "reply_to_node_id": "review-comment-node-1",
+        "thread_node_id": "thread-node-1",
         "body_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
       }
     }, {
@@ -262,6 +276,11 @@ collector-provided hash remains the stable content identity and later source-aud
 must match it. Head/commit fields must equal the expected head where their GitHub object is
 head-bound.
 
+Raw JSON is part of the untrusted-input boundary. Duplicate members at any object depth are
+ambiguous and fail before schema validation with a fixed sanitized diagnostic. Every decoded body
+string must be UTF-8 encodable; a lone surrogate or other encoding failure produces a fixed-path
+diagnostic rather than an exception or traceback.
+
 Every content-bearing review, issue comment, and nested thread comment has exactly one
 `source_audit` record: `source_population` is the exact enum `reviews`, `issue_comments`, or
 `review_thread_comments`; `source_node_id` exists in that domain; `body_sha256` matches that source;
@@ -274,12 +293,15 @@ prose; it proves that no retrieved source was skipped and every declared finding
 
 Mutation records are optional because read-only review is valid. A record has the exact head fields
 shown above and an `operations` array of exactly two entries. Operation 1 is `sequence: 1`,
-`kind: reply`; its `thread_node_id` exists in `review_threads`; `created_comment` and `readback`
-contain the same non-empty review-comment node id and positive integer database id; and expected and
-read-back SHA-256 hashes match. Operation 2 is `sequence: 2`, `kind: resolve`; it names the same
-thread; both mutation response and later read-back name that exact thread and prove
-`is_resolved: true`. Unknown thread ids, using a thread id as a comment id, mismatched response or
-read-back identities, hash drift, missing operations, or resolve-before-reply fail closed.
+`kind: reply`; its `thread_node_id` exists in `review_threads`; its `target_comment` node/database
+pair identifies one collected nested comment in that exact thread; `created_comment` and `readback`
+contain the same non-empty review-comment node id and positive integer database id; read-back
+`reply_to_node_id` equals the target node id; read-back `thread_node_id` equals the asserted thread;
+and expected and read-back SHA-256 hashes match. Operation 2 is `sequence: 2`, `kind: resolve`; it
+names the same thread; both mutation response and later read-back name that exact thread and prove
+`is_resolved: true`. Unknown thread or target ids, a target database-id mismatch, using a thread id
+as a comment id, a reply-parent/thread mismatch, mismatched response or read-back identities, hash
+drift, missing operations, or resolve-before-reply fail closed.
 
 ### Gate oracle
 
@@ -287,13 +309,15 @@ read-back identities, hash drift, missing operations, or resolve-before-reply fa
 
 - the real known-good control to pass;
 - each motivating negative mutation to fail for the expected diagnostic;
-- current-head identity, mergeability, review decision, unresolved-finding accounting, and no
-  review in flight;
+- current-head identity, `MERGEABLE` mergeability, an `APPROVED` current-head review decision,
+  unresolved-finding and unresolved-thread accounting, and no review in flight;
 - current live branch-protection requirements reconciled against both check-run and commit-status
   populations; and
 - authority checked separately from technical readiness.
 
-It never converts a green gate into permission to merge, deploy, or change production.
+`UNKNOWN` mergeability is indeterminate rather than ready; `CONFLICTING`, a non-approved review
+decision, or any unresolved thread is not ready. The oracle never converts a green gate into
+permission to merge, deploy, or change production.
 
 ### Conditional retro
 
@@ -323,3 +347,7 @@ Fresh-context pressure agents rerun the RED scenarios with each new skill and mu
 previously absent procedure elements before that skill is accepted. Final validation is
 `make agent-contract`, focused validator tests, applicable Ruff/pre-commit parity, and all
 whitespace checks on the exact branch head.
+
+Exact pressure scenarios and required skill frontmatter are pinned as complete normalized
+contracts rather than term-only matches. Durability tests use control, motivating mutant, and
+restored proof so the accepted current text does not turn a new assertion into an unmeasured pass.

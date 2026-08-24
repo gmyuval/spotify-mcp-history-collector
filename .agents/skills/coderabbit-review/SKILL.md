@@ -58,12 +58,16 @@ population, revalidate, and start a new review round.
 Keep identifier domains exact. A REST review reply targets the existing review comment's positive
 integer database ID; a thread resolution targets the review thread's GraphQL node ID. Never use a
 thread node ID as a comment ID or a comment ID as a thread ID. Associate the reply with the same
-thread in the evidence record and preserve both the created comment node ID and database ID.
+thread in the evidence record and preserve both the created comment node ID and database ID. Record
+the target existing review comment's node ID and positive integer database ID, and require that
+exact pair to match a collected nested comment in the asserted thread.
 
 For one thread, perform and prove this order:
 
 1. Reply, then read back the created comment and require its node ID, database ID, and UTF-8 body
-   SHA-256 to match the intended reply. A successful mutation response alone is insufficient.
+   SHA-256 to match the intended reply. Require read-back `reply_to_node_id` equals the target
+   comment node ID and `thread_node_id` equals the asserted thread node ID. A successful mutation
+   response alone is insufficient.
 2. Only after the reply read-back, resolve the same thread. Read the thread back separately and
    require the exact thread node ID with `is_resolved: true`. A successful resolution response
    alone is insufficient.

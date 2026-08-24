@@ -42,6 +42,19 @@ SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
+class _DuplicateKeyError(ValueError):
+    """Signal an ambiguous JSON object without retaining its untrusted key."""
+
+
+def _object_without_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateKeyError
+        result[key] = value
+    return result
+
+
 def _is_integer(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -187,11 +200,11 @@ def _validate_connection(
     ):
         issues.append(f"PAGINATION_INCOMPLETE: {path}.pages")
 
-    if total_is_valid and total_count != len(collected):
-        issues.append(f"COUNT_MISMATCH: {path}")
     identifiers = [item.get("node_id") for item in collected if _is_nonempty_string(item.get("node_id"))]
     if len(identifiers) != len(set(identifiers)):
         issues.append(f"ITEM_ID_DUPLICATE: {path}")
+    if total_is_valid and total_count != len(set(identifiers)):
+        issues.append(f"COUNT_MISMATCH: {path}")
     return collected
 
 
@@ -243,6 +256,8 @@ def validate_evidence(document: object, expected_head: str) -> list[str]:
 
     sources: dict[tuple[str, str], object] = {}
     review_comment_ids: list[str] = []
+    review_comments_by_node: dict[str, int] = {}
+    review_comments_by_thread: dict[str, set[str]] = {}
 
     def validate_content_body(record: dict[object, object], path: str) -> None:
         body_hash = record.get("body_sha256")
@@ -251,8 +266,14 @@ def validate_evidence(document: object, expected_head: str) -> list[str]:
             body = record.get("body")
             if not isinstance(body, str):
                 issues.append(f"EVIDENCE_TYPE_INVALID: {path}.body")
-            elif hashlib.sha256(body.encode("utf-8")).hexdigest() != body_hash:
-                issues.append(f"SOURCE_BODY_HASH_MISMATCH: {path}")
+            else:
+                try:
+                    encoded_body = body.encode("utf-8")
+                except UnicodeEncodeError:
+                    issues.append(f"SOURCE_BODY_ENCODING_INVALID: {path}.body")
+                else:
+                    if hashlib.sha256(encoded_body).hexdigest() != body_hash:
+                        issues.append(f"SOURCE_BODY_HASH_MISMATCH: {path}")
 
     def validate_review(value: object, path: str) -> dict[object, object] | None:
         record = _exact_object(value, {"node_id", "submitted_commit_sha", "body_sha256"}, {"body"}, path, issues)
@@ -300,16 +321,26 @@ def validate_evidence(document: object, expected_head: str) -> list[str]:
         if isinstance(node_id, str):
             sources[("review_thread_comments", node_id)] = record.get("body_sha256")
             review_comment_ids.append(node_id)
+            database_id = record.get("database_id")
+            if _is_nonempty_string(node_id) and _is_positive_integer(database_id):
+                review_comments_by_node[node_id] = database_id
         return record
 
     def validate_thread(value: object, path: str) -> dict[object, object] | None:
         record = _exact_object(value, {"node_id", "is_resolved", "comments"}, set(), path, issues)
         if record is None:
             return None
-        _require_string(record.get("node_id"), f"{path}.node_id", issues, nonempty=True)
+        thread_node_id = record.get("node_id")
+        _require_string(thread_node_id, f"{path}.node_id", issues, nonempty=True)
         if not isinstance(record.get("is_resolved"), bool):
             issues.append(f"EVIDENCE_TYPE_INVALID: {path}.is_resolved")
-        _validate_connection(record.get("comments"), f"{path}.comments", validate_review_comment, issues)
+        comments = _validate_connection(record.get("comments"), f"{path}.comments", validate_review_comment, issues)
+        if _is_nonempty_string(thread_node_id):
+            review_comments_by_thread[thread_node_id] = {
+                comment_node_id
+                for comment in comments
+                if _is_nonempty_string(comment_node_id := comment.get("node_id"))
+            }
         return record
 
     def validate_check_run(value: object, path: str) -> dict[object, object] | None:
@@ -494,7 +525,15 @@ def validate_evidence(document: object, expected_head: str) -> list[str]:
             issues.append("MUTATION_OPERATION_COUNT: root.mutations.operations")
         reply_record = _exact_object(
             operations[0] if operations else None,
-            {"sequence", "kind", "thread_node_id", "created_comment", "expected_body_sha256", "readback"},
+            {
+                "sequence",
+                "kind",
+                "thread_node_id",
+                "target_comment",
+                "created_comment",
+                "expected_body_sha256",
+                "readback",
+            },
             set(),
             f"{mutation_path}.operations[0]",
             issues,
@@ -531,6 +570,41 @@ def validate_evidence(document: object, expected_head: str) -> list[str]:
         if reply_thread != resolve_thread:
             issues.append("MUTATION_RESOLUTION_ID_MISMATCH: root.mutations.operations")
 
+        target = _exact_object(
+            reply_record.get("target_comment"),
+            {"node_id", "database_id"},
+            set(),
+            f"{mutation_path}.operations[0].target_comment",
+            issues,
+        )
+        if target is not None:
+            target_node_id = target.get("node_id")
+            target_database_id = target.get("database_id")
+            _require_string(
+                target_node_id,
+                f"{mutation_path}.operations[0].target_comment.node_id",
+                issues,
+                nonempty=True,
+            )
+            _require_positive_integer(
+                target_database_id,
+                f"{mutation_path}.operations[0].target_comment.database_id",
+                issues,
+            )
+            if _is_nonempty_string(target_node_id) and target_node_id not in review_comments_by_node:
+                issues.append("MUTATION_TARGET_UNKNOWN: root.mutations.operations")
+            elif (
+                _is_nonempty_string(target_node_id)
+                and _is_nonempty_string(reply_thread)
+                and target_node_id not in review_comments_by_thread.get(reply_thread, set())
+            ):
+                issues.append("MUTATION_TARGET_THREAD_MISMATCH: root.mutations.operations")
+            elif (
+                _is_nonempty_string(target_node_id)
+                and _is_positive_integer(target_database_id)
+                and review_comments_by_node.get(target_node_id) != target_database_id
+            ):
+                issues.append("MUTATION_TARGET_DATABASE_ID_MISMATCH: root.mutations.operations")
         created = _exact_object(
             reply_record.get("created_comment"),
             {"node_id", "database_id"},
@@ -542,7 +616,7 @@ def validate_evidence(document: object, expected_head: str) -> list[str]:
             issues.append("MUTATION_FIELD_MISSING: root.mutations.operations.created_comment")
         reply_readback = _exact_object(
             reply_record.get("readback"),
-            {"node_id", "database_id", "body_sha256"},
+            {"node_id", "database_id", "reply_to_node_id", "thread_node_id", "body_sha256"},
             set(),
             f"{mutation_path}.operations[0].readback",
             issues,
@@ -570,9 +644,25 @@ def validate_evidence(document: object, expected_head: str) -> list[str]:
             _require_positive_integer(
                 reply_readback.get("database_id"), f"{mutation_path}.operations[0].readback.database_id", issues
             )
+            _require_string(
+                reply_readback.get("reply_to_node_id"),
+                f"{mutation_path}.operations[0].readback.reply_to_node_id",
+                issues,
+                nonempty=True,
+            )
+            _require_string(
+                reply_readback.get("thread_node_id"),
+                f"{mutation_path}.operations[0].readback.thread_node_id",
+                issues,
+                nonempty=True,
+            )
             _require_sha256(
                 reply_readback.get("body_sha256"), f"{mutation_path}.operations[0].readback.body_sha256", issues
             )
+            if target is not None and reply_readback.get("reply_to_node_id") != target.get("node_id"):
+                issues.append("MUTATION_REPLY_PARENT_MISMATCH: root.mutations.operations")
+            if reply_readback.get("thread_node_id") != reply_thread:
+                issues.append("MUTATION_REPLY_THREAD_MISMATCH: root.mutations.operations")
             if reply_readback.get("body_sha256") != expected_body_hash:
                 issues.append("MUTATION_REPLY_HASH_MISMATCH: root.mutations.operations")
             if created is not None and (
@@ -658,7 +748,7 @@ def main(argv: list[str] | None = None) -> int:
     expected_head = arguments[2]
     try:
         with open(arguments[0], encoding="utf-8") as evidence_file:
-            document = json.loads(evidence_file.read())
+            document = json.loads(evidence_file.read(), object_pairs_hook=_object_without_duplicate_keys)
     except OSError:
         print("EVIDENCE_UNREADABLE: input", file=sys.stderr)
         return 1
@@ -667,6 +757,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except json.JSONDecodeError:
         print("EVIDENCE_JSON_INVALID: input", file=sys.stderr)
+        return 1
+    except _DuplicateKeyError:
+        print("EVIDENCE_JSON_DUPLICATE_KEY: input", file=sys.stderr)
         return 1
     issues = validate_evidence(document, expected_head)
     if issues:
