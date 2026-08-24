@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import scripts.validate_agent_memory as agent_memory
 from scripts.validate_agent_contract import (
     EXPECTED_SKILLS,
     REQUIRED_FILES,
@@ -314,6 +315,119 @@ Python discovery or the repository toolchain changes.
                 self.assertNotEqual(0, result.returncode, name)
                 self.assertEqual(expected, result.stdout, name)
                 self.assertEqual("", result.stderr, name)
+
+    def test_memory_root_or_ancestor_reparse_cannot_become_trusted_boundary(self) -> None:
+        for relative_reparse in (Path("docs"), Path("docs/agent/memory")):
+            with self.subTest(path=relative_reparse), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self.memory_fixture(root)
+                reparse = root / relative_reparse
+                real_lstat = Path.lstat
+
+                def fake_lstat(
+                    path: Path,
+                    reparse_path: Path = reparse,
+                    delegate=real_lstat,
+                ) -> object:
+                    if path == reparse_path:
+                        return SimpleNamespace(
+                            st_mode=stat.S_IFDIR,
+                            st_file_attributes=WINDOWS_REPARSE_POINT,
+                        )
+                    return delegate(path)
+
+                with patch.object(Path, "lstat", new=fake_lstat):
+                    issues = agent_memory.validate_memory(root)
+
+                self.assertEqual(
+                    ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"],
+                    issues,
+                )
+
+    def test_escaping_entry_reparse_returns_sanitized_diagnostic_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            outside = root.parent / "external-memory-entry.md"
+            real_lstat = Path.lstat
+            real_resolve = Path.resolve
+
+            def fake_lstat(path: Path) -> object:
+                if path == entry:
+                    return SimpleNamespace(
+                        st_mode=stat.S_IFREG,
+                        st_file_attributes=WINDOWS_REPARSE_POINT,
+                    )
+                return real_lstat(path)
+
+            def fake_resolve(path: Path, strict: bool = False) -> Path:
+                if path == entry:
+                    return outside
+                return real_resolve(path, strict=strict)
+
+            issues: list[str] | None = None
+            try:
+                with (
+                    patch.object(Path, "lstat", new=fake_lstat),
+                    patch.object(Path, "resolve", new=fake_resolve),
+                ):
+                    issues = agent_memory.validate_memory(root)
+            except ValueError:
+                pass
+
+            self.assertIsNotNone(
+                issues,
+                "entry reparse leaked through diagnostics instead of failing closed",
+            )
+            self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/windows-pinned-uv-validation.md"],
+                issues,
+            )
+
+    def test_lowercase_readme_topic_is_not_silently_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            lowercase_readme = memory / "readme.md"
+            lowercase_entry = """# Lowercase readme is a distinct topic
+- Date: 2026-08-25
+- Evidence: primary evidence
+- Affected surface: case-sensitive filesystems
+
+## Measured
+The lowercase topic exists separately from the canonical index.
+
+## Inference
+None.
+
+## Revisit when
+Repository filename conventions change.
+"""
+            real_glob = Path.glob
+            real_read = agent_memory._read
+
+            def fake_glob(path: Path, pattern: str):
+                entries = list(real_glob(path, pattern))
+                if path == memory and pattern == "*.md":
+                    entries.append(lowercase_readme)
+                return iter(entries)
+
+            def fake_read(path: Path) -> str | None:
+                if path.name == "readme.md":
+                    return lowercase_entry
+                return real_read(path)
+
+            with (
+                patch.object(Path, "glob", new=fake_glob),
+                patch("scripts.validate_agent_memory._read", side_effect=fake_read),
+            ):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_ENTRY_UNINDEXED: docs/agent/memory/readme.md"],
+                issues,
+            )
 
     def test_live_contract_passes_validator(self) -> None:
         self.assertEqual([], validate_contract(ROOT))
