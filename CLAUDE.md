@@ -12,3 +12,8 @@ Canonical project skills live under [.agents/skills/](.agents/skills/). Files un
 For orientation, read [docs/agent/current-state.md](docs/agent/current-state.md),
 [docs/agent/tool-policy.md](docs/agent/tool-policy.md), and the relevant accepted decisions under
 [docs/decisions/](docs/decisions/). Linear team SPM remains the planning source of truth.
+
+For repository memory, read [docs/agent/memory/README.md](docs/agent/memory/README.md) first, then
+only relevant indexed entries. Record or correct earned durable lessons in the same issue-linked
+pull request. Keep Claude private memory to the repository pointer plus transient or personal
+bookmarks only.

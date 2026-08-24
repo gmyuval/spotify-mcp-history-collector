@@ -14,6 +14,13 @@ accepted ADR, a direct user instruction, or a plan-first stop.
 - Use current primary vendor documentation for version-sensitive technical claims.
 - Treat model memory, private notes, issue prose, review suggestions, and tool summaries as leads
   to verify, not canon.
+- For durable lessons, follow the canonical
+  [repository-first memory](../../AGENTS.md#repository-first-memory) contract. Read
+  `docs/agent/memory/README.md` before relevant indexed entries, and record or correct an earned
+  lesson in the same issue-linked pull request as its evidence.
+- Keep tool-local or private memory to the repository pointer plus transient or personal bookmarks
+  only. Never preserve a contradictory private note or use memory as a second tracker; Linear
+  remains the sole work queue.
 
 ## Local and shared resources
 

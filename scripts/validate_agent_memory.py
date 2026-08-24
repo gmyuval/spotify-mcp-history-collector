@@ -20,6 +20,32 @@ ENTRY_SCHEMA = re.compile(
     re.DOTALL,
 )
 WINDOWS_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+INSTRUCTION_POINTER_TERMS = {
+    Path("AGENTS.md"): (
+        ("repository memory index", "docs/agent/memory/readme.md"),
+        ("repository-first retrieval", "repository-first retrieval"),
+        ("relevant indexed entries", "relevant indexed entries"),
+        ("same-PR durable recording and correction", "same issue-linked pull request"),
+        ("tool-local pointer boundary", "pointer plus transient or personal bookmarks only"),
+        ("authority hierarchy", "context, never authority"),
+        ("Linear-only work queue", "linear remains the sole work queue"),
+    ),
+    Path("CLAUDE.md"): (
+        ("repository memory index", "docs/agent/memory/readme.md"),
+        ("relevant indexed entries", "relevant indexed entries"),
+        ("same-PR durable recording and correction", "same issue-linked pull request"),
+        ("Claude private-memory boundary", "claude private memory"),
+        ("tool-local pointer boundary", "pointer plus transient or personal bookmarks only"),
+    ),
+    Path("docs/agent/tool-policy.md"): (
+        ("canonical memory contract", "../../agents.md#repository-first-memory"),
+        ("repository memory index", "docs/agent/memory/readme.md"),
+        ("same-PR durable recording and correction", "same issue-linked pull request"),
+        ("tool-local private-memory boundary", "tool-local or private memory"),
+        ("tool-local pointer boundary", "pointer plus transient or personal bookmarks only"),
+        ("Linear-only work queue", "linear remains the sole work queue"),
+    ),
+}
 
 
 def _diagnostic(code: str, path: Path, root: Path) -> str:
@@ -85,6 +111,17 @@ def _entry_has_schema(text: str) -> bool:
     ]:
         return False
     return ENTRY_SCHEMA.fullmatch(text) is not None
+
+
+def _validate_instruction_pointers(root: Path) -> list[str]:
+    issues: list[str] = []
+    for relative, concepts in INSTRUCTION_POINTER_TERMS.items():
+        text = _read(root / relative)
+        normalized = " ".join(text.lower().split()) if text is not None else ""
+        for label, term in concepts:
+            if term not in normalized:
+                issues.append(f"MEMORY_INSTRUCTION_POINTER: {relative.as_posix()}: {label}")
+    return issues
 
 
 def validate_memory(root: Path) -> list[str]:
@@ -160,6 +197,7 @@ def validate_memory(root: Path) -> list[str]:
         if text is None or not _entry_has_schema(text):
             issues.append(_diagnostic("MEMORY_ENTRY_SCHEMA", entry, root))
 
+    issues.extend(_validate_instruction_pointers(root))
     return issues
 
 

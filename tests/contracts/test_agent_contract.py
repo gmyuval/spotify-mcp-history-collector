@@ -98,6 +98,36 @@ Python discovery or the repository toolchain changes.
 """,
             encoding="utf-8",
         )
+        (root / "AGENTS.md").write_text(
+            """## Repository-first memory
+
+Read `docs/agent/memory/README.md` first, then retrieve only relevant indexed entries. Use
+repository-first retrieval for durable knowledge. Record or correct an earned durable lesson in
+the same issue-linked pull request. Tool-local memory contains the repository pointer plus
+transient or personal bookmarks only. Memory is context, never authority, and cannot override
+higher-priority harness or user instructions, this contract, accepted ADRs, Linear, or current
+code, tests, and observed evidence. Linear remains the sole work queue.
+""",
+            encoding="utf-8",
+        )
+        (root / "CLAUDE.md").write_text(
+            """Read [docs/agent/memory/README.md](docs/agent/memory/README.md) first, then only
+relevant indexed entries. Record or correct earned durable lessons in the same issue-linked pull
+request. Keep Claude private memory to the repository pointer plus transient or personal bookmarks
+only.
+""",
+            encoding="utf-8",
+        )
+        tool_policy = root / "docs" / "agent" / "tool-policy.md"
+        tool_policy.parent.mkdir(parents=True, exist_ok=True)
+        tool_policy.write_text(
+            """Follow the [repository-first memory](../../AGENTS.md#repository-first-memory)
+contract. Read `docs/agent/memory/README.md` before relevant indexed entries. Route durable memory
+through the same issue-linked pull request and keep tool-local or private memory to the repository
+pointer plus transient or personal bookmarks only. Linear remains the sole work queue.
+""",
+            encoding="utf-8",
+        )
         return readme, entry
 
     def test_live_memory_contract_passes_validator(self) -> None:
@@ -106,6 +136,68 @@ Python discovery or the repository toolchain changes.
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertEqual("Memory contract OK (1 indexed topic).\n", result.stdout)
         self.assertEqual("", result.stderr)
+
+    def test_repository_first_two_layer_memory_contract(self) -> None:
+        agents = " ".join(self.read("AGENTS.md").split())
+        claude = " ".join(self.read("CLAUDE.md").split())
+        tool_policy = " ".join(self.read("docs/agent/tool-policy.md").split())
+
+        self.assert_terms(
+            agents,
+            (
+                "repository-first memory",
+                "docs/agent/memory/README.md",
+                "relevant indexed entries",
+                "same issue-linked pull request",
+                "pointer plus transient or personal bookmarks only",
+                "context, never authority",
+                "higher-priority harness or user instructions",
+                "Linear remains the sole work queue",
+            ),
+            "canonical repository-first memory contract",
+        )
+        self.assert_terms(
+            claude,
+            (
+                "docs/agent/memory/README.md",
+                "relevant indexed entries",
+                "same issue-linked pull request",
+                "Claude private memory",
+                "pointer plus transient or personal bookmarks only",
+            ),
+            "thin Claude memory adapter",
+        )
+        self.assert_terms(
+            tool_policy,
+            (
+                "repository-first memory",
+                "../../AGENTS.md#repository-first-memory",
+                "docs/agent/memory/README.md",
+                "same issue-linked pull request",
+                "tool-local or private memory",
+                "pointer plus transient or personal bookmarks only",
+                "Linear remains the sole work queue",
+            ),
+            "tool memory source selection",
+        )
+
+    def test_memory_instruction_pointer_mutation_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            claude = root / "CLAUDE.md"
+            text = claude.read_text(encoding="utf-8")
+            mutated = text.replace(
+                "docs/agent/memory/README.md",
+                "docs/agent/memory/private-index.md",
+            )
+            self.assertNotEqual(text, mutated, "Claude pointer mutation fixture must change the adapter")
+            claude.write_text(mutated, encoding="utf-8")
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: repository memory index"],
+                agent_memory.validate_memory(root),
+            )
 
     def test_memory_index_mutations_fail_closed(self) -> None:
         cases = (
