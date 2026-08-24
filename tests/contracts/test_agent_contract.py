@@ -344,6 +344,97 @@ Python discovery or the repository toolchain changes.
                     issues,
                 )
 
+    def test_memory_index_reparse_is_rejected_before_reading(self) -> None:
+        reparse_cases = (
+            ("POSIX symlink", stat.S_IFLNK, 0),
+            ("Windows reparse", stat.S_IFREG, WINDOWS_REPARSE_POINT),
+        )
+        for name, mode, attributes in reparse_cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                readme, _ = self.memory_fixture(root)
+                real_lstat = Path.lstat
+                real_read = agent_memory._read
+                read_paths: list[Path] = []
+
+                def fake_lstat(
+                    path: Path,
+                    target: Path = readme,
+                    target_mode: int = mode,
+                    target_attributes: int = attributes,
+                    delegate=real_lstat,
+                ) -> object:
+                    if path == target:
+                        return SimpleNamespace(
+                            st_mode=target_mode,
+                            st_file_attributes=target_attributes,
+                        )
+                    return delegate(path)
+
+                def fake_read(
+                    path: Path,
+                    observed: list[Path] = read_paths,
+                    delegate=real_read,
+                ) -> str | None:
+                    observed.append(path)
+                    return delegate(path)
+
+                with (
+                    patch.object(Path, "lstat", new=fake_lstat),
+                    patch("scripts.validate_agent_memory._read", side_effect=fake_read),
+                ):
+                    issues = agent_memory.validate_memory(root)
+
+                self.assertEqual(
+                    ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"],
+                    issues,
+                )
+                self.assertNotIn(readme, read_paths, "reparse index content must not be read")
+
+    def test_case_variant_readme_alias_is_rejected_by_file_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, _ = self.memory_fixture(root)
+            alias = readme.with_name("readme.md")
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(
+                    "windows-pinned-uv-validation.md",
+                    "readme.md",
+                ),
+                encoding="utf-8",
+            )
+            real_is_file = Path.is_file
+            real_resolve = Path.resolve
+            real_samefile = Path.samefile
+
+            def fake_is_file(path: Path) -> bool:
+                return True if path == alias else real_is_file(path)
+
+            def fake_resolve(path: Path, strict: bool = False) -> Path:
+                if path == alias:
+                    return alias
+                return real_resolve(path, strict=strict)
+
+            def fake_samefile(path: Path, other: Path) -> bool:
+                if path == alias and other == readme:
+                    return True
+                return real_samefile(path, other)
+
+            with (
+                patch.object(Path, "is_file", new=fake_is_file),
+                patch.object(Path, "resolve", new=fake_resolve),
+                patch.object(Path, "samefile", new=fake_samefile),
+            ):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                [
+                    "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md",
+                    "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md",
+                ],
+                issues,
+            )
+
     def test_escaping_entry_reparse_returns_sanitized_diagnostic_without_traceback(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -428,6 +519,71 @@ Repository filename conventions change.
                 ["MEMORY_ENTRY_UNINDEXED: docs/agent/memory/readme.md"],
                 issues,
             )
+
+    def test_distinct_lowercase_readme_can_be_indexed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            readme, _ = self.memory_fixture(root)
+            lowercase_readme = memory / "readme.md"
+            lowercase_entry = """# Lowercase readme is a distinct topic
+- Date: 2026-08-25
+- Evidence: primary evidence
+- Affected surface: case-sensitive filesystems
+
+## Measured
+The lowercase topic exists separately from the canonical index.
+
+## Inference
+None.
+
+## Revisit when
+Repository filename conventions change.
+"""
+            readme.write_text(
+                readme.read_text(encoding="utf-8") + "\n- [Lowercase readme is a distinct topic](readme.md)\n",
+                encoding="utf-8",
+            )
+            real_glob = Path.glob
+            real_is_file = Path.is_file
+            real_read = agent_memory._read
+            real_resolve = Path.resolve
+            real_samefile = Path.samefile
+
+            def fake_glob(path: Path, pattern: str):
+                entries = list(real_glob(path, pattern))
+                if path == memory and pattern == "*.md":
+                    entries.append(lowercase_readme)
+                return iter(entries)
+
+            def fake_is_file(path: Path) -> bool:
+                return True if path == lowercase_readme else real_is_file(path)
+
+            def fake_read(path: Path) -> str | None:
+                if path.name == "readme.md":
+                    return lowercase_entry
+                return real_read(path)
+
+            def fake_resolve(path: Path, strict: bool = False) -> Path:
+                if path == lowercase_readme:
+                    return lowercase_readme
+                return real_resolve(path, strict=strict)
+
+            def fake_samefile(path: Path, other: Path) -> bool:
+                if path == lowercase_readme and other == readme:
+                    return False
+                return real_samefile(path, other)
+
+            with (
+                patch.object(Path, "glob", new=fake_glob),
+                patch.object(Path, "is_file", new=fake_is_file),
+                patch.object(Path, "resolve", new=fake_resolve),
+                patch.object(Path, "samefile", new=fake_samefile),
+                patch("scripts.validate_agent_memory._read", side_effect=fake_read),
+            ):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual([], issues)
 
     def test_live_contract_passes_validator(self) -> None:
         self.assertEqual([], validate_contract(ROOT))

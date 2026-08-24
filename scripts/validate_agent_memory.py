@@ -52,6 +52,13 @@ def _has_reparse_component(path: Path, boundary: Path) -> bool:
         current = current.parent
 
 
+def _same_file(left: Path, right: Path) -> bool:
+    try:
+        return left.samefile(right)
+    except OSError:
+        return False
+
+
 def _read(path: Path) -> str | None:
     try:
         return path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
@@ -88,6 +95,8 @@ def validate_memory(root: Path) -> list[str]:
     readme_path = root / README_RELATIVE
     if _has_reparse_component(memory, root):
         return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)]
+    if _is_reparse_point(readme_path):
+        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)]
     readme = _read(readme_path)
     if readme is None:
         return [_diagnostic("MEMORY_INDEX_LINK_MISSING", readme_path, root)]
@@ -118,7 +127,7 @@ def validate_memory(root: Path) -> list[str]:
         except ValueError:
             issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root))
             continue
-        if resolved_candidate.parent != memory or resolved_candidate.name == "README.md":
+        if resolved_candidate.parent != memory or _same_file(resolved_candidate, readme_path):
             issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root))
             continue
 
