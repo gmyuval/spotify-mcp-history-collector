@@ -66,9 +66,118 @@ class AgentContractTests(unittest.TestCase):
                 "end-session",
                 "gate-oracle",
                 "pr-lifecycle",
+                "retro",
                 "session-start",
             },
             EXPECTED_SKILLS,
+        )
+
+    def test_retro_has_canonical_skill_and_exact_adapter(self) -> None:
+        canonical_path = ROOT / ".agents" / "skills" / "retro" / "SKILL.md"
+        adapter_path = ROOT / ".claude" / "skills" / "retro" / "SKILL.md"
+        self.assertTrue(canonical_path.is_file(), "canonical retro skill is missing")
+        self.assertTrue(adapter_path.is_file(), "retro Claude adapter is missing")
+
+        canonical = canonical_path.read_text(encoding="utf-8")
+        closing = canonical.find("\n---\n", 4)
+        self.assertGreater(closing, 0, "canonical retro frontmatter is incomplete")
+        frontmatter = canonical[: closing + 4]
+        expected_frontmatter = """---
+name: retro
+description: >-
+  Use when repeated delivery evidence, a substantive escape or incident, or an owner request may justify a durable process correction.
+---"""
+        self.assertEqual(expected_frontmatter, frontmatter)
+        pointer = (
+            "Read [../../../.agents/skills/retro/SKILL.md]"
+            "(../../../.agents/skills/retro/SKILL.md) completely and follow it. "
+            "That file is the canonical skill; this file only provides Claude Code discovery."
+        )
+        expected_adapter = f"{frontmatter}\n# Claude Code adapter\n\n{pointer}\n"
+        self.assertEqual(expected_adapter, adapter_path.read_text(encoding="utf-8"))
+
+    def test_retro_is_earned_evidence_based_and_enforceable(self) -> None:
+        retro = " ".join(self.read(".agents/skills/retro/SKILL.md").split())
+        self.assert_terms(
+            retro,
+            (
+                "owner request",
+                "substantive escape or incident",
+                "repeated evidence",
+                "shared cause",
+                "single ordinary correction",
+                "does not trigger",
+                "incident",
+                "pattern",
+                "evidence pins",
+                "smallest enforceable mechanism",
+                "test",
+                "validator rule",
+                "structural change",
+                "canonical procedure correction",
+                "red mutation",
+                "green validation command",
+                "Linear",
+                "never",
+                "queue",
+                "routine ceremony",
+                "blame",
+                "be more careful",
+            ),
+            "retro trigger and mechanism contract",
+        )
+
+    def test_end_session_conditionally_invokes_retro_without_copying_its_procedure(self) -> None:
+        end_session = " ".join(self.read(".agents/skills/end-session/SKILL.md").split())
+        self.assert_terms(
+            end_session,
+            (
+                ".agents/skills/retro/SKILL.md",
+                "evaluate",
+                "owner request",
+                "substantive escape or incident",
+                "repeated evidence",
+                "shared cause",
+                "single ordinary correction does not trigger",
+            ),
+            "end-session conditional retro pointer",
+        )
+        self.assertNotIn(
+            "smallest enforceable mechanism",
+            end_session,
+            "end-session must invoke retro instead of embedding its procedure",
+        )
+
+    def test_retro_pressure_fixture_is_exact_and_sanitized(self) -> None:
+        fixture = " ".join(self.read("tests/contracts/fixtures/skill-pressure/retro.md").split())
+        self.assert_terms(
+            fixture,
+            (
+                "IMPORTANT: These are real retro decisions. Choose and act; do not ask the owner.",
+                "Read `.agents/skills/retro/SKILL.md` completely before answering.",
+                "the release train closes in 12 minutes",
+                "a senior reviewer says to write a short lesson and move on",
+                "two prior review rounds are sunk",
+                "you are exhausted",
+                "Production deployment is not authorized.",
+                "two earlier pull requests omitted outside-diff PR conversation findings",
+                "A third omission with the same incomplete-population cause was caught before merge",
+                "whether this is an incident or pattern",
+                "the exact RED mutation and GREEN validation command",
+                "one ordinary typo was corrected during one review round",
+                "Return Trigger decisions, Shared cause, Mechanism, Mechanism validation, Verbatim rationalizations",
+                "PRESENT, ABSENT, or AMBIGUOUS",
+                "Do not repair omissions after the matrix.",
+                "repeated case triggers",
+                "ordinary case does not trigger",
+                "incident versus pattern distinguished",
+                "evidence grouped by shared cause",
+                "enforceable mechanism selected",
+                "mechanism has a RED mutation and GREEN command",
+                "Linear owns follow-up",
+                "no blame, routine ceremony, or memory queue",
+            ),
+            "retro pressure fixture",
         )
 
     def test_coderabbit_review_has_canonical_skill_and_exact_adapter(self) -> None:
