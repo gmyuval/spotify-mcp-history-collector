@@ -152,6 +152,10 @@ INSTRUCTION_POINTER_RULES = {
             "durable or transient classification",
             re.escape("distinguish an earned durable lesson from a transient or personal bookmark"),
         ),
+        (
+            "same-PR earned memory recording",
+            re.escape("record any earned entry and index change in the same issue-linked pull request as its evidence"),
+        ),
         ("landed bookmark cleanup", re.escape("remove a landed bookmark")),
         (
             "recoverable bookmark cleanup",

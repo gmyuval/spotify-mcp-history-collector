@@ -145,8 +145,9 @@ pull request; never preserve a contradictory private note.
 """,
             ".agents/skills/end-session/SKILL.md": """Read
 `docs/agent/memory/README.md` before relevant indexed entries. Distinguish an earned durable lesson
-from a transient or personal bookmark. Remove a landed bookmark and any bookmark whose state is
-recoverable from Git, GitHub, Linear, or the repository.
+from a transient or personal bookmark. Record any earned entry and index change in the same
+issue-linked pull request as its evidence. Remove a landed bookmark and any bookmark whose state
+is recoverable from Git, GitHub, Linear, or the repository.
 """,
             "docs/agent/review-checklist.md": """Repository memory was considered. Durable context
 is placed at the correct source of truth and updated only when earned. Any repository-memory entry
@@ -243,6 +244,7 @@ private content was committed.
             (
                 "docs/agent/memory/README.md",
                 "Distinguish an earned durable lesson from a transient or personal bookmark",
+                "Record any earned entry and index change in the same issue-linked pull request as its evidence",
                 "Remove a landed bookmark",
                 "bookmark whose state is recoverable from Git, GitHub, Linear, or the repository",
             ),
@@ -276,6 +278,24 @@ private content was committed.
 
             self.assertEqual(
                 ["MEMORY_INSTRUCTION_POINTER: .agents/skills/pr-lifecycle/SKILL.md: repository memory index"],
+                agent_memory.validate_memory(root),
+            )
+
+    def test_end_session_same_pr_memory_recording_mutation_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            lifecycle = root / ".agents" / "skills" / "end-session" / "SKILL.md"
+            text = lifecycle.read_text(encoding="utf-8")
+            mutated = text.replace(
+                "in the same\nissue-linked pull request as its evidence",
+                "in a separate\npull request after its evidence",
+            )
+            self.assertNotEqual(text, mutated, "same-PR memory mutation fixture must change the skill")
+            lifecycle.write_text(mutated, encoding="utf-8")
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: .agents/skills/end-session/SKILL.md: same-PR earned memory recording"],
                 agent_memory.validate_memory(root),
             )
 
