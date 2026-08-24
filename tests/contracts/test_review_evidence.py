@@ -18,6 +18,63 @@ def complete_bundle() -> dict[str, object]:
     return json.loads((FIXTURES / "complete.json").read_text(encoding="utf-8"))
 
 
+def full_domain_bundle() -> dict[str, object]:
+    """Return a valid bundle containing every optional record domain."""
+    document = complete_bundle()
+    reviews = document["populations"]["reviews"]
+    reviews["total_count"] = 1
+    reviews["pages"][0]["items"] = [
+        {
+            "node_id": "review-node-1",
+            "submitted_commit_sha": "0" * 40,
+            "body_sha256": "c" * 64,
+        }
+    ]
+    issue_comments = document["populations"]["issue_comments"]
+    issue_comments["total_count"] = 1
+    issue_comments["pages"][0]["items"] = [
+        {
+            "node_id": "issue-comment-node-1",
+            "database_id": 201,
+            "body_sha256": "d" * 64,
+        }
+    ]
+    document["source_audit"].extend(
+        [
+            {
+                "source_population": "reviews",
+                "source_node_id": "review-node-1",
+                "body_sha256": "c" * 64,
+                "finding_count": 1,
+            },
+            {
+                "source_population": "issue_comments",
+                "source_node_id": "issue-comment-node-1",
+                "body_sha256": "d" * 64,
+                "finding_count": 0,
+            },
+        ]
+    )
+    document["findings"] = [
+        {
+            "key": "finding-1",
+            "source_population": "reviews",
+            "source_node_id": "review-node-1",
+            "ordinal": 1,
+            "disposition": "open",
+            "evidence_reference": "synthetic-reference",
+        }
+    ]
+    return document
+
+
+def nested_value(document: object, path: tuple[object, ...]) -> object:
+    value = document
+    for part in path:
+        value = value[part]
+    return value
+
+
 class ReviewEvidenceTests(unittest.TestCase):
     def test_complete_bundle_is_valid(self) -> None:
         self.assertEqual([], validate_evidence(complete_bundle(), "0" * 40))
@@ -75,11 +132,25 @@ class ReviewEvidenceTests(unittest.TestCase):
             self.assertTrue(
                 any(issue.startswith("EVIDENCE_KEY_UNKNOWN:") for issue in validate_evidence(document, "0" * 40))
             )
+        with self.subTest("missing field"):
+            document = deepcopy(complete_bundle())
+            del document["populations"]["check_runs"]["pages"][0]["items"][0]["name"]
+            self.assertTrue(
+                any(issue.startswith("EVIDENCE_FIELD_MISSING:") for issue in validate_evidence(document, "0" * 40))
+            )
 
     def test_invalid_pull_request_check_and_status_enums_fail_closed(self) -> None:
         with self.subTest("pull request"):
             document = deepcopy(complete_bundle())
             document["pull_request"]["mergeable"] = "NOT_A_STATE"
+            self.assertTrue(any(issue.startswith("ENUM_INVALID:") for issue in validate_evidence(document, "0" * 40)))
+        with self.subTest("check run"):
+            document = deepcopy(complete_bundle())
+            document["populations"]["check_runs"]["pages"][0]["items"][0]["status"] = "NOPE"
+            self.assertTrue(any(issue.startswith("ENUM_INVALID:") for issue in validate_evidence(document, "0" * 40)))
+        with self.subTest("commit status"):
+            document = deepcopy(complete_bundle())
+            document["populations"]["commit_statuses"]["pages"][0]["items"][0]["state"] = "NOPE"
             self.assertTrue(any(issue.startswith("ENUM_INVALID:") for issue in validate_evidence(document, "0" * 40)))
 
     def test_nested_zero_count_requires_terminal_empty_page(self) -> None:
@@ -411,7 +482,7 @@ class ReviewEvidenceTests(unittest.TestCase):
             path.write_text("{", encoding="utf-8")
             stderr = StringIO()
             with redirect_stderr(stderr):
-                result = main([str(path)])
+                result = main([str(path), "--expected-head", "0" * 40])
 
         self.assertNotEqual(0, result)
         self.assertIn("EVIDENCE_JSON_INVALID", stderr.getvalue())
@@ -422,7 +493,7 @@ class ReviewEvidenceTests(unittest.TestCase):
             path.write_text('{"schema_version": 1}', encoding="utf-8")
             stderr = StringIO()
             with redirect_stderr(stderr):
-                result = main([str(path)])
+                result = main([str(path), "--expected-head", "0" * 40])
 
         self.assertNotEqual(0, result)
         self.assertIn("EVIDENCE_FIELD_MISSING", stderr.getvalue())
@@ -439,7 +510,7 @@ class ReviewEvidenceTests(unittest.TestCase):
                         path.write_bytes(b"\xff")
                     stderr = StringIO()
                     with redirect_stderr(stderr):
-                        result = main([str(path)])
+                        result = main([str(path), "--expected-head", "0" * 40])
                     self.assertNotEqual(0, result)
                     self.assertIn(code, stderr.getvalue())
 
@@ -456,7 +527,7 @@ class ReviewEvidenceTests(unittest.TestCase):
             path.write_text(json.dumps(document), encoding="utf-8")
             stdout, stderr = StringIO(), StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
-                result = main([str(path)])
+                result = main([str(path), "--expected-head", "0" * 40])
 
         self.assertEqual(0, result)
         self.assertTrue(stdout.getvalue())
@@ -469,7 +540,7 @@ class ReviewEvidenceTests(unittest.TestCase):
             path.write_text(json.dumps(complete_bundle()), encoding="utf-8")
             stdout = StringIO()
             with redirect_stdout(stdout):
-                result = main([str(path)])
+                result = main([str(path), "--expected-head", "0" * 40])
 
         self.assertEqual(0, result)
         self.assertEqual(
@@ -485,20 +556,395 @@ class ReviewEvidenceTests(unittest.TestCase):
             },
             set(json.loads(stdout.getvalue())),
         )
-        with self.subTest("check run"):
-            document = deepcopy(complete_bundle())
-            document["populations"]["check_runs"]["pages"][0]["items"][0]["status"] = "NOPE"
-            self.assertTrue(any(issue.startswith("ENUM_INVALID:") for issue in validate_evidence(document, "0" * 40)))
-        with self.subTest("commit status"):
-            document = deepcopy(complete_bundle())
-            document["populations"]["commit_statuses"]["pages"][0]["items"][0]["state"] = "NOPE"
-            self.assertTrue(any(issue.startswith("ENUM_INVALID:") for issue in validate_evidence(document, "0" * 40)))
-        with self.subTest("missing field"):
-            document = deepcopy(complete_bundle())
-            del document["populations"]["check_runs"]["pages"][0]["items"][0]["name"]
-            self.assertTrue(
-                any(issue.startswith("EVIDENCE_FIELD_MISSING:") for issue in validate_evidence(document, "0" * 40))
+
+    def test_cli_requires_independent_expected_head(self) -> None:
+        with TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "evidence.json"
+            path.write_text(json.dumps(complete_bundle()), encoding="utf-8")
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                mismatch_result = main([str(path), "--expected-head", "1" * 40])
+                missing_argument_result = main([])
+
+        self.assertNotEqual(0, mismatch_result)
+        self.assertIn("HEAD_EXPECTED_MISMATCH", stderr.getvalue())
+        self.assertNotEqual(0, missing_argument_result)
+
+    def test_malformed_nested_objects_fail_closed_without_leaking_values(self) -> None:
+        for path, value in (("pull_request", []), ("source_audit", {}), ("mutations", {})):
+            with self.subTest(path=path):
+                document = deepcopy(complete_bundle())
+                document[path] = value
+                issues = validate_evidence(document, "0" * 40)
+                self.assertTrue(any(issue.startswith("EVIDENCE_TYPE_INVALID:") for issue in issues))
+                self.assertFalse(any("synthetic-secret" in issue for issue in issues))
+
+    def test_every_collected_content_source_requires_an_audit(self) -> None:
+        document = deepcopy(complete_bundle())
+        document["source_audit"] = []
+
+        self.assertTrue(any(issue.startswith("SOURCE_UNAUDITED:") for issue in validate_evidence(document, "0" * 40)))
+
+    def test_checks_and_statuses_must_bind_to_expected_head(self) -> None:
+        for population, field in (("check_runs", "head_sha"), ("commit_statuses", "commit_sha")):
+            with self.subTest(population=population):
+                document = deepcopy(complete_bundle())
+                document["populations"][population]["pages"][0]["items"][0][field] = "1" * 40
+                self.assertTrue(any(issue.startswith("HEAD_DRIFT:") for issue in validate_evidence(document, "0" * 40)))
+
+    def test_mutation_reply_and_resolve_required_records_fail_closed(self) -> None:
+        for index, field in ((0, "created_comment"), (1, "response")):
+            with self.subTest(field=field):
+                document = deepcopy(complete_bundle())
+                del document["mutations"][0]["operations"][index][field]
+                self.assertTrue(
+                    any(issue.startswith("MUTATION_FIELD_MISSING:") for issue in validate_evidence(document, "0" * 40))
+                )
+
+    def test_pagination_proof_requires_first_and_intermediate_invariants(self) -> None:
+        document = deepcopy(complete_bundle())
+        pages = document["populations"]["reviews"]["pages"]
+        pages[0]["request_cursor"] = "unexpected"
+        self.assertTrue(
+            any(issue.startswith("PAGINATION_CURSOR_INVALID:") for issue in validate_evidence(document, "0" * 40))
+        )
+
+    def test_review_and_issue_comment_audit_coverage_is_body_independent(self) -> None:
+        document = deepcopy(complete_bundle())
+        for name, node_id in (("reviews", "review-node-1"), ("issue_comments", "issue-node-1")):
+            document["populations"][name]["total_count"] = 1
+            document["populations"][name]["pages"][0]["items"] = [{"node_id": node_id}]
+
+        self.assertGreaterEqual(
+            sum(issue.startswith("SOURCE_UNAUDITED:") for issue in validate_evidence(document, "0" * 40)),
+            2,
+        )
+
+    def test_diagnostics_never_interpolate_untrusted_identifiers(self) -> None:
+        document = deepcopy(complete_bundle())
+        document["findings"] = [
+            {
+                "source_population": "synthetic-secret",
+                "source_node_id": "synthetic-secret",
+                "ordinal": 1,
+                "key": "synthetic-secret",
+                "disposition": "open",
+                "evidence_reference": "synthetic-secret",
+            }
+        ]
+
+        self.assertNotIn("synthetic-secret", "\n".join(validate_evidence(document, "0" * 40)))
+
+    def test_nested_pagination_requires_null_first_cursor(self) -> None:
+        document = deepcopy(complete_bundle())
+        document["populations"]["review_threads"]["pages"][0]["items"][0]["comments"]["pages"][0]["request_cursor"] = (
+            "x"
+        )
+        self.assertTrue(
+            any(issue.startswith("PAGINATION_CURSOR_INVALID:") for issue in validate_evidence(document, "0" * 40))
+        )
+
+    def test_exact_key_sets_cover_every_schema_object(self) -> None:
+        cases = (
+            ("pull request", ("pull_request",), "number"),
+            ("connection", ("populations", "reviews"), "total_count"),
+            ("page", ("populations", "reviews", "pages", 0), "request_cursor"),
+            ("page info", ("populations", "reviews", "pages", 0, "page_info"), "has_next_page"),
+            ("review", ("populations", "reviews", "pages", 0, "items", 0), "submitted_commit_sha"),
+            ("issue comment", ("populations", "issue_comments", "pages", 0, "items", 0), "database_id"),
+            ("thread", ("populations", "review_threads", "pages", 0, "items", 0), "is_resolved"),
+            (
+                "nested connection",
+                ("populations", "review_threads", "pages", 0, "items", 0, "comments"),
+                "total_count",
+            ),
+            (
+                "nested page",
+                ("populations", "review_threads", "pages", 0, "items", 0, "comments", "pages", 0),
+                "items",
+            ),
+            (
+                "nested page info",
+                (
+                    "populations",
+                    "review_threads",
+                    "pages",
+                    0,
+                    "items",
+                    0,
+                    "comments",
+                    "pages",
+                    0,
+                    "page_info",
+                ),
+                "end_cursor",
+            ),
+            (
+                "review comment",
+                (
+                    "populations",
+                    "review_threads",
+                    "pages",
+                    0,
+                    "items",
+                    0,
+                    "comments",
+                    "pages",
+                    0,
+                    "items",
+                    0,
+                ),
+                "reply_to_node_id",
+            ),
+            ("check run", ("populations", "check_runs", "pages", 0, "items", 0), "conclusion"),
+            ("commit status", ("populations", "commit_statuses", "pages", 0, "items", 0), "context"),
+            ("audit", ("source_audit", 0), "finding_count"),
+            ("finding", ("findings", 0), "evidence_reference"),
+            ("mutation", ("mutations", 0), "observed_head_before"),
+            ("reply", ("mutations", 0, "operations", 0), "created_comment"),
+            ("created comment", ("mutations", 0, "operations", 0, "created_comment"), "database_id"),
+            ("reply readback", ("mutations", 0, "operations", 0, "readback"), "body_sha256"),
+            ("resolve", ("mutations", 0, "operations", 1), "response"),
+            ("resolve response", ("mutations", 0, "operations", 1, "response"), "is_resolved"),
+            ("resolve readback", ("mutations", 0, "operations", 1, "readback"), "is_resolved"),
+        )
+        for label, path, required_field in cases:
+            with self.subTest(label=label, defect="missing"):
+                document = full_domain_bundle()
+                del nested_value(document, path)[required_field]
+                self.assertTrue(
+                    any(issue.startswith("EVIDENCE_FIELD_MISSING:") for issue in validate_evidence(document, "0" * 40))
+                )
+            with self.subTest(label=label, defect="unknown"):
+                document = full_domain_bundle()
+                nested_value(document, path)["synthetic-secret-extra"] = True
+                issues = validate_evidence(document, "0" * 40)
+                self.assertTrue(any(issue.startswith("EVIDENCE_KEY_UNKNOWN:") for issue in issues))
+                self.assertNotIn("synthetic-secret-extra", "\n".join(issues))
+
+    def test_field_types_formats_and_integer_constraints_cover_every_domain(self) -> None:
+        cases = (
+            ("schema version bool", ("schema_version",), True),
+            ("expected head uppercase", ("expected_head_sha",), "A" * 40),
+            ("observed head short", ("observed_head_sha",), "0" * 39),
+            ("pr number bool", ("pull_request", "number"), True),
+            ("pr number zero", ("pull_request", "number"), 0),
+            ("review in flight", ("pull_request", "review_in_flight"), 0),
+            ("connection total bool", ("populations", "reviews", "total_count"), True),
+            ("connection total negative", ("populations", "reviews", "total_count"), -1),
+            ("connection pages", ("populations", "reviews", "pages"), {}),
+            ("page cursor", ("populations", "reviews", "pages", 0, "request_cursor"), 7),
+            ("page items", ("populations", "reviews", "pages", 0, "items"), {}),
+            ("page info", ("populations", "reviews", "pages", 0, "page_info"), []),
+            ("has next", ("populations", "reviews", "pages", 0, "page_info", "has_next_page"), 0),
+            ("end cursor", ("populations", "reviews", "pages", 0, "page_info", "end_cursor"), 7),
+            ("review node", ("populations", "reviews", "pages", 0, "items", 0, "node_id"), ""),
+            (
+                "review submitted head",
+                ("populations", "reviews", "pages", 0, "items", 0, "submitted_commit_sha"),
+                "1" * 40,
+            ),
+            ("review hash", ("populations", "reviews", "pages", 0, "items", 0, "body_sha256"), "A" * 64),
+            (
+                "issue database id",
+                ("populations", "issue_comments", "pages", 0, "items", 0, "database_id"),
+                0,
+            ),
+            ("thread resolved", ("populations", "review_threads", "pages", 0, "items", 0, "is_resolved"), 0),
+            (
+                "reply-to id",
+                (
+                    "populations",
+                    "review_threads",
+                    "pages",
+                    0,
+                    "items",
+                    0,
+                    "comments",
+                    "pages",
+                    0,
+                    "items",
+                    0,
+                    "reply_to_node_id",
+                ),
+                5,
+            ),
+            ("check name", ("populations", "check_runs", "pages", 0, "items", 0, "name"), 5),
+            ("status context", ("populations", "commit_statuses", "pages", 0, "items", 0, "context"), 5),
+            ("audit population", ("source_audit", 0, "source_population"), "not-a-population"),
+            ("audit count bool", ("source_audit", 0, "finding_count"), True),
+            ("audit count negative", ("source_audit", 0, "finding_count"), -1),
+            ("finding key", ("findings", 0, "key"), ""),
+            ("finding ordinal bool", ("findings", 0, "ordinal"), True),
+            ("finding ordinal zero", ("findings", 0, "ordinal"), 0),
+            ("evidence reference", ("findings", 0, "evidence_reference"), 5),
+            ("mutation head", ("mutations", 0, "expected_head_sha"), "A" * 40),
+            ("operations type", ("mutations", 0, "operations"), {}),
+            ("reply sequence", ("mutations", 0, "operations", 0, "sequence"), True),
+            ("reply thread", ("mutations", 0, "operations", 0, "thread_node_id"), ""),
+            ("created node", ("mutations", 0, "operations", 0, "created_comment", "node_id"), ""),
+            ("created database", ("mutations", 0, "operations", 0, "created_comment", "database_id"), 0),
+            ("expected body hash", ("mutations", 0, "operations", 0, "expected_body_sha256"), "A" * 64),
+            ("readback database", ("mutations", 0, "operations", 0, "readback", "database_id"), True),
+            ("resolve sequence", ("mutations", 0, "operations", 1, "sequence"), 1),
+            ("response resolved", ("mutations", 0, "operations", 1, "response", "is_resolved"), 1),
+        )
+        for label, path, value in cases:
+            with self.subTest(label=label):
+                document = full_domain_bundle()
+                parent = nested_value(document, path[:-1])
+                parent[path[-1]] = value
+                self.assertNotEqual([], validate_evidence(document, "0" * 40))
+
+    def test_all_enum_domains_and_check_conclusion_state_are_exact(self) -> None:
+        valid_values = (
+            (("pull_request", "mergeable"), ("MERGEABLE", "CONFLICTING", "UNKNOWN")),
+            (("pull_request", "review_decision"), ("APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", None)),
+            (
+                ("populations", "check_runs", "pages", 0, "items", 0, "status"),
+                ("QUEUED", "IN_PROGRESS", "COMPLETED", "WAITING", "REQUESTED", "PENDING"),
+            ),
+            (
+                ("populations", "commit_statuses", "pages", 0, "items", 0, "state"),
+                ("EXPECTED", "ERROR", "FAILURE", "PENDING", "SUCCESS"),
+            ),
+            (("findings", 0, "disposition"), ("fixed", "rejected", "open")),
+        )
+        for path, values in valid_values:
+            for value in values:
+                with self.subTest(path=path, value=value):
+                    document = full_domain_bundle()
+                    nested_value(document, path[:-1])[path[-1]] = value
+                    if path[-1] == "status":
+                        document["populations"]["check_runs"]["pages"][0]["items"][0]["conclusion"] = (
+                            "SUCCESS" if value == "COMPLETED" else None
+                        )
+                    self.assertFalse(
+                        any(issue.startswith("ENUM_INVALID:") for issue in validate_evidence(document, "0" * 40))
+                    )
+
+        conclusions = (
+            "SUCCESS",
+            "FAILURE",
+            "NEUTRAL",
+            "CANCELLED",
+            "SKIPPED",
+            "TIMED_OUT",
+            "ACTION_REQUIRED",
+            "STALE",
+            "STARTUP_FAILURE",
+        )
+        for conclusion in conclusions:
+            with self.subTest(conclusion=conclusion):
+                document = full_domain_bundle()
+                document["populations"]["check_runs"]["pages"][0]["items"][0]["conclusion"] = conclusion
+                self.assertEqual([], validate_evidence(document, "0" * 40))
+        for status, conclusion in (("COMPLETED", None), ("PENDING", "SUCCESS"), ("COMPLETED", "NOPE")):
+            with self.subTest(status=status, conclusion=conclusion):
+                document = full_domain_bundle()
+                item = document["populations"]["check_runs"]["pages"][0]["items"][0]
+                item["status"], item["conclusion"] = status, conclusion
+                self.assertTrue(
+                    any(issue.startswith("ENUM_INVALID:") for issue in validate_evidence(document, "0" * 40))
+                )
+
+    def test_complete_pagination_proof_rejects_every_unproven_transition(self) -> None:
+        def two_pages(document: dict[str, object], nested: bool = False) -> list[dict[str, object]]:
+            if nested:
+                connection = document["populations"]["review_threads"]["pages"][0]["items"][0]["comments"]
+                connection["total_count"] = 1
+                pages = connection["pages"]
+            else:
+                connection = document["populations"]["reviews"]
+                connection["total_count"] = 1
+                pages = connection["pages"]
+                pages[0]["items"] = [full_domain_bundle()["populations"]["reviews"]["pages"][0]["items"][0]]
+            pages[0]["page_info"] = {"has_next_page": True, "end_cursor": "cursor-1"}
+            pages.append(
+                {"request_cursor": "cursor-1", "items": [], "page_info": {"has_next_page": False, "end_cursor": None}}
             )
+            return pages
+
+        for nested in (False, True):
+            for label, mutate in (
+                ("intermediate says terminal", lambda pages: pages[0]["page_info"].update(has_next_page=False)),
+                ("intermediate cursor null", lambda pages: pages[0]["page_info"].update(end_cursor=None)),
+                ("final cursor nonnull", lambda pages: pages[-1]["page_info"].update(end_cursor="left-open")),
+            ):
+                with self.subTest(nested=nested, label=label):
+                    document = full_domain_bundle()
+                    pages = two_pages(document, nested)
+                    mutate(pages)
+                    self.assertTrue(
+                        any(
+                            issue.startswith("PAGINATION_INCOMPLETE:")
+                            for issue in validate_evidence(document, "0" * 40)
+                        )
+                    )
+
+    def test_mutation_proof_requires_exact_sequence_kinds_identities_and_shapes(self) -> None:
+        cases = (
+            (("mutations", 0, "operations", 0, "sequence"), 2, "MUTATION_ORDER_INVALID"),
+            (("mutations", 0, "operations", 0, "kind"), "resolve", "MUTATION_ORDER_INVALID"),
+            (("mutations", 0, "operations", 1, "sequence"), 1, "MUTATION_ORDER_INVALID"),
+            (("mutations", 0, "operations", 1, "kind"), "reply", "MUTATION_ORDER_INVALID"),
+            (("mutations", 0, "operations", 0, "readback", "node_id"), "other", "MUTATION_REPLY_ID_MISMATCH"),
+            (
+                ("mutations", 0, "operations", 1, "response", "thread_node_id"),
+                "other",
+                "MUTATION_RESOLUTION_ID_MISMATCH",
+            ),
+            (("mutations", 0, "operations", 1, "readback", "is_resolved"), False, "MUTATION_RESOLUTION_UNPROVEN"),
+        )
+        for path, value, code in cases:
+            with self.subTest(path=path):
+                document = full_domain_bundle()
+                nested_value(document, path[:-1])[path[-1]] = value
+                self.assertTrue(any(issue.startswith(f"{code}:") for issue in validate_evidence(document, "0" * 40)))
+
+    def test_validate_evidence_never_raises_or_echoes_arbitrary_untrusted_input(self) -> None:
+        sentinel = "synthetic-secret-value"
+        cases = (
+            None,
+            7,
+            sentinel,
+            [],
+            {},
+            {sentinel: sentinel, 7: sentinel},
+            {"schema_version": 1, "pull_request": {sentinel: sentinel}},
+        )
+        for document in cases:
+            with self.subTest(document_type=type(document).__name__):
+                issues = validate_evidence(document, sentinel)
+                self.assertIsInstance(issues, list)
+                self.assertTrue(issues)
+                self.assertNotIn(sentinel, "\n".join(issues))
+
+        document = full_domain_bundle()
+        document["populations"]["check_runs"]["pages"][0]["items"][0]["name"] = sentinel
+        document["populations"]["commit_statuses"]["pages"][0]["items"][0]["context"] = sentinel
+        document["findings"][0]["key"] = sentinel
+        document["findings"][0]["evidence_reference"] = sentinel
+        document["source_audit"][0]["source_node_id"] = sentinel
+        self.assertNotIn(sentinel, "\n".join(validate_evidence(document, "0" * 40)))
+
+    def test_unhashable_enum_and_identifier_values_never_raise(self) -> None:
+        paths = (
+            ("pull_request", "mergeable"),
+            ("pull_request", "review_decision"),
+            ("populations", "check_runs", "pages", 0, "items", 0, "status"),
+            ("populations", "check_runs", "pages", 0, "items", 0, "conclusion"),
+            ("populations", "commit_statuses", "pages", 0, "items", 0, "state"),
+            ("source_audit", 0, "source_population"),
+            ("findings", 0, "disposition"),
+            ("mutations", 0, "operations", 0, "thread_node_id"),
+            ("mutations", 0, "operations", 0, "created_comment", "node_id"),
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                document = full_domain_bundle()
+                nested_value(document, path[:-1])[path[-1]] = []
+                self.assertTrue(validate_evidence(document, "0" * 40))
 
 
 if __name__ == "__main__":
