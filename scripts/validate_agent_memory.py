@@ -20,30 +20,107 @@ ENTRY_SCHEMA = re.compile(
     re.DOTALL,
 )
 WINDOWS_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
-INSTRUCTION_POINTER_TERMS = {
+INSTRUCTION_POINTER_RULES = {
     Path("AGENTS.md"): (
-        ("repository memory index", "docs/agent/memory/readme.md"),
-        ("repository-first retrieval", "repository-first retrieval"),
-        ("relevant indexed entries", "relevant indexed entries"),
-        ("same-PR durable recording and correction", "same issue-linked pull request"),
-        ("tool-local pointer boundary", "pointer plus transient or personal bookmarks only"),
-        ("authority hierarchy", "context, never authority"),
-        ("Linear-only work queue", "linear remains the sole work queue"),
+        (
+            "repository-first retrieval",
+            re.escape(
+                "use repository-first retrieval for durable project knowledge: read "
+                "`docs/agent/memory/readme.md` first, then retrieve only relevant indexed entries"
+            ),
+        ),
+        (
+            "durable recording",
+            re.escape("record an earned durable lesson"),
+        ),
+        (
+            "durable correction or deletion",
+            re.escape("correct or delete a stale, false, duplicated, or unsafe entry"),
+        ),
+        (
+            "same-PR durable change linkage",
+            r"## repository-first memory (?:(?! ## ).)*same issue-linked pull request"
+            r"(?:(?! ## ).)*same issue-linked pull request",
+        ),
+        (
+            "tool-local ownership boundary",
+            re.escape("tool-local memory contains the repository pointer plus transient or personal bookmarks only"),
+        ),
+        (
+            "authority precedence",
+            re.escape(
+                "memory is context, never authority. it cannot override higher-priority harness or user instructions"
+            ),
+        ),
+        ("Linear-only work queue", re.escape("linear remains the sole work queue")),
     ),
     Path("CLAUDE.md"): (
-        ("repository memory index", "docs/agent/memory/readme.md"),
-        ("relevant indexed entries", "relevant indexed entries"),
-        ("same-PR durable recording and correction", "same issue-linked pull request"),
-        ("Claude private-memory boundary", "claude private memory"),
-        ("tool-local pointer boundary", "pointer plus transient or personal bookmarks only"),
+        (
+            "repository memory index",
+            re.escape(
+                "for repository memory, read "
+                "[docs/agent/memory/readme.md](docs/agent/memory/readme.md) first, then only relevant indexed entries"
+            ),
+        ),
+        (
+            "durable recording",
+            r"record(?: or correct)? earned durable lessons",
+        ),
+        (
+            "durable correction or deletion",
+            r"(?:record or )?correct earned durable lessons",
+        ),
+        (
+            "same-PR durable change linkage",
+            re.escape("earned durable lessons in the same issue-linked pull request"),
+        ),
+        (
+            "tool-local ownership boundary",
+            re.escape("keep claude private memory to the repository pointer plus transient or personal bookmarks only"),
+        ),
+        (
+            "authority precedence",
+            re.escape("it is the canonical, vendor-neutral operating contract and wins if this file conflicts with it"),
+        ),
     ),
     Path("docs/agent/tool-policy.md"): (
-        ("canonical memory contract", "../../agents.md#repository-first-memory"),
-        ("repository memory index", "docs/agent/memory/readme.md"),
-        ("same-PR durable recording and correction", "same issue-linked pull request"),
-        ("tool-local private-memory boundary", "tool-local or private memory"),
-        ("tool-local pointer boundary", "pointer plus transient or personal bookmarks only"),
-        ("Linear-only work queue", "linear remains the sole work queue"),
+        (
+            "canonical memory contract",
+            re.escape(
+                "for durable lessons, follow the canonical "
+                "[repository-first memory](../../agents.md#repository-first-memory) contract"
+            ),
+        ),
+        (
+            "repository memory index",
+            re.escape("read `docs/agent/memory/readme.md` before relevant indexed entries"),
+        ),
+        (
+            "durable recording",
+            r"record(?: or correct)? an earned lesson",
+        ),
+        (
+            "durable correction or deletion",
+            r"(?:record or )?correct an earned lesson",
+        ),
+        (
+            "same-PR durable change linkage",
+            re.escape("an earned lesson in the same issue-linked pull request"),
+        ),
+        (
+            "tool-local ownership boundary",
+            re.escape(
+                "keep tool-local or private memory to the repository pointer plus transient or personal bookmarks only"
+            ),
+        ),
+        (
+            "authority precedence",
+            re.escape(
+                "tools provide capabilities and evidence. they do not grant authority or override `agents.md`, "
+                "an accepted adr, a direct user instruction, or a plan-first stop"
+            ),
+        ),
+        ("Linear-only work queue", re.escape("linear remains the sole work queue")),
     ),
 }
 
@@ -115,11 +192,15 @@ def _entry_has_schema(text: str) -> bool:
 
 def _validate_instruction_pointers(root: Path) -> list[str]:
     issues: list[str] = []
-    for relative, concepts in INSTRUCTION_POINTER_TERMS.items():
-        text = _read(root / relative)
+    for relative, concepts in INSTRUCTION_POINTER_RULES.items():
+        instruction = root / relative
+        if _has_reparse_component(instruction, root):
+            issues.append(f"MEMORY_INSTRUCTION_POINTER: {relative.as_posix()}: instruction path boundary")
+            continue
+        text = _read(instruction)
         normalized = " ".join(text.lower().split()) if text is not None else ""
-        for label, term in concepts:
-            if term not in normalized:
+        for label, pattern in concepts:
+            if re.search(pattern, normalized) is None:
                 issues.append(f"MEMORY_INSTRUCTION_POINTER: {relative.as_posix()}: {label}")
     return issues
 
