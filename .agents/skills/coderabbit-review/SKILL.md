@@ -33,7 +33,7 @@ credentials, PII, or personal data into a report.
    audited source count. Reconcile every content-bearing source to exactly one source-audit record
    and reconcile its declared finding count to the extracted findings and their unique ordinals.
    Keep check runs and commit statuses separate and bound to the expected head.
-4. Run `python scripts/review_evidence.py <bundle.json> --expected-head <40-character-sha>` and
+4. Run `uv run --locked python scripts/review_evidence.py <bundle.json> --expected-head <40-character-sha>` and
    retain only its sanitized diagnostic or summary. Exit zero proves evidence shape and internal
    consistency only; it is not review completion or merge authority.
 

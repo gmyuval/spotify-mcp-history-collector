@@ -274,6 +274,13 @@ PRESENT, ABSENT, or AMBIGUOUS. Do not repair omissions after the matrix.
             "coderabbit target and reply-association contract",
         )
 
+    def test_coderabbit_review_uses_locked_uv_for_evidence_validation(self) -> None:
+        coderabbit = self.read(".agents/skills/coderabbit-review/SKILL.md")
+        self.assertIn(
+            "uv run --locked python scripts/review_evidence.py <bundle.json> --expected-head <40-character-sha>",
+            coderabbit,
+        )
+
     def test_gate_oracle_has_canonical_skill_and_exact_adapter(self) -> None:
         canonical_path = ROOT / ".agents" / "skills" / "gate-oracle" / "SKILL.md"
         adapter_path = ROOT / ".claude" / "skills" / "gate-oracle" / "SKILL.md"
@@ -325,6 +332,13 @@ description: >-
             "gate-oracle fail-closed verdict",
         )
 
+    def test_gate_oracle_validates_review_evidence_against_the_pinned_head(self) -> None:
+        oracle = self.read(".agents/skills/gate-oracle/SKILL.md")
+        self.assertIn(
+            "uv run --locked python scripts/review_evidence.py <bundle.json> --expected-head <pinned-head>",
+            oracle,
+        )
+
     def test_gate_oracle_requires_the_complete_exact_ready_state(self) -> None:
         oracle = " ".join(self.read(".agents/skills/gate-oracle/SKILL.md").split())
         self.assert_terms(
@@ -343,6 +357,21 @@ description: >-
                 "only when every condition above is proved",
             ),
             "gate-oracle exact ready-state contract",
+        )
+
+    def test_gate_oracle_separates_missing_and_non_successful_protection_evidence(self) -> None:
+        oracle = " ".join(self.read(".agents/skills/gate-oracle/SKILL.md").split())
+        self.assertIn(
+            "Return not ready when merge conflicts are reported (`CONFLICTING`), the review "
+            "decision is non-approved, any finding or thread is unresolved, any review is in "
+            "flight, any observed required branch-protection context is non-successful, or the "
+            "live head has drifted.",
+            oracle,
+        )
+        self.assertIn(
+            "Return indeterminate when mergeability is `UNKNOWN` or required evidence is "
+            "incomplete, including when a required branch-protection context is missing.",
+            oracle,
         )
 
     def test_review_workflows_invoke_gate_oracle_for_final_current_head_readiness(self) -> None:
@@ -390,8 +419,9 @@ verdict is ready, not ready, or indeterminate.
 
 For live state C, evaluate each independent one-defect mutation: `CONFLICTING` mergeability; a
 review decision of `CHANGES_REQUESTED`, `REVIEW_REQUIRED`, or null; one unresolved finding; one
-unresolved review thread; a review in flight; one missing or non-successful protection context;
-or a live head different from the pin. State the verdict for each mutation.
+unresolved review thread; a review in flight; one missing required protection context; one
+observed non-successful protection context; or a live head different from the pin. State the
+verdict for each mutation.
 
 Return Decision for A, B, and every C mutation, Control evidence, Negative evidence, Verbatim
 rationalizations, then mark the acceptance matrix PRESENT, ABSENT, or AMBIGUOUS. Do not repair

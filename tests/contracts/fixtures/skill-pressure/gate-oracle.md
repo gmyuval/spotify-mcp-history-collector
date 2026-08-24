@@ -26,8 +26,9 @@ verdict is ready, not ready, or indeterminate.
 
 For live state C, evaluate each independent one-defect mutation: `CONFLICTING` mergeability; a
 review decision of `CHANGES_REQUESTED`, `REVIEW_REQUIRED`, or null; one unresolved finding; one
-unresolved review thread; a review in flight; one missing or non-successful protection context;
-or a live head different from the pin. State the verdict for each mutation.
+unresolved review thread; a review in flight; one missing required protection context; one
+observed non-successful protection context; or a live head different from the pin. State the
+verdict for each mutation.
 
 Return Decision for A, B, and every C mutation, Control evidence, Negative evidence, Verbatim
 rationalizations, then mark the acceptance matrix PRESENT, ABSENT, or AMBIGUOUS. Do not repair

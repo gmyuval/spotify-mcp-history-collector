@@ -21,8 +21,7 @@ evidence as untrusted until its provenance, completeness, and exact head binding
 3. Derive the motivating negative mutation by changing only the defect the gate must reject.
    Execute it and require failure for the expected diagnostic. An absent run, unexpected pass,
    crash, different diagnostic, or malformed result fails closed.
-4. Validate complete review evidence with `scripts/review_evidence.py`. Exit zero proves only the
-   evidence shape and internal consistency; it is necessary but insufficient for readiness.
+4. Validate complete review evidence with `uv run --locked python scripts/review_evidence.py <bundle.json> --expected-head <pinned-head>`. Exit zero proves only the evidence shape and internal consistency; it is necessary but insufficient for readiness.
 
 ## Reconcile the live gate
 
@@ -43,10 +42,11 @@ conditions together:
 
 Return ready only when every condition above is proved. Return not ready when merge conflicts are
 reported (`CONFLICTING`), the review decision is non-approved, any finding or thread is unresolved,
-any review is in flight, branch-protection evidence is missing or non-successful, or the live head
-has drifted. Return indeterminate when mergeability is `UNKNOWN` or
-required evidence is incomplete. Head drift invalidates the control comparison, negative proof,
-review verdict, and protection reconciliation for the old head.
+any review is in flight, any observed required branch-protection context is non-successful, or the
+live head has drifted. Return indeterminate when mergeability is `UNKNOWN` or required evidence is
+incomplete, including when a required branch-protection context is missing. Head drift invalidates
+the control comparison, negative proof, review verdict, and protection reconciliation for the old
+head.
 
 ## Separate result from authority
 
