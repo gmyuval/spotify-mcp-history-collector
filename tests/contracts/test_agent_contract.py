@@ -59,7 +59,38 @@ class AgentContractTests(unittest.TestCase):
         self.assertEqual([], validate_contract(ROOT))
 
     def test_expected_skill_inventory_is_exact(self) -> None:
-        self.assertEqual({"adr-new", "end-session", "pr-lifecycle", "session-start"}, EXPECTED_SKILLS)
+        self.assertEqual(
+            {"adr-new", "coderabbit-review", "end-session", "pr-lifecycle", "session-start"},
+            EXPECTED_SKILLS,
+        )
+
+    def test_coderabbit_review_has_canonical_skill_and_exact_adapter(self) -> None:
+        canonical_path = ROOT / ".agents" / "skills" / "coderabbit-review" / "SKILL.md"
+        adapter_path = ROOT / ".claude" / "skills" / "coderabbit-review" / "SKILL.md"
+        self.assertTrue(canonical_path.is_file(), "canonical coderabbit-review skill is missing")
+        self.assertTrue(adapter_path.is_file(), "coderabbit-review Claude adapter is missing")
+
+        canonical = canonical_path.read_text(encoding="utf-8")
+        closing = canonical.find("\n---\n", 4)
+        self.assertGreater(closing, 0, "canonical coderabbit-review frontmatter is incomplete")
+        frontmatter = canonical[: closing + 4]
+        pointer = (
+            "Read [../../../.agents/skills/coderabbit-review/SKILL.md]"
+            "(../../../.agents/skills/coderabbit-review/SKILL.md) completely and follow it. "
+            "That file is the canonical skill; this file only provides Claude Code discovery."
+        )
+        expected_adapter = f"{frontmatter}\n# Claude Code adapter\n\n{pointer}\n"
+        self.assertEqual(expected_adapter, adapter_path.read_text(encoding="utf-8"))
+
+    def test_pr_lifecycle_invokes_coderabbit_review_without_duplicating_mechanics(self) -> None:
+        lifecycle = " ".join(self.read(".agents/skills/pr-lifecycle/SKILL.md").split())
+        self.assertIn(".agents/skills/coderabbit-review/SKILL.md", lifecycle)
+        self.assertIn("For every review round", lifecycle)
+        self.assertNotIn(
+            "review bodies, inline comments, and unresolved threads",
+            lifecycle,
+            "pr-lifecycle must invoke coderabbit-review instead of restating collection mechanics",
+        )
 
     def test_missing_adapter_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -48,6 +48,15 @@ tool summary, green badge, or issue checkbox is only a claim until checked.
 ## Pull-request and merge evidence
 
 - [ ] The reviewed revision is the current PR head and GitHub reports it mergeable.
+- [ ] `coderabbit-review` produced a validator-accepted transient evidence bundle after proving
+      `build/review-evidence/` ignored; that directory was never staged, and validator success was
+      not treated as merge authority.
+- [ ] Reviews, PR conversation comments, review threads, nested comments/counter-replies, check
+      runs, and commit statuses have complete terminal-page proof. API totals, unique item counts,
+      audited source counts, and extracted finding counts reconcile without an omitted population.
+- [ ] Any review reply and thread resolution used the expected current head and the correct comment
+      database-ID/thread-node-ID domains. Reply preceded resolution; the created reply and resolved
+      thread were each read back exactly. An API success response alone was not accepted.
 - [ ] The current branch-protection rules were read live; every required check is green on that
       head and the required approving review targets that head.
 - [ ] No unresolved review thread or known review still in flight remains.

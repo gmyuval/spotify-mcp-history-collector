@@ -64,16 +64,11 @@ assumed. Do not create a disposable linkage PR during discovery.
 
 ## Phase 3 - review
 
-For every review round:
-
-1. Read the current head SHA, mergeability/conflicts, review decision, check rollup, review bodies,
-   inline comments, and unresolved threads. Empty or partial reads fail closed.
-2. Verify each finding against `AGENTS.md`, accepted ADRs, current code/tests, and pinned dependency
-   behaviour. Fix valid findings; explain rejected suggestions.
-3. Batch fixes into one normal push when practical, then rerun affected gates. Any head change
-   invalidates earlier current-head review/check evidence.
-4. Independently verify every delegate report from the actual diff, command output, or external
-   object. Delegates do not arm watchers or mutate GitHub/Linear.
+For every review round, read
+[`coderabbit-review`](../../../.agents/skills/coderabbit-review/SKILL.md) completely and invoke it as
+the canonical collection, finding-adjudication, mutation, and convergence procedure. Independently
+verify every delegate report from the actual diff, command output, or external object. Delegates do
+not arm watchers or mutate GitHub/Linear, and the root retains every authority decision.
 
 Do not assume CodeRabbit, auto-merge, or branch deletion. Query the repository's current settings
 and branch protection before relying on them. A review approval must target the current head, every
