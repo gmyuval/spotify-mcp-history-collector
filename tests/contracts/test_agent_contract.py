@@ -690,6 +690,76 @@ private content was committed.
                 self.assertEqual(expected, result.stdout, name)
                 self.assertEqual("", result.stderr, name)
 
+    def test_memory_tree_scan_failure_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+
+            with patch("os.scandir", side_effect=PermissionError):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                issues,
+            )
+
+    def test_indexed_memory_schema_is_validated_when_tree_scan_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            entry.write_text(
+                entry.read_text(encoding="utf-8").replace("- Date: 2026-08-25\n", ""),
+                encoding="utf-8",
+            )
+
+            with patch("os.scandir", side_effect=PermissionError):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                [
+                    "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md",
+                    "MEMORY_TREE_SCAN: docs/agent/memory",
+                ],
+                issues,
+            )
+
+    def test_nested_markdown_is_rejected_without_following_directory_boundaries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            _, entry = self.memory_fixture(root)
+            nested = memory / "nested"
+            nested.mkdir()
+            (nested / "topic.md").write_text(entry.read_text(encoding="utf-8"), encoding="utf-8")
+
+            result = self.run_memory_validator(root)
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertEqual(
+                "MEMORY_ENTRY_LAYOUT: docs/agent/memory/nested\n"
+                "MEMORY_ENTRY_LAYOUT: docs/agent/memory/nested/topic.md\n",
+                result.stdout,
+            )
+            self.assertEqual("", result.stderr)
+
+    def test_uppercase_markdown_extension_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            _, entry = self.memory_fixture(root)
+            uppercase = memory / "uppercase-topic.MD"
+            uppercase.write_text(entry.read_text(encoding="utf-8"), encoding="utf-8")
+
+            result = self.run_memory_validator(root)
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertEqual(
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/uppercase-topic.MD\n"
+                "MEMORY_ENTRY_FILENAME: docs/agent/memory/uppercase-topic.MD\n",
+                result.stdout,
+            )
+            self.assertEqual("", result.stderr)
+
     def test_memory_root_or_ancestor_reparse_cannot_become_trusted_boundary(self) -> None:
         for relative_reparse in (Path("docs"), Path("docs/agent/memory")):
             with self.subTest(path=relative_reparse), tempfile.TemporaryDirectory() as temporary:
@@ -869,14 +939,17 @@ None.
 ## Revisit when
 Repository filename conventions change.
 """
-            real_glob = Path.glob
+            real_scan = agent_memory._scan_memory_tree
             real_read = agent_memory._read
 
-            def fake_glob(path: Path, pattern: str):
-                entries = list(real_glob(path, pattern))
-                if path == memory and pattern == "*.md":
-                    entries.append(lowercase_readme)
-                return iter(entries)
+            def fake_scan(
+                memory_path: Path,
+                root_path: Path,
+                blocked_entries: set[Path],
+            ) -> tuple[list[Path], list[str]]:
+                entries, issues = real_scan(memory_path, root_path, blocked_entries)
+                entries.append(lowercase_readme)
+                return entries, issues
 
             def fake_read(path: Path) -> str | None:
                 if path.name == "readme.md":
@@ -884,7 +957,7 @@ Repository filename conventions change.
                 return real_read(path)
 
             with (
-                patch.object(Path, "glob", new=fake_glob),
+                patch("scripts.validate_agent_memory._scan_memory_tree", side_effect=fake_scan),
                 patch("scripts.validate_agent_memory._read", side_effect=fake_read),
             ):
                 issues = agent_memory.validate_memory(root)
@@ -918,17 +991,20 @@ Repository filename conventions change.
                 readme.read_text(encoding="utf-8") + "\n- [Lowercase readme is a distinct topic](readme.md)\n",
                 encoding="utf-8",
             )
-            real_glob = Path.glob
+            real_scan = agent_memory._scan_memory_tree
             real_is_file = Path.is_file
             real_read = agent_memory._read
             real_resolve = Path.resolve
             real_samefile = Path.samefile
 
-            def fake_glob(path: Path, pattern: str):
-                entries = list(real_glob(path, pattern))
-                if path == memory and pattern == "*.md":
-                    entries.append(lowercase_readme)
-                return iter(entries)
+            def fake_scan(
+                memory_path: Path,
+                root_path: Path,
+                blocked_entries: set[Path],
+            ) -> tuple[list[Path], list[str]]:
+                entries, issues = real_scan(memory_path, root_path, blocked_entries)
+                entries.append(lowercase_readme)
+                return entries, issues
 
             def fake_is_file(path: Path) -> bool:
                 return True if path == lowercase_readme else real_is_file(path)
@@ -949,7 +1025,7 @@ Repository filename conventions change.
                 return real_samefile(path, other)
 
             with (
-                patch.object(Path, "glob", new=fake_glob),
+                patch("scripts.validate_agent_memory._scan_memory_tree", side_effect=fake_scan),
                 patch.object(Path, "is_file", new=fake_is_file),
                 patch.object(Path, "resolve", new=fake_resolve),
                 patch.object(Path, "samefile", new=fake_samefile),

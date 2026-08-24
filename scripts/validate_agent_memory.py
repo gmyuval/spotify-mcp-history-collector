@@ -1,5 +1,6 @@
 """Dependency-free validation for repository-owned durable agent memory."""
 
+import os
 import re
 import stat
 import sys
@@ -241,6 +242,48 @@ def _entry_has_schema(text: str) -> bool:
     return ENTRY_SCHEMA.fullmatch(text) is not None
 
 
+def _scan_memory_tree(memory: Path, root: Path, blocked_entries: set[Path]) -> tuple[list[Path], list[str]]:
+    entries: list[Path] = []
+    issues: list[str] = []
+    pending = [memory]
+    while pending:
+        directory = pending.pop(0)
+        try:
+            with os.scandir(directory) as iterator:
+                children = sorted(iterator, key=lambda child: (child.name.casefold(), child.name))
+        except OSError:
+            issues.append(_diagnostic("MEMORY_TREE_SCAN", directory, root))
+            continue
+
+        for child in children:
+            path = Path(child.path)
+            try:
+                metadata = child.stat(follow_symlinks=False)
+            except OSError:
+                issues.append(_diagnostic("MEMORY_TREE_SCAN", path, root))
+                continue
+
+            is_reparse = stat.S_ISLNK(metadata.st_mode) or bool(
+                getattr(metadata, "st_file_attributes", 0) & WINDOWS_REPARSE_POINT
+            )
+            if is_reparse:
+                if path not in blocked_entries:
+                    issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", path, root))
+                continue
+            if stat.S_ISDIR(metadata.st_mode):
+                issues.append(_diagnostic("MEMORY_ENTRY_LAYOUT", path, root))
+                pending.append(path)
+                continue
+            if path.suffix.lower() != ".md":
+                continue
+            if directory != memory or not stat.S_ISREG(metadata.st_mode):
+                issues.append(_diagnostic("MEMORY_ENTRY_LAYOUT", path, root))
+                continue
+            entries.append(path)
+
+    return entries, issues
+
+
 def _validate_instruction_pointers(root: Path) -> list[str]:
     issues: list[str] = []
     for relative, concepts in INSTRUCTION_POINTER_RULES.items():
@@ -256,23 +299,21 @@ def _validate_instruction_pointers(root: Path) -> list[str]:
     return issues
 
 
-def validate_memory(root: Path) -> list[str]:
-    """Return sanitized, fail-closed findings for the repository memory tree."""
-
+def _validate_memory(root: Path) -> tuple[list[str], int]:
     root = root.absolute()
     memory = root / MEMORY_RELATIVE
     readme_path = root / README_RELATIVE
     if _has_reparse_component(memory, root):
-        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)]
+        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)], 0
     if _is_reparse_point(readme_path):
-        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)]
+        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)], 0
     readme = _read(readme_path)
     if readme is None:
-        return [_diagnostic("MEMORY_INDEX_LINK_MISSING", readme_path, root)]
+        return [_diagnostic("MEMORY_INDEX_LINK_MISSING", readme_path, root)], 0
 
     index = _index_body(readme)
     if index is None:
-        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)]
+        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)], 0
 
     issues: list[str] = []
     indexed: dict[Path, int] = {}
@@ -307,16 +348,17 @@ def validate_memory(root: Path) -> list[str]:
             issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", candidate, root))
         if not candidate.is_file():
             issues.append(_diagnostic("MEMORY_INDEX_LINK_MISSING", candidate, root))
+            continue
+        text = _read(candidate)
+        if text is None or not _entry_has_schema(text):
+            issues.append(_diagnostic("MEMORY_ENTRY_SCHEMA", candidate, root))
 
-    try:
-        entries = sorted(
-            (path for path in memory.glob("*.md") if path.name != "README.md"),
-            key=lambda path: path.as_posix(),
-        )
-    except OSError:
-        entries = []
+    entries, scan_issues = _scan_memory_tree(memory, root, blocked_entries)
+    issues.extend(scan_issues)
 
     for entry in entries:
+        if entry.name == "README.md":
+            continue
         if _has_reparse_component(entry, memory):
             if entry not in blocked_entries:
                 issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", entry, root))
@@ -325,22 +367,29 @@ def validate_memory(root: Path) -> list[str]:
             issues.append(_diagnostic("MEMORY_ENTRY_UNINDEXED", entry, root))
         if KEBAB_MARKDOWN.fullmatch(entry.name) is None:
             issues.append(_diagnostic("MEMORY_ENTRY_FILENAME", entry, root))
-        text = _read(entry)
-        if text is None or not _entry_has_schema(text):
-            issues.append(_diagnostic("MEMORY_ENTRY_SCHEMA", entry, root))
+        if entry not in indexed:
+            text = _read(entry)
+            if text is None or not _entry_has_schema(text):
+                issues.append(_diagnostic("MEMORY_ENTRY_SCHEMA", entry, root))
 
     issues.extend(_validate_instruction_pointers(root))
+    return issues, len(indexed)
+
+
+def validate_memory(root: Path) -> list[str]:
+    """Return sanitized, fail-closed findings for the repository memory tree."""
+
+    issues, _ = _validate_memory(root)
     return issues
 
 
 def main() -> int:
     root = Path(sys.argv[1]) if len(sys.argv) == 2 else Path(__file__).resolve().parents[1]
-    issues = validate_memory(root)
+    issues, topic_count = _validate_memory(root)
     if issues:
         for issue in issues:
             print(issue)
         return 1
-    topic_count = sum(path.name != "README.md" for path in (root / MEMORY_RELATIVE).glob("*.md"))
     print(f"Memory contract OK ({topic_count} indexed topic{'s' if topic_count != 1 else ''}).")
     return 0
 
