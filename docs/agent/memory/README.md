@@ -27,4 +27,4 @@ when later evidence makes it false.
 
 ## Index
 
-No durable topic entries have been recorded yet.
+- [Pinned uv provides reproducible Windows validation when plain Python discovery fails](windows-pinned-uv-validation.md)

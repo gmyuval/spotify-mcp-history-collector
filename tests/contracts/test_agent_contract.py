@@ -2,6 +2,8 @@
 
 import shutil
 import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,6 +56,264 @@ class AgentContractTests(unittest.TestCase):
             any(issue.startswith(f"{reason}:") for issue in issues),
             f"expected {reason}, got: {issues}",
         )
+
+    def run_memory_validator(self, root: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "validate_agent_memory.py"), str(root)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def memory_fixture(self, root: Path) -> tuple[Path, Path]:
+        memory = root / "docs" / "agent" / "memory"
+        memory.mkdir(parents=True)
+        readme = memory / "README.md"
+        readme.write_text(
+            """# Durable project memory
+
+## Index
+
+- [Pinned uv is reliable for Windows validation](windows-pinned-uv-validation.md)
+""",
+            encoding="utf-8",
+        )
+        entry = memory / "windows-pinned-uv-validation.md"
+        entry.write_text(
+            """# Pinned uv is reliable for Windows validation
+- Date: 2026-08-25
+- Evidence: `uv --version`; `uv run --locked python --version`
+- Affected surface: local contract validation on Windows
+
+## Measured
+The pinned command completed and the plain interpreter did not.
+
+## Inference
+Pinned uv is the reliable entrypoint on this host.
+
+## Revisit when
+Python discovery or the repository toolchain changes.
+""",
+            encoding="utf-8",
+        )
+        return readme, entry
+
+    def test_live_memory_contract_passes_validator(self) -> None:
+        result = self.run_memory_validator(ROOT)
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("Memory contract OK (1 indexed topic).\n", result.stdout)
+        self.assertEqual("", result.stderr)
+
+    def test_memory_index_mutations_fail_closed(self) -> None:
+        cases = (
+            (
+                "unindexed topic",
+                "entry",
+                "",
+                "",
+                "unindexed-topic.md",
+                "# A second durable conclusion\n- Date: 2026-08-25\n- Evidence: primary evidence\n- Affected surface: local validation\n\n## Measured\nMeasured fact.\n\n## Inference\nNone.\n\n## Revisit when\nThe validation surface changes.\n",
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/unindexed-topic.md\n",
+            ),
+            (
+                "missing target",
+                "readme",
+                "windows-pinned-uv-validation.md",
+                "missing-topic.md",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_MISSING: docs/agent/memory/missing-topic.md\n"
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "absolute target",
+                "readme",
+                "windows-pinned-uv-validation.md",
+                "C:/private/outside.md",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md\n"
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "escaping target",
+                "readme",
+                "windows-pinned-uv-validation.md",
+                "../outside.md",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md\n"
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "README target",
+                "readme",
+                "windows-pinned-uv-validation.md",
+                "README.md",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md\n"
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "duplicate index path",
+                "readme",
+                "",
+                "\n- [A duplicate conclusion](windows-pinned-uv-validation.md)",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "non-kebab filename",
+                "both",
+                "windows-pinned-uv-validation.md",
+                "Bad_Name.md",
+                "",
+                "",
+                "MEMORY_ENTRY_FILENAME: docs/agent/memory/Bad_Name.md\n",
+            ),
+            (
+                "duplicate H1 conclusion",
+                "entry",
+                "# Pinned uv is reliable for Windows validation\n",
+                "# Pinned uv is reliable for Windows validation\n# A second conclusion\n",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing date",
+                "entry",
+                "- Date: 2026-08-25\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "malformed date",
+                "entry",
+                "- Date: 2026-08-25",
+                "- Date: 2026/08/25",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing evidence",
+                "entry",
+                "- Evidence: `uv --version`; `uv run --locked python --version`\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty evidence",
+                "entry",
+                "- Evidence: `uv --version`; `uv run --locked python --version`",
+                "- Evidence: ",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing affected surface",
+                "entry",
+                "- Affected surface: local contract validation on Windows\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty affected surface",
+                "entry",
+                "- Affected surface: local contract validation on Windows",
+                "- Affected surface: ",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing measured section",
+                "entry",
+                "## Measured\nThe pinned command completed and the plain interpreter did not.\n\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty measured section",
+                "entry",
+                "## Measured\nThe pinned command completed and the plain interpreter did not.",
+                "## Measured\n",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing inference section",
+                "entry",
+                "## Inference\nPinned uv is the reliable entrypoint on this host.\n\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty inference section",
+                "entry",
+                "## Inference\nPinned uv is the reliable entrypoint on this host.",
+                "## Inference\n",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing revisit section",
+                "entry",
+                "## Revisit when\nPython discovery or the repository toolchain changes.\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty revisit section",
+                "entry",
+                "## Revisit when\nPython discovery or the repository toolchain changes.",
+                "## Revisit when\n",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+        )
+
+        for name, target, old, new, extra_name, extra_text, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                readme, entry = self.memory_fixture(root)
+                if target in {"readme", "both"}:
+                    text = readme.read_text(encoding="utf-8")
+                    readme.write_text(text.replace(old, new) if old else text + new, encoding="utf-8")
+                if target in {"entry", "both"}:
+                    text = entry.read_text(encoding="utf-8")
+                    entry.write_text(text.replace(old, new) if old else text + new, encoding="utf-8")
+                    if target == "both":
+                        entry.rename(entry.with_name(new))
+                if extra_name:
+                    entry.with_name(extra_name).write_text(extra_text, encoding="utf-8")
+
+                result = self.run_memory_validator(root)
+
+                self.assertNotEqual(0, result.returncode, name)
+                self.assertEqual(expected, result.stdout, name)
+                self.assertEqual("", result.stderr, name)
 
     def test_live_contract_passes_validator(self) -> None:
         self.assertEqual([], validate_contract(ROOT))
