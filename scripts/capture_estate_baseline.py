@@ -16,7 +16,7 @@ from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 DO_COMMAND_SUFFIXES: dict[str, tuple[str, ...]] = {
     "droplets": ("compute", "droplet", "list"),
@@ -216,7 +216,7 @@ def resolve_command(
     return [executable, *command[1:]]
 
 
-PROVIDER_READ_TIMEOUT_SECONDS = 120
+PROVIDER_READ_TIMEOUT_SECONDS: Final[int] = 120
 
 
 def _run_json_command(provider: str, name: str, command: list[str]) -> object:
