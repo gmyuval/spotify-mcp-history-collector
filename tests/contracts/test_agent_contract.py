@@ -714,7 +714,7 @@ private content was committed.
             self.memory_fixture(root)
 
             with patch(
-                "scripts.validate_agent_memory._scan_memory_root",
+                "scripts.validate_agent_memory._snapshot_memory",
                 side_effect=PermissionError,
                 create=True,
             ):
@@ -725,7 +725,7 @@ private content was committed.
                 issues,
             )
 
-    def test_indexed_memory_schema_is_validated_when_tree_scan_fails(self) -> None:
+    def test_snapshot_failure_prevents_path_based_content_validation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             _, entry = self.memory_fixture(root)
@@ -735,17 +735,14 @@ private content was committed.
             )
 
             with patch(
-                "scripts.validate_agent_memory._scan_memory_root",
+                "scripts.validate_agent_memory._snapshot_memory",
                 side_effect=PermissionError,
                 create=True,
             ):
                 issues = agent_memory.validate_memory(root)
 
             self.assertEqual(
-                [
-                    "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md",
-                    "MEMORY_TREE_SCAN: docs/agent/memory",
-                ],
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
                 issues,
             )
 
@@ -835,23 +832,23 @@ private content was committed.
             outside = root / "outside"
             outside.mkdir()
             (outside / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
-            real_scan_root = getattr(agent_memory, "_scan_memory_root", None)
+            real_snapshot = getattr(agent_memory, "_snapshot_memory", None)
             scanned: list[Path] = []
             replaced = False
 
-            def replace_after_root_scan(directory: Path):
+            def replace_after_root_scan(repository: Path):
                 nonlocal replaced
-                scanned.append(directory)
-                self.assertIsNotNone(real_scan_root)
-                children = real_scan_root(directory)
+                scanned.append(repository)
+                self.assertIsNotNone(real_snapshot)
+                snapshot = real_snapshot(repository)
                 nested.rename(original)
                 self.create_directory_link(nested, outside)
                 replaced = True
-                return children
+                return snapshot
 
             try:
                 with patch(
-                    "scripts.validate_agent_memory._scan_memory_root",
+                    "scripts.validate_agent_memory._snapshot_memory",
                     side_effect=replace_after_root_scan,
                     create=True,
                 ):
@@ -865,7 +862,7 @@ private content was committed.
                 ["MEMORY_ENTRY_LAYOUT: docs/agent/memory/nested"],
                 issues,
             )
-            self.assertEqual([memory], scanned)
+            self.assertEqual([root], scanned)
             self.assertNotIn("external-secret.md", "\n".join(issues))
 
     def test_memory_root_replacement_fails_without_external_name_leakage(self) -> None:
@@ -884,15 +881,20 @@ private content was committed.
             else:
                 real_open = agent_memory.os.open
 
-            def replace_before_root_open(path: str | bytes | Path, *args: object):
+            def replace_before_root_open(
+                path: str | bytes | Path,
+                *args: object,
+                **kwargs: object,
+            ):
                 nonlocal replaced
                 directory = Path(path)
-                if directory == memory and not replaced:
+                memory_component_open = sys.platform != "win32" and directory == Path("memory")
+                if (directory == memory or memory_component_open) and not replaced:
                     memory.rename(original)
                     self.create_directory_link(memory, outside)
                     replaced = True
                 self.assertIsNotNone(real_open)
-                return real_open(path, *args)
+                return real_open(path, *args, **kwargs)
 
             try:
                 target = (
@@ -912,6 +914,129 @@ private content was committed.
                 issues,
             )
             self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    def test_memory_ancestor_replacement_fails_without_external_name_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            agent = root / "docs" / "agent"
+            memory = agent / "memory"
+            self.memory_fixture(root)
+            original = root / "agent-original"
+            outside_agent = root / "outside-agent"
+            outside_memory = outside_agent / "memory"
+            outside_memory.mkdir(parents=True)
+            (outside_memory / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            replaced = False
+
+            if sys.platform == "win32":
+                real_open = getattr(agent_memory, "_win32_open_directory", None)
+            else:
+                real_open = agent_memory.os.open
+
+            def replace_ancestor_before_memory_open(
+                path: str | bytes | Path,
+                *args: object,
+                **kwargs: object,
+            ):
+                nonlocal replaced
+                directory = Path(path) if not isinstance(path, int) else None
+                memory_component_open = sys.platform != "win32" and directory == Path("memory")
+                if (directory == memory or memory_component_open) and not replaced:
+                    agent.rename(original)
+                    self.create_directory_link(agent, outside_agent)
+                    replaced = True
+                self.assertIsNotNone(real_open)
+                return real_open(path, *args, **kwargs)
+
+            try:
+                target = (
+                    "scripts.validate_agent_memory._win32_open_directory"
+                    if sys.platform == "win32"
+                    else "scripts.validate_agent_memory.os.open"
+                )
+                with patch(target, side_effect=replace_ancestor_before_memory_open, create=True):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    self.remove_directory_link(agent)
+                    original.rename(agent)
+
+            self.assertEqual(
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                issues,
+            )
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    def test_memory_root_replacement_before_index_read_never_reads_external_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            readme, _ = self.memory_fixture(root)
+            original = root / "memory-original"
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "README.md").write_text(
+                "# External\n\n## Index\n\n- [External](external-secret.md)\n",
+                encoding="utf-8",
+            )
+            (outside / "external-secret.md").write_text("must not be read", encoding="utf-8")
+            real_path_read = agent_memory._read
+            real_handle_read = getattr(agent_memory, "_read_memory_child", None)
+            replaced = False
+
+            def replace_root() -> None:
+                nonlocal replaced
+                if not replaced:
+                    memory.rename(original)
+                    self.create_directory_link(memory, outside)
+                    replaced = True
+
+            def replace_before_path_read(path: Path) -> str | None:
+                if path == readme:
+                    replace_root()
+                return real_path_read(path)
+
+            def replace_before_handle_read(*args: object):
+                replace_root()
+                self.assertIsNotNone(real_handle_read)
+                return real_handle_read(*args)
+
+            try:
+                with (
+                    patch("scripts.validate_agent_memory._read", side_effect=replace_before_path_read),
+                    patch(
+                        "scripts.validate_agent_memory._read_memory_child",
+                        side_effect=replace_before_handle_read,
+                        create=True,
+                    ),
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    self.remove_directory_link(memory)
+                    original.rename(memory)
+
+            self.assertEqual(
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                issues,
+            )
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    @unittest.skipIf(sys.platform == "win32", "Windows forbids control characters in filenames")
+    def test_memory_diagnostics_escape_control_characters_in_filenames(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            (memory / "forged\nline.md").write_text("invalid schema", encoding="utf-8")
+
+            issues = agent_memory.validate_memory(root)
+
+            self.assertIn(
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/forged\\nline.md",
+                issues,
+            )
+            self.assertTrue(all("\n" not in issue for issue in issues))
 
     def test_uppercase_markdown_extension_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1054,29 +1179,29 @@ private content was committed.
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             _, entry = self.memory_fixture(root)
-            outside = root.parent / "external-memory-entry.md"
-            real_lstat = Path.lstat
-            real_resolve = Path.resolve
+            real_snapshot = agent_memory._snapshot_memory
 
-            def fake_lstat(path: Path) -> object:
-                if path == entry:
-                    return SimpleNamespace(
-                        st_mode=stat.S_IFREG,
-                        st_file_attributes=WINDOWS_REPARSE_POINT,
+            def fake_snapshot(repository: Path):
+                snapshot = real_snapshot(repository)
+                children = tuple(
+                    agent_memory._MemoryChild(
+                        child.name,
+                        stat.S_IFLNK if child.name == entry.name else child.mode,
+                        (
+                            child.file_attributes | WINDOWS_REPARSE_POINT
+                            if child.name == entry.name
+                            else child.file_attributes
+                        ),
+                        child.identity,
+                        None if child.name == entry.name else child.text,
                     )
-                return real_lstat(path)
-
-            def fake_resolve(path: Path, strict: bool = False) -> Path:
-                if path == entry:
-                    return outside
-                return real_resolve(path, strict=strict)
+                    for child in snapshot.children
+                )
+                return agent_memory._MemorySnapshot(children)
 
             issues: list[str] | None = None
             try:
-                with (
-                    patch.object(Path, "lstat", new=fake_lstat),
-                    patch.object(Path, "resolve", new=fake_resolve),
-                ):
+                with patch("scripts.validate_agent_memory._snapshot_memory", side_effect=fake_snapshot):
                     issues = agent_memory.validate_memory(root)
             except ValueError:
                 pass
@@ -1090,6 +1215,7 @@ private content was committed.
                 issues,
             )
 
+    @unittest.skipIf(sys.platform == "win32", "requires a case-sensitive filesystem")
     def test_lowercase_readme_topic_is_not_silently_excluded(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1110,34 +1236,16 @@ None.
 ## Revisit when
 Repository filename conventions change.
 """
-            real_scan = agent_memory._scan_memory_tree
-            real_read = agent_memory._read
+            lowercase_readme.write_text(lowercase_entry, encoding="utf-8")
 
-            def fake_scan(
-                memory_path: Path,
-                root_path: Path,
-                blocked_entries: set[Path],
-            ) -> tuple[list[Path], list[str]]:
-                entries, issues = real_scan(memory_path, root_path, blocked_entries)
-                entries.append(lowercase_readme)
-                return entries, issues
-
-            def fake_read(path: Path) -> str | None:
-                if path.name == "readme.md":
-                    return lowercase_entry
-                return real_read(path)
-
-            with (
-                patch("scripts.validate_agent_memory._scan_memory_tree", side_effect=fake_scan),
-                patch("scripts.validate_agent_memory._read", side_effect=fake_read),
-            ):
-                issues = agent_memory.validate_memory(root)
+            issues = agent_memory.validate_memory(root)
 
             self.assertEqual(
                 ["MEMORY_ENTRY_UNINDEXED: docs/agent/memory/readme.md"],
                 issues,
             )
 
+    @unittest.skipIf(sys.platform == "win32", "requires a case-sensitive filesystem")
     def test_distinct_lowercase_readme_can_be_indexed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1162,47 +1270,9 @@ Repository filename conventions change.
                 readme.read_text(encoding="utf-8") + "\n- [Lowercase readme is a distinct topic](readme.md)\n",
                 encoding="utf-8",
             )
-            real_scan = agent_memory._scan_memory_tree
-            real_is_file = Path.is_file
-            real_read = agent_memory._read
-            real_resolve = Path.resolve
-            real_samefile = Path.samefile
+            lowercase_readme.write_text(lowercase_entry, encoding="utf-8")
 
-            def fake_scan(
-                memory_path: Path,
-                root_path: Path,
-                blocked_entries: set[Path],
-            ) -> tuple[list[Path], list[str]]:
-                entries, issues = real_scan(memory_path, root_path, blocked_entries)
-                entries.append(lowercase_readme)
-                return entries, issues
-
-            def fake_is_file(path: Path) -> bool:
-                return True if path == lowercase_readme else real_is_file(path)
-
-            def fake_read(path: Path) -> str | None:
-                if path.name == "readme.md":
-                    return lowercase_entry
-                return real_read(path)
-
-            def fake_resolve(path: Path, strict: bool = False) -> Path:
-                if path == lowercase_readme:
-                    return lowercase_readme
-                return real_resolve(path, strict=strict)
-
-            def fake_samefile(path: Path, other: Path) -> bool:
-                if path == lowercase_readme and other == readme:
-                    return False
-                return real_samefile(path, other)
-
-            with (
-                patch("scripts.validate_agent_memory._scan_memory_tree", side_effect=fake_scan),
-                patch.object(Path, "is_file", new=fake_is_file),
-                patch.object(Path, "resolve", new=fake_resolve),
-                patch.object(Path, "samefile", new=fake_samefile),
-                patch("scripts.validate_agent_memory._read", side_effect=fake_read),
-            ):
-                issues = agent_memory.validate_memory(root)
+            issues = agent_memory.validate_memory(root)
 
             self.assertEqual([], issues)
 
