@@ -213,13 +213,6 @@ def _has_reparse_component(path: Path, boundary: Path) -> bool:
         current = current.parent
 
 
-def _read(path: Path) -> str | None:
-    try:
-        return path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
-    except OSError, UnicodeError:
-        return None
-
-
 def _index_body(readme: str) -> str | None:
     heading = re.search(r"^## Index[ \t]*$", readme, re.MULTILINE)
     if heading is None:
@@ -247,6 +240,7 @@ class _MemoryChild:
     mode: int
     file_attributes: int = 0
     identity: tuple[int, int] = (0, 0)
+    link_count: int = 1
     text: str | None = None
 
 
@@ -254,6 +248,13 @@ class _MemoryChild:
 class _Win32HandleInfo:
     file_attributes: int
     identity: tuple[int, int]
+    link_count: int
+
+
+@dataclass(frozen=True)
+class _MemoryRead:
+    text: str | None
+    link_count: int
 
 
 @dataclass(frozen=True)
@@ -269,7 +270,7 @@ def _posix_directory_flags() -> int:
     return os.O_RDONLY | directory_flag | no_follow_flag
 
 
-def _read_posix_memory_child(memory: Path, memory_handle: int, child: _MemoryChild) -> str:
+def _read_posix_memory_child(memory: Path, memory_handle: int, child: _MemoryChild) -> _MemoryRead:
     no_follow_flag = getattr(os, "O_NOFOLLOW", 0)
     if no_follow_flag == 0:
         raise OSError(errno.ENOTSUP, "descriptor-bound no-follow reads are unavailable")
@@ -283,10 +284,13 @@ def _read_posix_memory_child(memory: Path, memory_handle: int, child: _MemoryChi
         visible = os.stat(memory / child.name, follow_symlinks=False)
         if (visible.st_dev, visible.st_ino) != child.identity:
             raise OSError(errno.ESTALE, "visible memory child identity changed")
+        if metadata.st_nlink != 1:
+            return _MemoryRead(None, metadata.st_nlink)
         chunks: list[bytes] = []
         while chunk := os.read(descriptor, 64 * 1024):
             chunks.append(chunk)
-        return b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        text = b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        return _MemoryRead(text, metadata.st_nlink)
     finally:
         os.close(descriptor)
 
@@ -320,6 +324,7 @@ def _snapshot_memory_posix(root: Path) -> _MemorySnapshot:
                     child.name,
                     metadata.st_mode,
                     identity=(metadata.st_dev, metadata.st_ino),
+                    link_count=metadata.st_nlink,
                 )
                 for child in iterator
                 for metadata in (child.stat(follow_symlinks=False),)
@@ -327,14 +332,18 @@ def _snapshot_memory_posix(root: Path) -> _MemorySnapshot:
         snapshotted: list[_MemoryChild] = []
         for child in sorted(children, key=lambda item: (item.name.casefold(), item.name)):
             text = None
-            if stat.S_ISREG(child.mode) and child.name.lower().endswith(".md"):
-                text = _read_memory_child(root / MEMORY_RELATIVE, descriptor, child)
+            link_count = child.link_count
+            if stat.S_ISREG(child.mode) and child.name.lower().endswith(".md") and link_count == 1:
+                result = _read_memory_child(root / MEMORY_RELATIVE, descriptor, child)
+                text = result.text
+                link_count = result.link_count
             snapshotted.append(
                 _MemoryChild(
                     child.name,
                     child.mode,
                     child.file_attributes,
                     child.identity,
+                    link_count,
                     text,
                 )
             )
@@ -410,6 +419,7 @@ def _win32_handle_info(handle: int) -> _Win32HandleInfo:
     return _Win32HandleInfo(
         information.file_attributes,
         (information.volume_serial_number, file_id),
+        information.number_of_links,
     )
 
 
@@ -533,7 +543,36 @@ def _win32_open_file(path: Path) -> int:
     return int(handle)
 
 
-def _read_win32_memory_child(memory: Path, child: _MemoryChild) -> str:
+def _read_win32_handle_text(handle: int, _name: str) -> str:
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    read_file = kernel32.ReadFile
+    read_file.argtypes = (
+        wintypes.HANDLE,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.LPVOID,
+    )
+    read_file.restype = wintypes.BOOL
+    chunks: list[bytes] = []
+    while True:
+        buffer = ctypes.create_string_buffer(64 * 1024)
+        read = wintypes.DWORD()
+        if not read_file(
+            wintypes.HANDLE(handle),
+            buffer,
+            len(buffer),
+            ctypes.byref(read),
+            None,
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        if read.value == 0:
+            break
+        chunks.append(buffer.raw[: read.value])
+    return b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _read_win32_memory_child(memory: Path, child: _MemoryChild) -> _MemoryRead:
     handle = _win32_open_file(memory / child.name)
     try:
         information = _win32_handle_info(handle)
@@ -541,38 +580,14 @@ def _read_win32_memory_child(memory: Path, child: _MemoryChild) -> str:
             raise OSError(errno.EINVAL, "memory child is not a no-follow regular file")
         if information.identity != child.identity:
             raise OSError(errno.ESTALE, "memory child identity changed")
-
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        read_file = kernel32.ReadFile
-        read_file.argtypes = (
-            wintypes.HANDLE,
-            wintypes.LPVOID,
-            wintypes.DWORD,
-            ctypes.POINTER(wintypes.DWORD),
-            wintypes.LPVOID,
-        )
-        read_file.restype = wintypes.BOOL
-        chunks: list[bytes] = []
-        while True:
-            buffer = ctypes.create_string_buffer(64 * 1024)
-            read = wintypes.DWORD()
-            if not read_file(
-                wintypes.HANDLE(handle),
-                buffer,
-                len(buffer),
-                ctypes.byref(read),
-                None,
-            ):
-                raise ctypes.WinError(ctypes.get_last_error())
-            if read.value == 0:
-                break
-            chunks.append(buffer.raw[: read.value])
-        return b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        if information.link_count != 1:
+            return _MemoryRead(None, information.link_count)
+        return _MemoryRead(_read_win32_handle_text(handle, child.name), information.link_count)
     finally:
         _win32_close_handle(handle)
 
 
-def _read_memory_child(memory: Path, memory_handle: int, child: _MemoryChild) -> str:
+def _read_memory_child(memory: Path, memory_handle: int, child: _MemoryChild) -> _MemoryRead:
     if sys.platform == "win32":
         return _read_win32_memory_child(memory, child)
     return _read_posix_memory_child(memory, memory_handle, child)
@@ -584,9 +599,7 @@ def _snapshot_memory_windows(root: Path) -> _MemorySnapshot:
     try:
         _validate_win32_directory_handle(handle)
         for component in MEMORY_RELATIVE.parts:
-            matches = [
-                child for child in _win32_memory_children(handle) if child.name.casefold() == component.casefold()
-            ]
+            matches = [child for child in _win32_memory_children(handle) if child.name == component]
             if len(matches) != 1:
                 raise OSError(errno.ENOENT, "memory boundary is missing")
             expected = matches[0]
@@ -614,14 +627,18 @@ def _snapshot_memory_windows(root: Path) -> _MemorySnapshot:
         snapshotted: list[_MemoryChild] = []
         for child in children:
             text = None
+            link_count = child.link_count
             if stat.S_ISREG(child.mode) and child.name.lower().endswith(".md"):
-                text = _read_memory_child(current_path, handle, child)
+                result = _read_memory_child(current_path, handle, child)
+                text = result.text
+                link_count = result.link_count
             snapshotted.append(
                 _MemoryChild(
                     child.name,
                     child.mode,
                     child.file_attributes,
                     child.identity,
+                    link_count,
                     text,
                 )
             )
@@ -636,6 +653,107 @@ def _snapshot_memory(root: Path) -> _MemorySnapshot:
     return _snapshot_memory_posix(root)
 
 
+def _validate_repository_relative(relative: Path) -> None:
+    if relative.is_absolute() or not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+        raise OSError(errno.EINVAL, "repository file path is not a strict relative path")
+
+
+def _read_repository_file_posix(root: Path, relative: Path) -> str:
+    _validate_repository_relative(relative)
+    directory_flags = _posix_directory_flags()
+    descriptor = os.open(root, directory_flags)
+    current_path = root
+    try:
+        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            raise OSError(errno.ENOTDIR, "repository root is not a directory")
+        for component in relative.parts[:-1]:
+            child_descriptor = os.open(component, directory_flags, dir_fd=descriptor)
+            try:
+                metadata = os.fstat(child_descriptor)
+                if not stat.S_ISDIR(metadata.st_mode):
+                    raise OSError(errno.ENOTDIR, "repository ancestor is not a directory")
+                current_path /= component
+                visible = os.stat(current_path, follow_symlinks=False)
+                if (visible.st_dev, visible.st_ino) != (metadata.st_dev, metadata.st_ino):
+                    raise OSError(errno.ESTALE, "visible repository ancestor identity changed")
+            except BaseException:
+                os.close(child_descriptor)
+                raise
+            os.close(descriptor)
+            descriptor = child_descriptor
+
+        no_follow_flag = getattr(os, "O_NOFOLLOW", 0)
+        file_descriptor = os.open(relative.name, os.O_RDONLY | no_follow_flag, dir_fd=descriptor)
+        try:
+            metadata = os.fstat(file_descriptor)
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                raise OSError(errno.EINVAL, "repository instruction is not a unique regular file")
+            visible = os.stat(current_path / relative.name, follow_symlinks=False)
+            if (visible.st_dev, visible.st_ino) != (metadata.st_dev, metadata.st_ino):
+                raise OSError(errno.ESTALE, "visible repository file identity changed")
+            chunks: list[bytes] = []
+            while chunk := os.read(file_descriptor, 64 * 1024):
+                chunks.append(chunk)
+            return b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        finally:
+            os.close(file_descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _read_repository_file_windows(root: Path, relative: Path) -> str:
+    _validate_repository_relative(relative)
+    current_path = root
+    handle = _win32_open_directory(root)
+    try:
+        _validate_win32_directory_handle(handle)
+        for component in relative.parts[:-1]:
+            matches = [child for child in _win32_memory_children(handle) if child.name == component]
+            if len(matches) != 1:
+                raise OSError(errno.ENOENT, "repository ancestor is missing")
+            expected = matches[0]
+            if stat.S_ISLNK(expected.mode) or not stat.S_ISDIR(expected.mode):
+                raise OSError(errno.ENOTDIR, "repository ancestor is not a directory")
+            if expected.file_attributes & WINDOWS_REPARSE_POINT:
+                raise OSError(errno.ELOOP, "repository ancestor is a reparse point")
+
+            current_path /= component
+            child_handle = _win32_open_directory(current_path)
+            try:
+                actual = _validate_win32_directory_handle(child_handle)
+                if actual.identity != expected.identity:
+                    raise OSError(errno.ESTALE, "repository ancestor identity changed")
+            except BaseException:
+                _win32_close_handle(child_handle)
+                raise
+            _win32_close_handle(handle)
+            handle = child_handle
+
+        matches = [child for child in _win32_memory_children(handle) if child.name == relative.name]
+        if len(matches) != 1:
+            raise OSError(errno.ENOENT, "repository instruction is missing")
+        expected = matches[0]
+        if stat.S_ISLNK(expected.mode) or not stat.S_ISREG(expected.mode):
+            raise OSError(errno.EINVAL, "repository instruction is not a regular file")
+        if expected.file_attributes & WINDOWS_REPARSE_POINT:
+            raise OSError(errno.ELOOP, "repository instruction is a reparse point")
+        result = _read_win32_memory_child(current_path, expected)
+        if result.link_count != 1 or result.text is None:
+            raise OSError(errno.EINVAL, "repository instruction is not a unique regular file")
+        return result.text
+    finally:
+        _win32_close_handle(handle)
+
+
+def _read_repository_file(root: Path, relative: Path) -> str | None:
+    try:
+        if sys.platform == "win32":
+            return _read_repository_file_windows(root, relative)
+        return _read_repository_file_posix(root, relative)
+    except OSError, UnicodeError:
+        return None
+
+
 def _scan_memory_tree(
     memory: Path,
     root: Path,
@@ -647,9 +765,9 @@ def _scan_memory_tree(
 
     for child in children:
         path = memory / child.name
-        key = child.name.casefold() if sys.platform == "win32" else child.name
+        key = child.name
         is_reparse = stat.S_ISLNK(child.mode) or bool(child.file_attributes & WINDOWS_REPARSE_POINT)
-        if is_reparse:
+        if is_reparse or (stat.S_ISREG(child.mode) and child.link_count != 1):
             if key not in blocked_entries:
                 issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", path, root))
             continue
@@ -673,8 +791,11 @@ def _validate_instruction_pointers(root: Path) -> list[str]:
         if _has_reparse_component(instruction, root):
             issues.append(f"MEMORY_INSTRUCTION_POINTER: {relative.as_posix()}: instruction path boundary")
             continue
-        text = _read(instruction)
-        normalized = " ".join(text.lower().split()) if text is not None else ""
+        text = _read_repository_file(root, relative)
+        if text is None:
+            issues.append(f"MEMORY_INSTRUCTION_POINTER: {relative.as_posix()}: instruction path boundary")
+            continue
+        normalized = " ".join(text.lower().split())
         for label, pattern in concepts:
             if re.search(pattern, normalized) is None:
                 issues.append(f"MEMORY_INSTRUCTION_POINTER: {relative.as_posix()}: {label}")
@@ -695,19 +816,18 @@ def _validate_memory(root: Path) -> tuple[list[str], int]:
     except OSError, UnicodeError:
         return [_diagnostic("MEMORY_TREE_SCAN", memory, root)], 0
 
-    def name_key(name: str) -> str:
-        return name.casefold() if sys.platform == "win32" else name
-
     children_by_name: dict[str, list[_MemoryChild]] = {}
     for child in snapshot.children:
-        children_by_name.setdefault(name_key(child.name), []).append(child)
+        children_by_name.setdefault(child.name, []).append(child)
 
-    readme_matches = children_by_name.get(name_key("README.md"), [])
+    readme_matches = children_by_name.get("README.md", [])
     if len(readme_matches) != 1:
         return [_diagnostic("MEMORY_INDEX_LINK_MISSING", readme_path, root)], 0
     readme_child = readme_matches[0]
     readme_reparse = stat.S_ISLNK(readme_child.mode) or bool(readme_child.file_attributes & WINDOWS_REPARSE_POINT)
     if readme_reparse:
+        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)], 0
+    if readme_child.link_count != 1:
         return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)], 0
     if not stat.S_ISREG(readme_child.mode) or readme_child.text is None:
         return [_diagnostic("MEMORY_INDEX_LINK_MISSING", readme_path, root)], 0
@@ -735,8 +855,8 @@ def _validate_memory(root: Path) -> tuple[list[str], int]:
             continue
 
         candidate = memory / target_path
-        key = name_key(raw_target)
-        if key == name_key("README.md"):
+        key = raw_target
+        if key == "README.md":
             issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root))
             continue
 
@@ -757,6 +877,10 @@ def _validate_memory(root: Path) -> tuple[list[str], int]:
             issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", candidate, root))
             blocked_entries.add(key)
             continue
+        if child.link_count != 1:
+            issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", candidate, root))
+            blocked_entries.add(key)
+            continue
         if not stat.S_ISREG(child.mode):
             issues.append(_diagnostic("MEMORY_INDEX_LINK_MISSING", candidate, root))
             continue
@@ -774,7 +898,7 @@ def _validate_memory(root: Path) -> tuple[list[str], int]:
         path = memory / entry.name
         if entry is readme_child:
             continue
-        key = name_key(entry.name)
+        key = entry.name
         if key not in indexed_entry_names:
             issues.append(_diagnostic("MEMORY_ENTRY_UNINDEXED", path, root))
         if KEBAB_MARKDOWN.fullmatch(entry.name) is None:
@@ -794,6 +918,9 @@ def validate_memory(root: Path) -> list[str]:
 
 
 def main() -> int:
+    if len(sys.argv) > 2:
+        print("usage: validate_agent_memory.py [repository-root]", file=sys.stderr)
+        return 2
     root = Path(sys.argv[1]) if len(sys.argv) == 2 else Path(__file__).resolve().parents[1]
     issues, topic_count = _validate_memory(root)
     if issues:

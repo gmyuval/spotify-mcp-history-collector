@@ -186,6 +186,24 @@ private content was committed.
         self.assertEqual("Memory contract OK (1 indexed topic).\n", result.stdout)
         self.assertEqual("", result.stderr)
 
+    def test_memory_validator_rejects_extra_root_arguments(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "validate_agent_memory.py"),
+                str(ROOT),
+                "unexpected-extra-root",
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertEqual("usage: validate_agent_memory.py [repository-root]\n", result.stderr)
+
     def test_repository_first_two_layer_memory_contract(self) -> None:
         agents = " ".join(self.read("AGENTS.md").split())
         claude = " ".join(self.read("CLAUDE.md").split())
@@ -462,7 +480,7 @@ private content was committed.
                 self.memory_fixture(root)
                 instruction = root / "CLAUDE.md"
                 real_lstat = Path.lstat
-                real_read = agent_memory._read
+                real_read = agent_memory._read_repository_file
                 read_paths: list[Path] = []
 
                 def fake_lstat(
@@ -480,16 +498,17 @@ private content was committed.
                     return delegate(path)
 
                 def fake_read(
-                    path: Path,
+                    repository: Path,
+                    relative: Path,
                     observed: list[Path] = read_paths,
                     delegate=real_read,
                 ) -> str | None:
-                    observed.append(path)
-                    return delegate(path)
+                    observed.append(relative)
+                    return delegate(repository, relative)
 
                 with (
                     patch.object(Path, "lstat", new=fake_lstat),
-                    patch("scripts.validate_agent_memory._read", side_effect=fake_read),
+                    patch("scripts.validate_agent_memory._read_repository_file", side_effect=fake_read),
                 ):
                     issues = agent_memory.validate_memory(root)
 
@@ -497,7 +516,64 @@ private content was committed.
                     ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: instruction path boundary"],
                     issues,
                 )
-                self.assertNotIn(instruction, read_paths, "reparse instruction content must not be read")
+                self.assertNotIn(Path("CLAUDE.md"), read_paths, "reparse instruction content must not be read")
+
+    def test_memory_instruction_ancestor_replacement_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            agent = root / "docs" / "agent"
+            instruction = agent / "tool-policy.md"
+            original = root / "agent-original"
+            outside_agent = root / "outside-agent"
+            outside_agent.mkdir()
+            (outside_agent / "tool-policy.md").write_text(
+                instruction.read_text(encoding="utf-8") + "\nexternal-sensitive-name\n",
+                encoding="utf-8",
+            )
+            real_safe_read = getattr(agent_memory, "_read_repository_file", None)
+            replaced = False
+
+            def replace_agent() -> None:
+                nonlocal replaced
+                if not replaced:
+                    agent.rename(original)
+                    self.create_directory_link(agent, outside_agent)
+                    replaced = True
+
+            def restore_agent() -> None:
+                nonlocal replaced
+                if replaced:
+                    self.remove_directory_link(agent)
+                    original.rename(agent)
+                    replaced = False
+
+            def replace_before_safe_read(repository: Path, relative: Path) -> str | None:
+                if relative != Path("docs/agent/tool-policy.md"):
+                    self.assertIsNotNone(real_safe_read)
+                    return real_safe_read(repository, relative)
+                replace_agent()
+                try:
+                    self.assertIsNotNone(real_safe_read)
+                    return real_safe_read(repository, relative)
+                finally:
+                    restore_agent()
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._read_repository_file",
+                    side_effect=replace_before_safe_read,
+                    create=True,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                restore_agent()
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: docs/agent/tool-policy.md: instruction path boundary"],
+                issues,
+            )
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
 
     def test_memory_index_mutations_fail_closed(self) -> None:
         cases = (
@@ -971,7 +1047,7 @@ private content was committed.
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             memory = root / "docs" / "agent" / "memory"
-            readme, _ = self.memory_fixture(root)
+            self.memory_fixture(root)
             original = root / "memory-original"
             outside = root / "outside"
             outside.mkdir()
@@ -980,7 +1056,6 @@ private content was committed.
                 encoding="utf-8",
             )
             (outside / "external-secret.md").write_text("must not be read", encoding="utf-8")
-            real_path_read = agent_memory._read
             real_handle_read = getattr(agent_memory, "_read_memory_child", None)
             replaced = False
 
@@ -991,24 +1066,16 @@ private content was committed.
                     self.create_directory_link(memory, outside)
                     replaced = True
 
-            def replace_before_path_read(path: Path) -> str | None:
-                if path == readme:
-                    replace_root()
-                return real_path_read(path)
-
             def replace_before_handle_read(*args: object):
                 replace_root()
                 self.assertIsNotNone(real_handle_read)
                 return real_handle_read(*args)
 
             try:
-                with (
-                    patch("scripts.validate_agent_memory._read", side_effect=replace_before_path_read),
-                    patch(
-                        "scripts.validate_agent_memory._read_memory_child",
-                        side_effect=replace_before_handle_read,
-                        create=True,
-                    ),
+                with patch(
+                    "scripts.validate_agent_memory._read_memory_child",
+                    side_effect=replace_before_handle_read,
+                    create=True,
                 ):
                     issues = agent_memory.validate_memory(root)
             finally:
@@ -1094,8 +1161,8 @@ private content was committed.
                 root = Path(temporary)
                 readme, _ = self.memory_fixture(root)
                 real_lstat = Path.lstat
-                real_read = agent_memory._read
-                read_paths: list[Path] = []
+                real_read = agent_memory._read_memory_child
+                read_names: list[str] = []
 
                 def fake_lstat(
                     path: Path,
@@ -1112,16 +1179,18 @@ private content was committed.
                     return delegate(path)
 
                 def fake_read(
-                    path: Path,
-                    observed: list[Path] = read_paths,
+                    memory_path: Path,
+                    memory_handle: int,
+                    child: agent_memory._MemoryChild,
+                    observed: list[str] = read_names,
                     delegate=real_read,
-                ) -> str | None:
-                    observed.append(path)
-                    return delegate(path)
+                ) -> agent_memory._MemoryRead:
+                    observed.append(child.name)
+                    return delegate(memory_path, memory_handle, child)
 
                 with (
                     patch.object(Path, "lstat", new=fake_lstat),
-                    patch("scripts.validate_agent_memory._read", side_effect=fake_read),
+                    patch("scripts.validate_agent_memory._read_memory_child", side_effect=fake_read),
                 ):
                     issues = agent_memory.validate_memory(root)
 
@@ -1129,9 +1198,9 @@ private content was committed.
                     ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"],
                     issues,
                 )
-                self.assertNotIn(readme, read_paths, "reparse index content must not be read")
+                self.assertNotIn(readme.name, read_names, "reparse index content must not be read")
 
-    def test_case_variant_readme_alias_is_rejected_by_file_identity(self) -> None:
+    def test_case_variant_readme_target_does_not_alias_canonical_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             readme, _ = self.memory_fixture(root)
@@ -1148,15 +1217,13 @@ private content was committed.
 
             issues = agent_memory.validate_memory(root)
 
-            expected = ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"]
-            if sys.platform != "win32":
-                expected.extend(
-                    [
-                        "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/readme.md",
-                        "MEMORY_ENTRY_SCHEMA: docs/agent/memory/readme.md",
-                    ]
-                )
-            expected.append("MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md")
+            if sys.platform == "win32":
+                expected = [
+                    "MEMORY_INDEX_LINK_MISSING: docs/agent/memory/readme.md",
+                    "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md",
+                ]
+            else:
+                expected = ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"]
             self.assertEqual(expected, issues)
 
     def test_unindexed_hardlink_name_to_indexed_topic_is_reported(self) -> None:
@@ -1169,7 +1236,10 @@ private content was committed.
             issues = agent_memory.validate_memory(root)
 
             self.assertEqual(
-                ["MEMORY_ENTRY_UNINDEXED: docs/agent/memory/topic-alias.md"],
+                [
+                    "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/windows-pinned-uv-validation.md",
+                    "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/topic-alias.md",
+                ],
                 issues,
             )
 
@@ -1183,9 +1253,80 @@ private content was committed.
             issues = agent_memory.validate_memory(root)
 
             self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"],
+                issues,
+            )
+
+    def test_indexed_external_hardlink_is_rejected_before_content_read(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, entry = self.memory_fixture(root)
+            memory = readme.parent
+            external = root / "outside-topic.md"
+            external.write_text(entry.read_text(encoding="utf-8"), encoding="utf-8")
+            entry.unlink()
+            imported = memory / "imported-topic.md"
+            imported.hardlink_to(external)
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(
+                    "windows-pinned-uv-validation.md",
+                    imported.name,
+                ),
+                encoding="utf-8",
+            )
+            if sys.platform == "win32":
+                real_content_read = agent_memory._read_win32_handle_text
+                content_reads: list[str] = []
+
+                def observed_content_read(handle: int, name: str) -> str:
+                    content_reads.append(name)
+                    return real_content_read(handle, name)
+
+                with patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=observed_content_read,
+                ):
+                    issues = agent_memory.validate_memory(root)
+                self.assertNotIn(imported.name, content_reads)
+            else:
+                real_read = agent_memory._read_memory_child
+                read_children: list[str] = []
+
+                def observed_read(
+                    memory_path: Path,
+                    memory_handle: int,
+                    child: agent_memory._MemoryChild,
+                ) -> agent_memory._MemoryRead:
+                    read_children.append(child.name)
+                    return real_read(memory_path, memory_handle, child)
+
+                with patch("scripts.validate_agent_memory._read_memory_child", side_effect=observed_read):
+                    issues = agent_memory.validate_memory(root)
+                self.assertNotIn(imported.name, read_children)
+
+            self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/imported-topic.md"],
+                issues,
+            )
+
+    def test_memory_index_target_case_must_match_directory_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, _ = self.memory_fixture(root)
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(
+                    "windows-pinned-uv-validation.md",
+                    "Windows-pinned-uv-validation.md",
+                ),
+                encoding="utf-8",
+            )
+
+            issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
                 [
-                    "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/readme-alias.md",
-                    "MEMORY_ENTRY_SCHEMA: docs/agent/memory/readme-alias.md",
+                    "MEMORY_INDEX_LINK_MISSING: docs/agent/memory/Windows-pinned-uv-validation.md",
+                    "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md",
                 ],
                 issues,
             )
@@ -1208,6 +1349,7 @@ private content was committed.
                             else child.file_attributes
                         ),
                         child.identity,
+                        child.link_count,
                         None if child.name == entry.name else child.text,
                     )
                     for child in snapshot.children
