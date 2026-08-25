@@ -37,18 +37,7 @@ If remote freshness matters, classify `git fetch --prune origin` honestly: it co
 writes remote-tracking refs under `.git`. A cached upstream comparison is not proof of current
 remote state.
 
-## 2. Reconcile scope and sensitive content
-
-Review the actual changed-file list and the diff against the issue/base. Confirm it contains only
-the authorized SPM slice. Inspect content without rendering secret or PII matches into the
-transcript.
-
-Publication is blocked by any credential, Spotify token, `.env` value, key material, personal
-listening history, imported account data, email allowlist, database dump, raw diagnostic, or other
-PII. Report only the path and rule/category. A clean heuristic scan lowers risk; it does not prove
-that no secret exists.
-
-## 3. Update durable repository context only when earned
+## 2. Update durable repository context only when earned
 
 Read [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md) before relevant indexed
 entries. Distinguish an earned durable lesson from a transient or personal bookmark. Record any
@@ -65,6 +54,17 @@ Update `docs/agent/current-state.md` when the observed repository/deployed postu
 memory topic under `docs/agent/memory/` only for a non-obvious, evidence-backed lesson that is not
 already expressed by code, tests, Git history, an ADR, or this contract. Never store a transient
 resume bookmark or action-bearing instruction as durable memory.
+
+## 3. Reconcile scope and sensitive content
+
+Review the actual changed-file list and the diff against the issue/base. Confirm it contains only
+the authorized SPM slice. Inspect content without rendering secret or PII matches into the
+transcript.
+
+Publication is blocked by any credential, Spotify token, `.env` value, key material, personal
+listening history, imported account data, email allowlist, database dump, raw diagnostic, or other
+PII. Report only the path and rule/category. A clean heuristic scan lowers risk; it does not prove
+that no secret exists.
 
 ## 4. Run and pin validation
 

@@ -290,6 +290,11 @@ private content was committed.
         )
         self.assertLess(
             end_session_source.index("Read [`docs/agent/memory/README.md`"),
+            end_session_source.index("Reconcile scope and sensitive content"),
+            "end-session must finish durable-context edits before final scope and sensitive review",
+        )
+        self.assertLess(
+            end_session_source.index("Read [`docs/agent/memory/README.md`"),
             end_session_source.index("Preserve work under the granted authority"),
             "end-session must assess repository memory before commit, publication, or merge",
         )
