@@ -1143,29 +1143,10 @@ private content was committed.
                 ),
                 encoding="utf-8",
             )
-            real_is_file = Path.is_file
-            real_resolve = Path.resolve
-            real_samefile = Path.samefile
+            if sys.platform != "win32":
+                alias.hardlink_to(readme)
 
-            def fake_is_file(path: Path) -> bool:
-                return True if path == alias else real_is_file(path)
-
-            def fake_resolve(path: Path, strict: bool = False) -> Path:
-                if path == alias:
-                    return alias
-                return real_resolve(path, strict=strict)
-
-            def fake_samefile(path: Path, other: Path) -> bool:
-                if path == alias and other == readme:
-                    return True
-                return real_samefile(path, other)
-
-            with (
-                patch.object(Path, "is_file", new=fake_is_file),
-                patch.object(Path, "resolve", new=fake_resolve),
-                patch.object(Path, "samefile", new=fake_samefile),
-            ):
-                issues = agent_memory.validate_memory(root)
+            issues = agent_memory.validate_memory(root)
 
             self.assertEqual(
                 [
