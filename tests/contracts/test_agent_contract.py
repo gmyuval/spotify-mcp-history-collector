@@ -67,6 +67,24 @@ class AgentContractTests(unittest.TestCase):
             check=False,
         )
 
+    def create_directory_link(self, link: Path, target: Path) -> None:
+        if sys.platform == "win32":
+            result = subprocess.run(
+                ["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            return
+        link.symlink_to(target, target_is_directory=True)
+
+    def remove_directory_link(self, link: Path) -> None:
+        if sys.platform == "win32":
+            link.rmdir()
+            return
+        link.unlink()
+
     def memory_fixture(self, root: Path) -> tuple[Path, Path]:
         memory = root / "docs" / "agent" / "memory"
         memory.mkdir(parents=True)
@@ -695,7 +713,11 @@ private content was committed.
             root = Path(temporary)
             self.memory_fixture(root)
 
-            with patch("os.scandir", side_effect=PermissionError):
+            with patch(
+                "scripts.validate_agent_memory._scan_memory_root",
+                side_effect=PermissionError,
+                create=True,
+            ):
                 issues = agent_memory.validate_memory(root)
 
             self.assertEqual(
@@ -712,7 +734,11 @@ private content was committed.
                 encoding="utf-8",
             )
 
-            with patch("os.scandir", side_effect=PermissionError):
+            with patch(
+                "scripts.validate_agent_memory._scan_memory_root",
+                side_effect=PermissionError,
+                create=True,
+            ):
                 issues = agent_memory.validate_memory(root)
 
             self.assertEqual(
@@ -736,11 +762,156 @@ private content was committed.
 
             self.assertNotEqual(0, result.returncode)
             self.assertEqual(
-                "MEMORY_ENTRY_LAYOUT: docs/agent/memory/nested\n"
-                "MEMORY_ENTRY_LAYOUT: docs/agent/memory/nested/topic.md\n",
+                "MEMORY_ENTRY_LAYOUT: docs/agent/memory/nested\n",
                 result.stdout,
             )
             self.assertEqual("", result.stderr)
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX directory symlink semantics")
+    def test_stable_posix_symlink_directory_is_rejected_without_external_name_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            nested = memory / "nested"
+            nested.symlink_to(outside, target_is_directory=True)
+            real_scandir = agent_memory.os.scandir
+            scanned: list[int | str | bytes | Path] = []
+
+            def descriptor_scandir(directory: int | str | bytes | Path):
+                scanned.append(directory)
+                return real_scandir(directory)
+
+            with patch("scripts.validate_agent_memory.os.scandir", side_effect=descriptor_scandir):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/nested"],
+                issues,
+            )
+            self.assertTrue(scanned)
+            self.assertTrue(all(isinstance(directory, int) for directory in scanned))
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows junction semantics")
+    def test_stable_windows_junction_directory_is_rejected_without_external_name_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            nested = memory / "nested"
+            self.create_directory_link(nested, outside)
+            real_scandir = agent_memory.os.scandir
+            scanned: list[int | str | bytes | Path] = []
+
+            def observed_scandir(directory: int | str | bytes | Path):
+                scanned.append(directory)
+                return real_scandir(directory)
+
+            with patch("scripts.validate_agent_memory.os.scandir", side_effect=observed_scandir):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/nested"],
+                issues,
+            )
+            self.assertEqual([], scanned, "Windows memory scans must use the pinned directory handle")
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    def test_queued_directory_replacement_is_never_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            nested = memory / "nested"
+            nested.mkdir()
+            original = memory / "nested-original"
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            real_scan_root = getattr(agent_memory, "_scan_memory_root", None)
+            scanned: list[Path] = []
+            replaced = False
+
+            def replace_after_root_scan(directory: Path):
+                nonlocal replaced
+                scanned.append(directory)
+                self.assertIsNotNone(real_scan_root)
+                children = real_scan_root(directory)
+                nested.rename(original)
+                self.create_directory_link(nested, outside)
+                replaced = True
+                return children
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._scan_memory_root",
+                    side_effect=replace_after_root_scan,
+                    create=True,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    self.remove_directory_link(nested)
+                    original.rename(nested)
+
+            self.assertEqual(
+                ["MEMORY_ENTRY_LAYOUT: docs/agent/memory/nested"],
+                issues,
+            )
+            self.assertEqual([memory], scanned)
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    def test_memory_root_replacement_fails_without_external_name_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            original = root / "memory-original"
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            replaced = False
+
+            if sys.platform == "win32":
+                real_open = getattr(agent_memory, "_win32_open_directory", None)
+            else:
+                real_open = agent_memory.os.open
+
+            def replace_before_root_open(path: str | bytes | Path, *args: object):
+                nonlocal replaced
+                directory = Path(path)
+                if directory == memory and not replaced:
+                    memory.rename(original)
+                    self.create_directory_link(memory, outside)
+                    replaced = True
+                self.assertIsNotNone(real_open)
+                return real_open(path, *args)
+
+            try:
+                target = (
+                    "scripts.validate_agent_memory._win32_open_directory"
+                    if sys.platform == "win32"
+                    else "scripts.validate_agent_memory.os.open"
+                )
+                with patch(target, side_effect=replace_before_root_open, create=True):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    self.remove_directory_link(memory)
+                    original.rename(memory)
+
+            self.assertEqual(
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                issues,
+            )
+            self.assertNotIn("external-secret.md", "\n".join(issues))
 
     def test_uppercase_markdown_extension_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
