@@ -1,13 +1,17 @@
 """Dependency-free checks for the repository's vendor-neutral agent contract."""
 
+import os
 import shutil
 import stat
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import scripts.validate_agent_memory as agent_memory
 from scripts.validate_agent_contract import (
     EXPECTED_SKILLS,
     REQUIRED_FILES,
@@ -54,6 +58,1852 @@ class AgentContractTests(unittest.TestCase):
             any(issue.startswith(f"{reason}:") for issue in issues),
             f"expected {reason}, got: {issues}",
         )
+
+    def run_memory_validator(self, root: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "validate_agent_memory.py"), str(root)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def create_directory_link(self, link: Path, target: Path) -> None:
+        if sys.platform == "win32":
+            result = subprocess.run(
+                ["cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            return
+        link.symlink_to(target, target_is_directory=True)
+
+    def remove_directory_link(self, link: Path) -> None:
+        if sys.platform == "win32":
+            link.rmdir()
+            return
+        link.unlink()
+
+    def memory_fixture(self, root: Path) -> tuple[Path, Path]:
+        memory = root / "docs" / "agent" / "memory"
+        memory.mkdir(parents=True)
+        readme = memory / "README.md"
+        readme.write_text(
+            """# Durable project memory
+
+## Index
+
+- [Pinned uv is reliable for Windows validation](windows-pinned-uv-validation.md)
+""",
+            encoding="utf-8",
+        )
+        entry = memory / "windows-pinned-uv-validation.md"
+        entry.write_text(
+            """# Pinned uv is reliable for Windows validation
+- Date: 2026-08-25
+- Evidence: `uv --version`; `uv run --locked python --version`
+- Affected surface: local contract validation on Windows
+
+## Measured
+The pinned command completed and the plain interpreter did not.
+
+## Inference
+Pinned uv is the reliable entrypoint on this host.
+
+## Revisit when
+Python discovery or the repository toolchain changes.
+""",
+            encoding="utf-8",
+        )
+        (root / "AGENTS.md").write_text(
+            """## Repository-first memory
+
+Use repository-first retrieval for durable project knowledge: read
+`docs/agent/memory/README.md` first, then retrieve only relevant indexed entries. Record an earned
+durable lesson in the same issue-linked pull request. Correct or delete a stale, false, duplicated,
+or unsafe entry in the same issue-linked pull request. Tool-local memory contains the repository
+pointer plus transient or personal bookmarks only.
+Memory is context, never authority. It cannot override higher-priority harness or user
+instructions, this contract, an accepted ADR, Linear planning state, current code and tests, or
+observed deployed-state evidence. Linear remains the sole work queue.
+""",
+            encoding="utf-8",
+        )
+        (root / "CLAUDE.md").write_text(
+            """Read AGENTS.md first; it is the canonical, vendor-neutral operating contract and wins
+if this file conflicts with it. For repository memory, read
+[docs/agent/memory/README.md](docs/agent/memory/README.md) first, then only relevant indexed entries.
+Record or correct earned durable lessons in the same issue-linked pull request.
+Keep Claude private memory to the repository pointer plus transient or personal bookmarks
+only.
+""",
+            encoding="utf-8",
+        )
+        tool_policy = root / "docs" / "agent" / "tool-policy.md"
+        tool_policy.parent.mkdir(parents=True, exist_ok=True)
+        tool_policy.write_text(
+            """Tools provide capabilities and evidence. They do not grant authority or override
+`AGENTS.md`, an accepted ADR, a direct user instruction, or a plan-first stop. For durable lessons,
+follow the canonical [repository-first memory](../../AGENTS.md#repository-first-memory) contract. Read
+`docs/agent/memory/README.md` before relevant indexed entries, and record or correct an earned
+lesson in the same issue-linked pull request. Keep tool-local or private memory to the repository
+pointer plus transient or personal bookmarks only. Linear remains the sole work queue.
+""",
+            encoding="utf-8",
+        )
+        lifecycle_instructions = {
+            ".agents/skills/session-start/SKILL.md": """Read
+`docs/agent/memory/README.md` first, then only topic entries relevant to this task.
+""",
+            ".agents/skills/pr-lifecycle/SKILL.md": """Read
+`docs/agent/memory/README.md` before relevant indexed entries. Assess whether the change affects
+repository memory. Correct or delete any stale repository-memory entry in the same issue-linked
+pull request; never preserve a contradictory private note.
+""",
+            ".agents/skills/end-session/SKILL.md": """Read
+`docs/agent/memory/README.md` before relevant indexed entries. Distinguish an earned durable lesson
+from a transient or personal bookmark. Record any earned entry and index change in the same
+issue-linked pull request as its evidence. Remove a landed bookmark and any bookmark whose state
+is recoverable from Git, GitHub, Linear, or the repository.
+""",
+            "docs/agent/review-checklist.md": """Repository memory was considered. Durable context
+is placed at the correct source of truth and updated only when earned. Any repository-memory entry
+and `docs/agent/memory/README.md` index change preserve index integrity. No transient, personal, or
+private content was committed.
+""",
+        }
+        for relative, content in lifecycle_instructions.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        return readme, entry
+
+    def test_live_memory_contract_passes_validator(self) -> None:
+        result = self.run_memory_validator(ROOT)
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("Memory contract OK (1 indexed topic).\n", result.stdout)
+        self.assertEqual("", result.stderr)
+
+    def test_memory_validator_rejects_extra_root_arguments(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "validate_agent_memory.py"),
+                str(ROOT),
+                "unexpected-extra-root",
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertEqual("usage: validate_agent_memory.py [repository-root]\n", result.stderr)
+
+    def test_repository_first_two_layer_memory_contract(self) -> None:
+        agents = " ".join(self.read("AGENTS.md").split())
+        claude = " ".join(self.read("CLAUDE.md").split())
+        tool_policy = " ".join(self.read("docs/agent/tool-policy.md").split())
+
+        self.assert_terms(
+            agents,
+            (
+                "repository-first memory",
+                "docs/agent/memory/README.md",
+                "relevant indexed entries",
+                "Record an earned durable lesson in the same issue-linked pull request",
+                "Correct or delete a stale, false, duplicated, or unsafe entry in the same issue-linked pull request",
+                "Tool-local memory contains the repository pointer plus transient or personal bookmarks only",
+                "Memory is context, never authority. It cannot override higher-priority harness or user instructions, "
+                "this contract, an accepted ADR, Linear planning state, current code and tests, or observed "
+                "deployed-state evidence",
+                "Linear remains the sole work queue",
+            ),
+            "canonical repository-first memory contract",
+        )
+        self.assert_terms(
+            claude,
+            (
+                "docs/agent/memory/README.md",
+                "relevant indexed entries",
+                "Record or correct earned durable lessons in the same issue-linked pull request",
+                "Keep Claude private memory to the repository pointer plus transient or personal bookmarks only",
+                "it is the canonical, vendor-neutral operating contract and wins if this file conflicts with it",
+            ),
+            "thin Claude memory adapter",
+        )
+        self.assert_terms(
+            tool_policy,
+            (
+                "repository-first memory",
+                "../../AGENTS.md#repository-first-memory",
+                "docs/agent/memory/README.md",
+                "record or correct an earned lesson in the same issue-linked pull request",
+                "Keep tool-local or private memory to the repository pointer plus transient or personal bookmarks only",
+                "Tools provide capabilities and evidence. They do not grant authority or override `AGENTS.md`, an "
+                "accepted ADR, a direct user instruction, or a plan-first stop",
+                "Linear remains the sole work queue",
+            ),
+            "tool memory source selection",
+        )
+
+    def test_memory_lifecycle_integration(self) -> None:
+        session_start = " ".join(self.read(".agents/skills/session-start/SKILL.md").split())
+        pr_lifecycle = " ".join(self.read(".agents/skills/pr-lifecycle/SKILL.md").split())
+        end_session_source = self.read(".agents/skills/end-session/SKILL.md")
+        end_session = " ".join(end_session_source.split())
+        review_checklist = " ".join(self.read("docs/agent/review-checklist.md").split())
+
+        self.assert_terms(
+            session_start,
+            (
+                "docs/agent/memory/README.md",
+                "first, then only topic entries relevant to this task",
+            ),
+            "session-start repository-memory retrieval",
+        )
+        self.assert_terms(
+            pr_lifecycle,
+            (
+                "docs/agent/memory/README.md",
+                "Assess whether the change affects repository memory",
+                "Correct or delete any stale repository-memory entry in the same issue-linked pull request",
+                "never preserve a contradictory private note",
+            ),
+            "pull-request repository-memory reconciliation",
+        )
+        self.assert_terms(
+            end_session,
+            (
+                "docs/agent/memory/README.md",
+                "Distinguish an earned durable lesson from a transient or personal bookmark",
+                "Record any earned entry and index change in the same issue-linked pull request as its evidence",
+                "Remove a landed bookmark",
+                "bookmark whose state is recoverable from Git, GitHub, Linear, or the repository",
+            ),
+            "end-session repository-memory wind-down",
+        )
+        self.assertLess(
+            end_session_source.index("Update `docs/agent/current-state.md`"),
+            end_session_source.index("Reconcile scope and sensitive content"),
+            "end-session must finish durable-context edits before final scope and sensitive review",
+        )
+        self.assertLess(
+            end_session_source.index("Read [`docs/agent/memory/README.md`"),
+            end_session_source.index("Reconcile scope and sensitive content"),
+            "end-session must retrieve repository memory before final scope and sensitive review",
+        )
+        self.assertLess(
+            end_session_source.index("Read [`docs/agent/memory/README.md`"),
+            end_session_source.index("Preserve work under the granted authority"),
+            "end-session must assess repository memory before commit, publication, or merge",
+        )
+        self.assertLess(
+            end_session_source.index("Read [`docs/agent/memory/README.md`"),
+            end_session_source.index("Update `docs/agent/current-state.md`"),
+            "end-session must read repository memory before deciding whether to update durable context",
+        )
+        self.assert_terms(
+            review_checklist,
+            (
+                "Repository memory was considered",
+                "correct source of truth",
+                "updated only when earned",
+                "docs/agent/memory/README.md",
+                "index integrity",
+                "No transient, personal, or private content",
+            ),
+            "repository-memory review coverage",
+        )
+
+    def test_memory_lifecycle_pointer_mutation_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            lifecycle = root / ".agents" / "skills" / "pr-lifecycle" / "SKILL.md"
+            text = lifecycle.read_text(encoding="utf-8")
+            mutated = text.replace(
+                "docs/agent/memory/README.md",
+                "docs/agent/memory/private-index.md",
+            )
+            self.assertNotEqual(text, mutated, "lifecycle pointer mutation fixture must change the skill")
+            lifecycle.write_text(mutated, encoding="utf-8")
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: .agents/skills/pr-lifecycle/SKILL.md: repository memory index"],
+                agent_memory.validate_memory(root),
+            )
+
+    def test_end_session_same_pr_memory_recording_mutation_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            lifecycle = root / ".agents" / "skills" / "end-session" / "SKILL.md"
+            text = lifecycle.read_text(encoding="utf-8")
+            mutated = text.replace(
+                "in the same\nissue-linked pull request as its evidence",
+                "in a separate\npull request after its evidence",
+            )
+            self.assertNotEqual(text, mutated, "same-PR memory mutation fixture must change the skill")
+            lifecycle.write_text(mutated, encoding="utf-8")
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: .agents/skills/end-session/SKILL.md: same-PR earned memory recording"],
+                agent_memory.validate_memory(root),
+            )
+
+    def test_memory_instruction_pointer_mutation_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            claude = root / "CLAUDE.md"
+            text = claude.read_text(encoding="utf-8")
+            mutated = text.replace(
+                "docs/agent/memory/README.md",
+                "docs/agent/memory/private-index.md",
+            )
+            self.assertNotEqual(text, mutated, "Claude pointer mutation fixture must change the adapter")
+            claude.write_text(mutated, encoding="utf-8")
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: repository memory index"],
+                agent_memory.validate_memory(root),
+            )
+
+    def test_memory_instruction_correction_mutations_fail_closed(self) -> None:
+        cases = (
+            ("AGENTS.md", "Correct or delete", "Review"),
+            ("CLAUDE.md", "Record or correct", "Record"),
+            ("docs/agent/tool-policy.md", "record or correct", "record"),
+        )
+        for relative, old, new in cases:
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self.memory_fixture(root)
+                path = root / relative
+                text = path.read_text(encoding="utf-8")
+                mutated = text.replace(old, new)
+                self.assertNotEqual(text, mutated, "correction mutation fixture must change the instruction")
+                path.write_text(mutated, encoding="utf-8")
+
+                self.assertEqual(
+                    [f"MEMORY_INSTRUCTION_POINTER: {Path(relative).as_posix()}: durable correction or deletion"],
+                    agent_memory.validate_memory(root),
+                )
+
+    def test_memory_instruction_recording_mutations_fail_closed(self) -> None:
+        cases = (
+            ("AGENTS.md", "Record an earned\ndurable lesson", "Document an earned\ndurable lesson"),
+            ("CLAUDE.md", "Record or correct earned durable lessons", "Correct earned durable lessons"),
+            (
+                "docs/agent/tool-policy.md",
+                "record or correct an earned\nlesson",
+                "correct an earned\nlesson",
+            ),
+        )
+        for relative, old, new in cases:
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self.memory_fixture(root)
+                path = root / relative
+                text = path.read_text(encoding="utf-8")
+                mutated = text.replace(old, new)
+                self.assertNotEqual(text, mutated, "recording mutation fixture must change the instruction")
+                path.write_text(mutated, encoding="utf-8")
+
+                self.assertEqual(
+                    [f"MEMORY_INSTRUCTION_POINTER: {Path(relative).as_posix()}: durable recording"],
+                    agent_memory.validate_memory(root),
+                )
+
+    def test_memory_instruction_same_pr_mutations_fail_closed(self) -> None:
+        for relative in ("AGENTS.md", "CLAUDE.md", "docs/agent/tool-policy.md"):
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self.memory_fixture(root)
+                path = root / relative
+                text = path.read_text(encoding="utf-8")
+                mutated = text.replace("same issue-linked pull request", "separate pull request")
+                self.assertNotEqual(text, mutated, "same-PR mutation fixture must change the instruction")
+                path.write_text(mutated, encoding="utf-8")
+
+                self.assertEqual(
+                    [f"MEMORY_INSTRUCTION_POINTER: {Path(relative).as_posix()}: same-PR durable change linkage"],
+                    agent_memory.validate_memory(root),
+                )
+
+    def test_memory_instruction_relationship_mutations_fail_closed(self) -> None:
+        cases = (
+            (
+                "AGENTS.md",
+                "an accepted ADR",
+                "an optional note",
+                "authority precedence",
+            ),
+            (
+                "AGENTS.md",
+                "Tool-local memory contains",
+                "Tool-local memory is unrelated. Other memory contains",
+                "tool-local ownership boundary",
+            ),
+            (
+                "CLAUDE.md",
+                "wins\nif this file conflicts with it",
+                "loses\nif this file conflicts with it",
+                "authority precedence",
+            ),
+            (
+                "CLAUDE.md",
+                "Keep Claude private memory to",
+                "Keep Claude private memory apart; keep other memory to",
+                "tool-local ownership boundary",
+            ),
+            (
+                "docs/agent/tool-policy.md",
+                "do not grant authority or override",
+                "may grant authority and override",
+                "authority precedence",
+            ),
+            (
+                "docs/agent/tool-policy.md",
+                "Keep tool-local or private memory to",
+                "Keep tool-local or private memory apart; keep other memory to",
+                "tool-local ownership boundary",
+            ),
+        )
+        for relative, old, new, concept in cases:
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self.memory_fixture(root)
+                path = root / relative
+                text = path.read_text(encoding="utf-8")
+                mutated = text.replace(old, new)
+                self.assertNotEqual(text, mutated, "relationship mutation fixture must change the instruction")
+                path.write_text(mutated, encoding="utf-8")
+
+                self.assertEqual(
+                    [f"MEMORY_INSTRUCTION_POINTER: {Path(relative).as_posix()}: {concept}"],
+                    agent_memory.validate_memory(root),
+                )
+
+    def test_memory_instruction_reparse_is_rejected_before_external_content_read(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            real_capture = agent_memory._capture_repository_file_boundary
+            real_read = agent_memory._read_repository_file
+            read_paths: list[Path] = []
+
+            def reject_reparse(repository: Path, relative: Path):
+                if relative == Path("CLAUDE.md"):
+                    raise OSError("reparse boundary")
+                return real_capture(repository, relative)
+
+            def observed_read(
+                repository: Path,
+                relative: Path,
+                expected_boundary: tuple[tuple[int, int], ...],
+            ) -> str | None:
+                read_paths.append(relative)
+                return real_read(repository, relative, expected_boundary)
+
+            with (
+                patch(
+                    "scripts.validate_agent_memory._capture_repository_file_boundary",
+                    side_effect=reject_reparse,
+                ),
+                patch("scripts.validate_agent_memory._read_repository_file", side_effect=observed_read),
+            ):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: instruction path boundary"],
+                issues,
+            )
+            self.assertNotIn(Path("CLAUDE.md"), read_paths, "reparse instruction content must not be read")
+
+    def test_memory_instruction_ancestor_replacement_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            agent = root / "docs" / "agent"
+            instruction = agent / "tool-policy.md"
+            original = root / "agent-original"
+            outside_agent = root / "outside-agent"
+            outside_agent.mkdir()
+            (outside_agent / "tool-policy.md").write_text(
+                instruction.read_text(encoding="utf-8") + "\nexternal-sensitive-name\n",
+                encoding="utf-8",
+            )
+            real_safe_read = getattr(agent_memory, "_read_repository_file", None)
+            replaced = False
+
+            def replace_agent() -> None:
+                nonlocal replaced
+                if not replaced:
+                    agent.rename(original)
+                    self.create_directory_link(agent, outside_agent)
+                    replaced = True
+
+            def restore_agent() -> None:
+                nonlocal replaced
+                if replaced:
+                    self.remove_directory_link(agent)
+                    original.rename(agent)
+                    replaced = False
+
+            def replace_before_safe_read(
+                repository: Path,
+                relative: Path,
+                expected_boundary: tuple[tuple[int, int], ...],
+            ) -> str | None:
+                if relative != Path("docs/agent/tool-policy.md"):
+                    self.assertIsNotNone(real_safe_read)
+                    return real_safe_read(repository, relative, expected_boundary)
+                replace_agent()
+                try:
+                    self.assertIsNotNone(real_safe_read)
+                    return real_safe_read(repository, relative, expected_boundary)
+                finally:
+                    restore_agent()
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._read_repository_file",
+                    side_effect=replace_before_safe_read,
+                    create=True,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                restore_agent()
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: docs/agent/tool-policy.md: instruction path boundary"],
+                issues,
+            )
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
+
+    def test_memory_instruction_path_replacement_during_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            instruction = root / "CLAUDE.md"
+            original = root / "CLAUDE-original.md"
+            target_identity = instruction.stat().st_ino
+            attempted = False
+            replaced = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def replace_after_read(handle: int, name: str) -> str:
+                    nonlocal attempted, replaced
+                    text = real_read(handle, name)
+                    if name == instruction.name and not replaced:
+                        attempted = True
+                        instruction.rename(original)
+                        instruction.write_text("external-sensitive-name", encoding="utf-8")
+                        replaced = True
+                    return text
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=replace_after_read,
+                )
+            else:
+                real_read = agent_memory.os.read
+
+                def replace_after_read(descriptor: int, size: int) -> bytes:
+                    nonlocal attempted, replaced
+                    chunk = real_read(descriptor, size)
+                    if os.fstat(descriptor).st_ino == target_identity and chunk and not replaced:
+                        attempted = True
+                        instruction.rename(original)
+                        instruction.write_text("external-sensitive-name", encoding="utf-8")
+                        replaced = True
+                    return chunk
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=replace_after_read)
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    instruction.unlink()
+                    original.rename(instruction)
+
+            self.assertTrue(attempted)
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: instruction path boundary"],
+                issues,
+            )
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
+
+    def test_memory_instruction_in_place_rewrite_during_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            instruction = root / "CLAUDE.md"
+            original_text = instruction.read_text(encoding="utf-8")
+            target_identity = instruction.stat().st_ino
+            attempted = False
+            rewritten = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def rewrite_after_read(handle: int, name: str) -> str:
+                    nonlocal attempted, rewritten
+                    text = real_read(handle, name)
+                    if name == instruction.name and not rewritten:
+                        attempted = True
+                        instruction.write_text("external-sensitive-name", encoding="utf-8")
+                        rewritten = True
+                    return text
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=rewrite_after_read,
+                )
+            else:
+                real_read = agent_memory.os.read
+
+                def rewrite_after_read(descriptor: int, size: int) -> bytes:
+                    nonlocal attempted, rewritten
+                    chunk = real_read(descriptor, size)
+                    if os.fstat(descriptor).st_ino == target_identity and chunk and not rewritten:
+                        attempted = True
+                        instruction.write_text("external-sensitive-name", encoding="utf-8")
+                        rewritten = True
+                    return chunk
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=rewrite_after_read)
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                instruction.write_text(original_text, encoding="utf-8")
+
+            self.assertTrue(attempted)
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: instruction path boundary"],
+                issues,
+            )
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows path-open replacement semantics")
+    def test_memory_instruction_ordinary_ancestor_replacement_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            agent = root / "docs" / "agent"
+            original = root / "agent-original"
+            real_read = agent_memory._read_win32_memory_child
+            replaced = False
+
+            def replace_before_content_open(*args: object, **kwargs: object):
+                nonlocal replaced
+                child = args[-1]
+                if child.name != "tool-policy.md":
+                    return real_read(*args, **kwargs)
+                agent.rename(original)
+                agent.mkdir()
+                (original / child.name).rename(agent / child.name)
+                replaced = True
+                try:
+                    return real_read(*args, **kwargs)
+                finally:
+                    (agent / child.name).rename(original / child.name)
+                    agent.rmdir()
+                    original.rename(agent)
+                    replaced = False
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._read_win32_memory_child",
+                    side_effect=replace_before_content_open,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    (agent / "tool-policy.md").rename(original / "tool-policy.md")
+                    agent.rmdir()
+                    original.rename(agent)
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: docs/agent/tool-policy.md: instruction path boundary"],
+                issues,
+            )
+
+    def test_memory_index_mutations_fail_closed(self) -> None:
+        cases = (
+            (
+                "unindexed topic",
+                "entry",
+                "",
+                "",
+                "unindexed-topic.md",
+                "# A second durable conclusion\n- Date: 2026-08-25\n- Evidence: primary evidence\n- Affected surface: local validation\n\n## Measured\nMeasured fact.\n\n## Inference\nNone.\n\n## Revisit when\nThe validation surface changes.\n",
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/unindexed-topic.md\n",
+            ),
+            (
+                "missing target",
+                "readme",
+                "windows-pinned-uv-validation.md",
+                "missing-topic.md",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_MISSING: docs/agent/memory/missing-topic.md\n"
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "absolute target",
+                "readme",
+                "windows-pinned-uv-validation.md",
+                "C:/private/outside.md",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md\n"
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "escaping target",
+                "readme",
+                "windows-pinned-uv-validation.md",
+                "../outside.md",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md\n"
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "README target",
+                "readme",
+                "windows-pinned-uv-validation.md",
+                "README.md",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md\n"
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "duplicate index path",
+                "readme",
+                "",
+                "\n- [A duplicate conclusion](windows-pinned-uv-validation.md)",
+                "",
+                "",
+                "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "non-kebab filename",
+                "both",
+                "windows-pinned-uv-validation.md",
+                "Bad_Name.md",
+                "",
+                "",
+                "MEMORY_ENTRY_FILENAME: docs/agent/memory/Bad_Name.md\n",
+            ),
+            (
+                "duplicate H1 conclusion",
+                "entry",
+                "# Pinned uv is reliable for Windows validation\n",
+                "# Pinned uv is reliable for Windows validation\n# A second conclusion\n",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing date",
+                "entry",
+                "- Date: 2026-08-25\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "malformed date",
+                "entry",
+                "- Date: 2026-08-25",
+                "- Date: 2026/08/25",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing evidence",
+                "entry",
+                "- Evidence: `uv --version`; `uv run --locked python --version`\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty evidence",
+                "entry",
+                "- Evidence: `uv --version`; `uv run --locked python --version`",
+                "- Evidence: ",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing affected surface",
+                "entry",
+                "- Affected surface: local contract validation on Windows\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty affected surface",
+                "entry",
+                "- Affected surface: local contract validation on Windows",
+                "- Affected surface: ",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing measured section",
+                "entry",
+                "## Measured\nThe pinned command completed and the plain interpreter did not.\n\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty measured section",
+                "entry",
+                "## Measured\nThe pinned command completed and the plain interpreter did not.",
+                "## Measured\n",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing inference section",
+                "entry",
+                "## Inference\nPinned uv is the reliable entrypoint on this host.\n\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty inference section",
+                "entry",
+                "## Inference\nPinned uv is the reliable entrypoint on this host.",
+                "## Inference\n",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "missing revisit section",
+                "entry",
+                "## Revisit when\nPython discovery or the repository toolchain changes.\n",
+                "",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+            (
+                "empty revisit section",
+                "entry",
+                "## Revisit when\nPython discovery or the repository toolchain changes.",
+                "## Revisit when\n",
+                "",
+                "",
+                "MEMORY_ENTRY_SCHEMA: docs/agent/memory/windows-pinned-uv-validation.md\n",
+            ),
+        )
+
+        for name, target, old, new, extra_name, extra_text, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                readme, entry = self.memory_fixture(root)
+                if target in {"readme", "both"}:
+                    text = readme.read_text(encoding="utf-8")
+                    readme.write_text(text.replace(old, new) if old else text + new, encoding="utf-8")
+                if target in {"entry", "both"}:
+                    text = entry.read_text(encoding="utf-8")
+                    entry.write_text(text.replace(old, new) if old else text + new, encoding="utf-8")
+                    if target == "both":
+                        entry.rename(entry.with_name(new))
+                if extra_name:
+                    entry.with_name(extra_name).write_text(extra_text, encoding="utf-8")
+
+                result = self.run_memory_validator(root)
+
+                self.assertNotEqual(0, result.returncode, name)
+                self.assertEqual(expected, result.stdout, name)
+                self.assertEqual("", result.stderr, name)
+
+    def test_memory_tree_scan_failure_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+
+            with patch(
+                "scripts.validate_agent_memory._snapshot_memory",
+                side_effect=PermissionError,
+                create=True,
+            ):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                issues,
+            )
+
+    def test_snapshot_failure_prevents_path_based_content_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            entry.write_text(
+                entry.read_text(encoding="utf-8").replace("- Date: 2026-08-25\n", ""),
+                encoding="utf-8",
+            )
+
+            with patch(
+                "scripts.validate_agent_memory._snapshot_memory",
+                side_effect=PermissionError,
+                create=True,
+            ):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                issues,
+            )
+
+    def test_nested_markdown_is_rejected_without_following_directory_boundaries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            _, entry = self.memory_fixture(root)
+            nested = memory / "nested"
+            nested.mkdir()
+            (nested / "topic.md").write_text(entry.read_text(encoding="utf-8"), encoding="utf-8")
+
+            result = self.run_memory_validator(root)
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertEqual(
+                "MEMORY_ENTRY_LAYOUT: docs/agent/memory/nested\n",
+                result.stdout,
+            )
+            self.assertEqual("", result.stderr)
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX directory symlink semantics")
+    def test_stable_posix_symlink_directory_is_rejected_without_external_name_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            nested = memory / "nested"
+            nested.symlink_to(outside, target_is_directory=True)
+            real_scandir = agent_memory.os.scandir
+            scanned: list[int | str | bytes | Path] = []
+
+            def descriptor_scandir(directory: int | str | bytes | Path):
+                scanned.append(directory)
+                return real_scandir(directory)
+
+            with patch("scripts.validate_agent_memory.os.scandir", side_effect=descriptor_scandir):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/nested"],
+                issues,
+            )
+            self.assertTrue(scanned)
+            self.assertTrue(all(isinstance(directory, int) for directory in scanned))
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows junction semantics")
+    def test_stable_windows_junction_directory_is_rejected_without_external_name_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            nested = memory / "nested"
+            self.create_directory_link(nested, outside)
+            real_scandir = agent_memory.os.scandir
+            scanned: list[int | str | bytes | Path] = []
+
+            def observed_scandir(directory: int | str | bytes | Path):
+                scanned.append(directory)
+                return real_scandir(directory)
+
+            with patch("scripts.validate_agent_memory.os.scandir", side_effect=observed_scandir):
+                issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/nested"],
+                issues,
+            )
+            self.assertEqual([], scanned, "Windows memory scans must use the pinned directory handle")
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    def test_queued_directory_replacement_is_never_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            nested = memory / "nested"
+            nested.mkdir()
+            original = memory / "nested-original"
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            real_snapshot = getattr(agent_memory, "_snapshot_memory", None)
+            scanned: list[Path] = []
+            replaced = False
+
+            def replace_after_root_scan(
+                repository: Path,
+                expected_boundary: tuple[tuple[int, int], ...],
+            ):
+                nonlocal replaced
+                scanned.append(repository)
+                self.assertIsNotNone(real_snapshot)
+                snapshot = real_snapshot(repository, expected_boundary)
+                nested.rename(original)
+                self.create_directory_link(nested, outside)
+                replaced = True
+                return snapshot
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._snapshot_memory",
+                    side_effect=replace_after_root_scan,
+                    create=True,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    self.remove_directory_link(nested)
+                    original.rename(nested)
+
+            self.assertEqual(
+                ["MEMORY_ENTRY_LAYOUT: docs/agent/memory/nested"],
+                issues,
+            )
+            self.assertEqual([root], scanned)
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    def test_memory_root_replacement_fails_without_external_name_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            original = root / "memory-original"
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            replaced = False
+
+            if sys.platform == "win32":
+                real_open = getattr(agent_memory, "_win32_open_directory", None)
+            else:
+                real_open = agent_memory.os.open
+
+            def replace_before_root_open(
+                path: str | bytes | Path,
+                *args: object,
+                **kwargs: object,
+            ):
+                nonlocal replaced
+                directory = Path(path)
+                memory_component_open = sys.platform != "win32" and directory == Path("memory")
+                if (directory == memory or memory_component_open) and not replaced:
+                    memory.rename(original)
+                    self.create_directory_link(memory, outside)
+                    replaced = True
+                self.assertIsNotNone(real_open)
+                return real_open(path, *args, **kwargs)
+
+            try:
+                target = (
+                    "scripts.validate_agent_memory._win32_open_directory"
+                    if sys.platform == "win32"
+                    else "scripts.validate_agent_memory.os.open"
+                )
+                with patch(target, side_effect=replace_before_root_open, create=True):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    self.remove_directory_link(memory)
+                    original.rename(memory)
+
+            self.assertEqual(
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                issues,
+            )
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    def test_ordinary_memory_root_replacement_before_snapshot_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            original = root / "memory-original"
+            outside = root / "outside-memory"
+            shutil.copytree(memory, outside)
+            real_snapshot = agent_memory._snapshot_memory
+            replaced = False
+
+            def replace_before_snapshot(*args: object, **kwargs: object):
+                nonlocal replaced
+                memory.rename(original)
+                outside.rename(memory)
+                replaced = True
+                return real_snapshot(*args, **kwargs)
+
+            try:
+                with patch("scripts.validate_agent_memory._snapshot_memory", side_effect=replace_before_snapshot):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    memory.rename(outside)
+                    original.rename(memory)
+
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows path-open replacement semantics")
+    def test_ordinary_memory_root_replacement_before_content_open_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            original = root / "memory-original"
+            real_read = agent_memory._read_memory_child
+            replaced = False
+
+            def replace_before_content_open(*args: object, **kwargs: object):
+                nonlocal replaced
+                if not replaced:
+                    memory.rename(original)
+                    memory.mkdir()
+                    for child in original.iterdir():
+                        child.rename(memory / child.name)
+                    replaced = True
+                return real_read(*args, **kwargs)
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._read_memory_child",
+                    side_effect=replace_before_content_open,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    for child in memory.iterdir():
+                        child.rename(original / child.name)
+                    memory.rmdir()
+                    original.rename(memory)
+
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
+
+    def test_memory_ancestor_replacement_fails_without_external_name_leakage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            agent = root / "docs" / "agent"
+            memory = agent / "memory"
+            self.memory_fixture(root)
+            original = root / "agent-original"
+            outside_agent = root / "outside-agent"
+            outside_memory = outside_agent / "memory"
+            outside_memory.mkdir(parents=True)
+            (outside_memory / "external-secret.md").write_text("must not be enumerated", encoding="utf-8")
+            replaced = False
+
+            if sys.platform == "win32":
+                real_open = getattr(agent_memory, "_win32_open_directory", None)
+            else:
+                real_open = agent_memory.os.open
+
+            def replace_ancestor_before_memory_open(
+                path: str | bytes | Path,
+                *args: object,
+                **kwargs: object,
+            ):
+                nonlocal replaced
+                directory = Path(path) if not isinstance(path, int) else None
+                memory_component_open = sys.platform != "win32" and directory == Path("memory")
+                if (directory == memory or memory_component_open) and not replaced:
+                    agent.rename(original)
+                    self.create_directory_link(agent, outside_agent)
+                    replaced = True
+                self.assertIsNotNone(real_open)
+                return real_open(path, *args, **kwargs)
+
+            try:
+                target = (
+                    "scripts.validate_agent_memory._win32_open_directory"
+                    if sys.platform == "win32"
+                    else "scripts.validate_agent_memory.os.open"
+                )
+                with patch(target, side_effect=replace_ancestor_before_memory_open, create=True):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    self.remove_directory_link(agent)
+                    original.rename(agent)
+
+            self.assertEqual(
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                issues,
+            )
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    def test_memory_root_replacement_before_index_read_never_reads_external_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            original = root / "memory-original"
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "README.md").write_text(
+                "# External\n\n## Index\n\n- [External](external-secret.md)\n",
+                encoding="utf-8",
+            )
+            (outside / "external-secret.md").write_text("must not be read", encoding="utf-8")
+            real_handle_read = getattr(agent_memory, "_read_memory_child", None)
+            replaced = False
+
+            def replace_root() -> None:
+                nonlocal replaced
+                if not replaced:
+                    memory.rename(original)
+                    self.create_directory_link(memory, outside)
+                    replaced = True
+
+            def replace_before_handle_read(*args: object):
+                replace_root()
+                self.assertIsNotNone(real_handle_read)
+                return real_handle_read(*args)
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._read_memory_child",
+                    side_effect=replace_before_handle_read,
+                    create=True,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    self.remove_directory_link(memory)
+                    original.rename(memory)
+
+            self.assertEqual(
+                ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                issues,
+            )
+            self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    @unittest.skipIf(sys.platform == "win32", "Windows forbids control characters in filenames")
+    def test_memory_diagnostics_escape_control_characters_in_filenames(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            (memory / "forged\nline.md").write_text("invalid schema", encoding="utf-8")
+
+            issues = agent_memory.validate_memory(root)
+
+            self.assertIn(
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/forged\\nline.md",
+                issues,
+            )
+            self.assertTrue(all("\n" not in issue for issue in issues))
+
+    def test_uppercase_markdown_extension_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            _, entry = self.memory_fixture(root)
+            uppercase = memory / "uppercase-topic.MD"
+            uppercase.write_text(entry.read_text(encoding="utf-8"), encoding="utf-8")
+
+            result = self.run_memory_validator(root)
+
+            self.assertNotEqual(0, result.returncode)
+            self.assertEqual(
+                "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/uppercase-topic.MD\n"
+                "MEMORY_ENTRY_FILENAME: docs/agent/memory/uppercase-topic.MD\n",
+                result.stdout,
+            )
+            self.assertEqual("", result.stderr)
+
+    def test_memory_root_or_ancestor_reparse_cannot_become_trusted_boundary(self) -> None:
+        for relative_reparse in (Path("docs"), Path("docs/agent/memory")):
+            with self.subTest(path=relative_reparse), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self.memory_fixture(root)
+                reparse = root / relative_reparse
+                original = root / f"{reparse.name}-original"
+                outside = root / f"outside-{reparse.name}"
+                outside.mkdir()
+                (outside / "external-sensitive-name.md").write_text(
+                    "must never be imported",
+                    encoding="utf-8",
+                )
+                reparse.rename(original)
+                self.create_directory_link(reparse, outside)
+                try:
+                    issues = agent_memory.validate_memory(root)
+                finally:
+                    self.remove_directory_link(reparse)
+                    original.rename(reparse)
+
+                self.assertEqual(
+                    ["MEMORY_TREE_SCAN: docs/agent/memory"],
+                    issues,
+                )
+                self.assertNotIn("external-sensitive-name.md", "\n".join(issues))
+
+    def test_memory_index_reparse_metadata_is_rejected(self) -> None:
+        reparse_cases = (
+            ("POSIX symlink", stat.S_IFLNK, 0),
+            ("Windows reparse", stat.S_IFREG, WINDOWS_REPARSE_POINT),
+        )
+        for name, mode, attributes in reparse_cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self.memory_fixture(root)
+                snapshot = agent_memory._MemorySnapshot(
+                    (
+                        agent_memory._MemoryChild(
+                            "README.md",
+                            mode,
+                            attributes,
+                            (1, 1),
+                            1,
+                            None,
+                        ),
+                    )
+                )
+
+                with patch("scripts.validate_agent_memory._snapshot_memory", return_value=snapshot):
+                    issues = agent_memory.validate_memory(root)
+
+                self.assertEqual(
+                    ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"],
+                    issues,
+                )
+
+    def test_case_variant_readme_target_does_not_alias_canonical_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, _ = self.memory_fixture(root)
+            alias = readme.with_name("readme.md")
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(
+                    "windows-pinned-uv-validation.md",
+                    "readme.md",
+                ),
+                encoding="utf-8",
+            )
+            if sys.platform != "win32":
+                alias.hardlink_to(readme)
+
+            issues = agent_memory.validate_memory(root)
+
+            if sys.platform == "win32":
+                expected = [
+                    "MEMORY_INDEX_LINK_MISSING: docs/agent/memory/readme.md",
+                    "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md",
+                ]
+            else:
+                expected = ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"]
+            self.assertEqual(expected, issues)
+
+    def test_unindexed_hardlink_name_to_indexed_topic_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            alias = entry.with_name("topic-alias.md")
+            alias.hardlink_to(entry)
+
+            issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                [
+                    "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/windows-pinned-uv-validation.md",
+                    "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/topic-alias.md",
+                ],
+                issues,
+            )
+
+    def test_unindexed_hardlink_name_to_readme_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, _ = self.memory_fixture(root)
+            alias = readme.with_name("readme-alias.md")
+            alias.hardlink_to(readme)
+
+            issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"],
+                issues,
+            )
+
+    def test_indexed_external_hardlink_is_rejected_before_content_read(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, entry = self.memory_fixture(root)
+            memory = readme.parent
+            external = root / "outside-topic.md"
+            external.write_text(entry.read_text(encoding="utf-8"), encoding="utf-8")
+            entry.unlink()
+            imported = memory / "imported-topic.md"
+            imported.hardlink_to(external)
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(
+                    "windows-pinned-uv-validation.md",
+                    imported.name,
+                ),
+                encoding="utf-8",
+            )
+            if sys.platform == "win32":
+                real_content_read = agent_memory._read_win32_handle_text
+                content_reads: list[str] = []
+
+                def observed_content_read(handle: int, name: str) -> str:
+                    content_reads.append(name)
+                    return real_content_read(handle, name)
+
+                with patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=observed_content_read,
+                ):
+                    issues = agent_memory.validate_memory(root)
+                self.assertNotIn(imported.name, content_reads)
+            else:
+                real_read = agent_memory._read_memory_child
+                read_children: list[str] = []
+
+                def observed_read(
+                    memory_path: Path,
+                    memory_handle: int,
+                    child: agent_memory._MemoryChild,
+                ) -> agent_memory._MemoryRead:
+                    read_children.append(child.name)
+                    return real_read(memory_path, memory_handle, child)
+
+                with patch("scripts.validate_agent_memory._read_memory_child", side_effect=observed_read):
+                    issues = agent_memory.validate_memory(root)
+                self.assertNotIn(imported.name, read_children)
+
+            self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/imported-topic.md"],
+                issues,
+            )
+
+    def test_hardlink_created_during_content_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, entry = self.memory_fixture(root)
+            external_alias = root / "external-hardlink.md"
+            linked = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def create_link_during_read(handle: int, name: str) -> str:
+                    nonlocal linked
+                    if name == entry.name and not linked:
+                        external_alias.hardlink_to(entry)
+                        linked = True
+                    return real_read(handle, name)
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=create_link_during_read,
+                )
+                expected = [f"MEMORY_INDEX_LINK_INVALID: docs/agent/memory/{entry.name}"]
+            else:
+                real_read = agent_memory.os.read
+
+                def create_link_during_read(descriptor: int, size: int) -> bytes:
+                    nonlocal linked
+                    if not linked:
+                        external_alias.hardlink_to(readme)
+                        linked = True
+                    return real_read(descriptor, size)
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=create_link_during_read)
+                expected = ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"]
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if external_alias.exists():
+                    external_alias.unlink()
+
+            self.assertTrue(linked)
+            self.assertEqual(expected, issues)
+
+    def test_memory_child_path_replacement_during_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            original = root / "topic-original.md"
+            target_identity = entry.stat().st_ino
+            attempted = False
+            replaced = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def replace_after_read(handle: int, name: str) -> str:
+                    nonlocal attempted, replaced
+                    text = real_read(handle, name)
+                    if name == entry.name and not replaced:
+                        attempted = True
+                        entry.rename(original)
+                        entry.write_text("external-sensitive-name", encoding="utf-8")
+                        replaced = True
+                    return text
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=replace_after_read,
+                )
+            else:
+                real_read = agent_memory.os.read
+
+                def replace_after_read(descriptor: int, size: int) -> bytes:
+                    nonlocal attempted, replaced
+                    chunk = real_read(descriptor, size)
+                    if os.fstat(descriptor).st_ino == target_identity and chunk and not replaced:
+                        attempted = True
+                        entry.rename(original)
+                        entry.write_text("external-sensitive-name", encoding="utf-8")
+                        replaced = True
+                    return chunk
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=replace_after_read)
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    entry.unlink()
+                    original.rename(entry)
+
+            self.assertTrue(attempted)
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
+
+    def test_memory_child_in_place_rewrite_during_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            original_text = entry.read_text(encoding="utf-8")
+            target_identity = entry.stat().st_ino
+            attempted = False
+            rewritten = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def rewrite_after_read(handle: int, name: str) -> str:
+                    nonlocal attempted, rewritten
+                    text = real_read(handle, name)
+                    if name == entry.name and not rewritten:
+                        attempted = True
+                        entry.write_text("external-sensitive-name", encoding="utf-8")
+                        rewritten = True
+                    return text
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=rewrite_after_read,
+                )
+            else:
+                real_read = agent_memory.os.read
+
+                def rewrite_after_read(descriptor: int, size: int) -> bytes:
+                    nonlocal attempted, rewritten
+                    chunk = real_read(descriptor, size)
+                    if os.fstat(descriptor).st_ino == target_identity and chunk and not rewritten:
+                        attempted = True
+                        entry.write_text("external-sensitive-name", encoding="utf-8")
+                        rewritten = True
+                    return chunk
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=rewrite_after_read)
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                entry.write_text(original_text, encoding="utf-8")
+
+            self.assertTrue(attempted)
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows file-sharing semantics")
+    def test_memory_child_restored_rewrite_during_open_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            original_text = entry.read_text(encoding="utf-8")
+            original_metadata = entry.stat()
+            substituted_text = original_text.replace(
+                "The pinned command completed and the plain interpreter did not.",
+                "External substituted content was read during validation.",
+            )
+            self.assertNotEqual(original_text, substituted_text)
+            real_read = agent_memory._read_win32_handle_text
+            attempted = False
+            substituted_reads: list[str] = []
+
+            def substitute_then_restore(handle: int, name: str) -> str:
+                nonlocal attempted
+                if name != entry.name:
+                    return real_read(handle, name)
+                attempted = True
+                mutated = False
+                try:
+                    entry.write_text(substituted_text, encoding="utf-8")
+                    mutated = True
+                    text = real_read(handle, name)
+                    substituted_reads.append(text)
+                    return text
+                finally:
+                    if mutated:
+                        entry.write_text(original_text, encoding="utf-8")
+                        os.utime(
+                            entry,
+                            ns=(original_metadata.st_atime_ns, original_metadata.st_mtime_ns),
+                        )
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=substitute_then_restore,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                entry.write_text(original_text, encoding="utf-8")
+
+            self.assertTrue(attempted)
+            self.assertEqual(
+                [], substituted_reads, "substituted bytes must not be readable through the retained handle"
+            )
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows file-sharing semantics")
+    def test_memory_child_temporary_hardlink_rewrite_during_open_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            alias = root / "temporary-external-alias.md"
+            original_text = entry.read_text(encoding="utf-8")
+            original_metadata = entry.stat()
+            substituted_text = original_text.replace(
+                "The pinned command completed and the plain interpreter did not.",
+                "External hardlink content was read during validation.",
+            )
+            self.assertNotEqual(original_text, substituted_text)
+            real_read = agent_memory._read_win32_handle_text
+            attempted = False
+            substituted_reads: list[str] = []
+
+            def substitute_through_temporary_alias(handle: int, name: str) -> str:
+                nonlocal attempted
+                if name != entry.name:
+                    return real_read(handle, name)
+                attempted = True
+                alias_created = False
+                mutated = False
+                try:
+                    alias.hardlink_to(entry)
+                    alias_created = True
+                    alias.write_text(substituted_text, encoding="utf-8")
+                    mutated = True
+                    text = real_read(handle, name)
+                    substituted_reads.append(text)
+                    return text
+                finally:
+                    if mutated:
+                        alias.write_text(original_text, encoding="utf-8")
+                    if alias_created:
+                        alias.unlink()
+                    if mutated:
+                        os.utime(
+                            entry,
+                            ns=(original_metadata.st_atime_ns, original_metadata.st_mtime_ns),
+                        )
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=substitute_through_temporary_alias,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if alias.exists():
+                    alias.unlink()
+                entry.write_text(original_text, encoding="utf-8")
+
+            self.assertTrue(attempted)
+            self.assertEqual([], substituted_reads, "hardlink-substituted bytes must not be readable")
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
+
+    def test_memory_index_target_case_must_match_directory_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, _ = self.memory_fixture(root)
+            readme.write_text(
+                readme.read_text(encoding="utf-8").replace(
+                    "windows-pinned-uv-validation.md",
+                    "Windows-pinned-uv-validation.md",
+                ),
+                encoding="utf-8",
+            )
+
+            issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                [
+                    "MEMORY_INDEX_LINK_MISSING: docs/agent/memory/Windows-pinned-uv-validation.md",
+                    "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md",
+                ],
+                issues,
+            )
+
+    def test_escaping_entry_reparse_returns_sanitized_diagnostic_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            real_snapshot = agent_memory._snapshot_memory
+
+            def fake_snapshot(
+                repository: Path,
+                expected_boundary: tuple[tuple[int, int], ...],
+            ):
+                snapshot = real_snapshot(repository, expected_boundary)
+                children = tuple(
+                    agent_memory._MemoryChild(
+                        child.name,
+                        stat.S_IFLNK if child.name == entry.name else child.mode,
+                        (
+                            child.file_attributes | WINDOWS_REPARSE_POINT
+                            if child.name == entry.name
+                            else child.file_attributes
+                        ),
+                        child.identity,
+                        child.link_count,
+                        None if child.name == entry.name else child.text,
+                    )
+                    for child in snapshot.children
+                )
+                return agent_memory._MemorySnapshot(children)
+
+            issues: list[str] | None = None
+            try:
+                with patch("scripts.validate_agent_memory._snapshot_memory", side_effect=fake_snapshot):
+                    issues = agent_memory.validate_memory(root)
+            except ValueError:
+                pass
+
+            self.assertIsNotNone(
+                issues,
+                "entry reparse leaked through diagnostics instead of failing closed",
+            )
+            self.assertEqual(
+                ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/windows-pinned-uv-validation.md"],
+                issues,
+            )
+
+    @unittest.skipIf(sys.platform == "win32", "requires a case-sensitive filesystem")
+    def test_lowercase_readme_topic_is_not_silently_excluded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            lowercase_readme = memory / "readme.md"
+            lowercase_entry = """# Lowercase readme is a distinct topic
+- Date: 2026-08-25
+- Evidence: primary evidence
+- Affected surface: case-sensitive filesystems
+
+## Measured
+The lowercase topic exists separately from the canonical index.
+
+## Inference
+None.
+
+## Revisit when
+Repository filename conventions change.
+"""
+            lowercase_readme.write_text(lowercase_entry, encoding="utf-8")
+
+            issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_ENTRY_UNINDEXED: docs/agent/memory/readme.md"],
+                issues,
+            )
+
+    @unittest.skipIf(sys.platform == "win32", "requires a case-sensitive filesystem")
+    def test_distinct_lowercase_readme_can_be_indexed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            readme, _ = self.memory_fixture(root)
+            lowercase_readme = memory / "readme.md"
+            lowercase_entry = """# Lowercase readme is a distinct topic
+- Date: 2026-08-25
+- Evidence: primary evidence
+- Affected surface: case-sensitive filesystems
+
+## Measured
+The lowercase topic exists separately from the canonical index.
+
+## Inference
+None.
+
+## Revisit when
+Repository filename conventions change.
+"""
+            readme.write_text(
+                readme.read_text(encoding="utf-8") + "\n- [Lowercase readme is a distinct topic](readme.md)\n",
+                encoding="utf-8",
+            )
+            lowercase_readme.write_text(lowercase_entry, encoding="utf-8")
+
+            issues = agent_memory.validate_memory(root)
+
+            self.assertEqual([], issues)
 
     def test_live_contract_passes_validator(self) -> None:
         self.assertEqual([], validate_contract(ROOT))

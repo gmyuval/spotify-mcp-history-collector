@@ -20,8 +20,8 @@ Read, in order:
    delegation.
 3. [`docs/agent/current-state.md`](../../../docs/agent/current-state.md) and
    [`docs/agent/tool-policy.md`](../../../docs/agent/tool-policy.md).
-4. [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md), then only topic entries
-   relevant to this task.
+4. Read [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md) first, then only topic
+   entries relevant to this task.
 5. The assigned Linear issues and ready candidates in the current cycle, including relations,
    estimates, milestones, project, status, and comments. Read accepted plans and relevant ADRs
    when work touches a plan-first boundary.

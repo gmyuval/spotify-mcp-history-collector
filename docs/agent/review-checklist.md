@@ -39,8 +39,13 @@ tool summary, green badge, or issue checkbox is only a claim until checked.
 
 ## Documentation and evidence
 
-- [ ] Current-state, product, integration, deployment, decision, and memory documents were updated
-      at the correct source-of-truth location, without creating a duplicate issue queue.
+- [ ] Repository memory was considered; durable context is placed at the correct source of truth
+      and updated only when earned, without creating a duplicate issue queue.
+- [ ] Any repository-memory entry and `docs/agent/memory/README.md` index change preserve index
+      integrity and ship in the same issue-linked pull request as their evidence.
+- [ ] No transient, personal, or private content was committed as repository memory.
+- [ ] Current-state, product, integration, deployment, and decision documents were updated when
+      earned at their correct source-of-truth location.
 - [ ] Durable claims identify whether they are measured, inferred, or conjectural and include a
       revision, date, command, or external-object pin where useful.
 - [ ] Every review finding has a disposition, and valid findings are fixed and revalidated.

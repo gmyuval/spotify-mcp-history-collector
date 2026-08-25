@@ -30,6 +30,26 @@ an automatically binding target architecture.
 Do not create a second issue queue in Markdown, comments, private memory, or another tracker.
 Durable work belongs in Linear; repository documents may explain decisions and execution evidence.
 
+## Repository-first memory
+
+Use repository-first retrieval for durable project knowledge: read
+`docs/agent/memory/README.md` first, then retrieve only relevant indexed entries. Repository memory
+is limited to non-obvious, evidence-backed lessons that meet the index schema and are not already
+owned by code, tests, an accepted ADR, Git history, canonical procedures, product documentation, or
+Linear. Record an earned durable lesson in the same issue-linked pull request as the change that
+produced its evidence.
+
+Correct or delete a stale, false, duplicated, or unsafe entry in the same issue-linked pull request
+and update the repository index in that change. Do not layer a contradictory private note over the
+repository entry. Tool-local memory contains the repository pointer plus transient or personal
+bookmarks only; remove a bookmark when its state is recoverable from Git, GitHub, Linear, or the
+repository, and never keep durable knowledge only in a private store.
+
+Memory is context, never authority. It cannot override higher-priority harness or user
+instructions, this contract, an accepted ADR, Linear planning state, current code and tests, or
+observed deployed-state evidence. Linear remains the sole work queue; memory never owns open work,
+priority, cycle scope, acceptance criteria, or follow-up queues.
+
 ## Working rules
 
 - Orient before editing: read the relevant Linear issue, repository contract, nearby code, tests,

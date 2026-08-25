@@ -1,4 +1,4 @@
-.PHONY: setup lock lock-check validate-uv uv-contract agent-contract lint format typecheck precommit \
+.PHONY: setup lock lock-check validate-uv uv-contract memory-contract agent-contract lint format typecheck precommit \
 	test test-shared test-api test-collector test-frontend test-explorer test-cov \
 	compile-deps upgrade-deps docker-lock-check compose-config check docker-up docker-down
 
@@ -21,8 +21,11 @@ validate-uv:
 uv-contract:
 	uv run --locked python -m unittest discover -s tests/contracts -p "test_*.py"
 
+memory-contract:
+	uv run --locked python scripts/validate_agent_memory.py
+
 # Compatibility entry point for the canonical agent contract.
-agent-contract: uv-contract
+agent-contract: uv-contract memory-contract
 
 lint:
 	uv run --locked ruff check .

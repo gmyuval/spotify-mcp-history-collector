@@ -15,6 +15,11 @@ delegates or imply authority to deploy or change production. Apply this lifecycl
 inside the session batch. Every additional ticket uses a separate branch and pull request naming
 its own one primary issue.
 
+Read [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md) before relevant indexed
+entries. Assess whether the change affects repository memory. Correct or delete any stale
+repository-memory entry in the same issue-linked pull request; never preserve a contradictory
+private note.
+
 ## Phase 1 - local implementation
 
 1. Run `session-start`. Read the selected SPM batch, then the current ticket's accepted plan/ADRs,
@@ -114,7 +119,7 @@ After an authorized merge:
    exact merge SHA. A healthy old deployment is not evidence the merge deployed.
 3. Verify Linear linkage/status/dependencies/criteria and correct them only within granted
    authority. Do not alter weekly-cycle scope silently.
-4. Check current-state, product docs, ADRs, and durable memory for facts this merge changed.
+4. Check current-state, product docs, ADRs, and repository memory for facts this merge changed.
 5. Delete a branch only after proving the PR merged and preserving the head SHA needed for recovery.
 
 Production failure, migration uncertainty, authentication/secret risk, a public MCP/API mismatch,
