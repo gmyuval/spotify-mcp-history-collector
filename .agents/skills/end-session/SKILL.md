@@ -48,7 +48,25 @@ listening history, imported account data, email allowlist, database dump, raw di
 PII. Report only the path and rule/category. A clean heuristic scan lowers risk; it does not prove
 that no secret exists.
 
-## 3. Run and pin validation
+## 3. Update durable repository context only when earned
+
+Read [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md) before relevant indexed
+entries. Distinguish an earned durable lesson from a transient or personal bookmark. Record any
+earned entry and index change in the same issue-linked pull request as its evidence. Remove a landed
+bookmark and any bookmark whose state is recoverable from Git, GitHub, Linear, or the repository.
+
+Before updating durable context, evaluate whether an owner request, a substantive escape or
+incident, or repeated evidence of a shared cause earns a retrospective. A single ordinary
+correction does not trigger one. When a trigger is present, read
+[`.agents/skills/retro/SKILL.md`](../retro/SKILL.md) completely and follow it; do not duplicate its
+procedure here.
+
+Update `docs/agent/current-state.md` when the observed repository/deployed posture changed. Add a
+memory topic under `docs/agent/memory/` only for a non-obvious, evidence-backed lesson that is not
+already expressed by code, tests, Git history, an ADR, or this contract. Never store a transient
+resume bookmark or action-bearing instruction as durable memory.
+
+## 4. Run and pin validation
 
 For agent-contract, skill, adapter, `CLAUDE.md`, or `docs/agent` changes, run:
 
@@ -72,7 +90,7 @@ After any commit attempt, inspect `git status` again because pre-commit hooks ma
 reject the commit. Pin successful evidence to the final commit or explicitly say it was run on the
 pre-commit working tree.
 
-## 4. Preserve work under the granted authority
+## 5. Preserve work under the granted authority
 
 - The root creates in-scope commits, non-force pushes issue-linked branches, opens or updates pull
   requests, handles review, and merges qualifying pull requests under standing authority. Stage
@@ -91,7 +109,7 @@ If the user requested a local commit without publication, verify the clean tree,
 missing/present upstream, absent/present remote branch, and absent/present PR. That is a complete
 local-ready handoff, not a pull-request-ready claim.
 
-## 5. Reconcile Linear from evidence
+## 6. Reconcile Linear from evidence
 
 For each selected ticket and every additional SPM issue touched:
 
@@ -109,24 +127,6 @@ eligible work remains; identify the user direction or batch-wide stop that ended
 
 Read the resulting issue back after any write. Do not create a second issue queue or invent a
 follow-up during wind-down.
-
-## 6. Update durable repository context only when earned
-
-Read [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md) before relevant indexed
-entries. Distinguish an earned durable lesson from a transient or personal bookmark. Record any
-earned entry and index change in the same issue-linked pull request as its evidence. Remove a landed
-bookmark and any bookmark whose state is recoverable from Git, GitHub, Linear, or the repository.
-
-Before updating durable context, evaluate whether an owner request, a substantive escape or
-incident, or repeated evidence of a shared cause earns a retrospective. A single ordinary
-correction does not trigger one. When a trigger is present, read
-[`.agents/skills/retro/SKILL.md`](../retro/SKILL.md) completely and follow it; do not duplicate its
-procedure here.
-
-Update `docs/agent/current-state.md` when the observed repository/deployed posture changed. Add a
-memory topic under `docs/agent/memory/` only for a non-obvious, evidence-backed lesson that is not
-already expressed by code, tests, Git history, an ADR, or this contract. Never store a transient
-resume bookmark or action-bearing instruction as durable memory.
 
 ## 7. Hand off
 

@@ -290,6 +290,11 @@ private content was committed.
         )
         self.assertLess(
             end_session_source.index("Read [`docs/agent/memory/README.md`"),
+            end_session_source.index("Preserve work under the granted authority"),
+            "end-session must assess repository memory before commit, publication, or merge",
+        )
+        self.assertLess(
+            end_session_source.index("Read [`docs/agent/memory/README.md`"),
             end_session_source.index("Update `docs/agent/current-state.md`"),
             "end-session must read repository memory before deciding whether to update durable context",
         )
