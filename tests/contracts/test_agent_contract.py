@@ -1148,10 +1148,44 @@ private content was committed.
 
             issues = agent_memory.validate_memory(root)
 
+            expected = ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"]
+            if sys.platform != "win32":
+                expected.extend(
+                    [
+                        "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/readme.md",
+                        "MEMORY_ENTRY_SCHEMA: docs/agent/memory/readme.md",
+                    ]
+                )
+            expected.append("MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md")
+            self.assertEqual(expected, issues)
+
+    def test_unindexed_hardlink_name_to_indexed_topic_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            alias = entry.with_name("topic-alias.md")
+            alias.hardlink_to(entry)
+
+            issues = agent_memory.validate_memory(root)
+
+            self.assertEqual(
+                ["MEMORY_ENTRY_UNINDEXED: docs/agent/memory/topic-alias.md"],
+                issues,
+            )
+
+    def test_unindexed_hardlink_name_to_readme_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, _ = self.memory_fixture(root)
+            alias = readme.with_name("readme-alias.md")
+            alias.hardlink_to(readme)
+
+            issues = agent_memory.validate_memory(root)
+
             self.assertEqual(
                 [
-                    "MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md",
-                    "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/windows-pinned-uv-validation.md",
+                    "MEMORY_ENTRY_UNINDEXED: docs/agent/memory/readme-alias.md",
+                    "MEMORY_ENTRY_SCHEMA: docs/agent/memory/readme-alias.md",
                 ],
                 issues,
             )

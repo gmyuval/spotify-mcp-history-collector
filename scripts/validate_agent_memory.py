@@ -719,7 +719,7 @@ def _validate_memory(root: Path) -> tuple[list[str], int]:
 
     issues: list[str] = []
     indexed_names: dict[str, tuple[str, int]] = {}
-    indexed_identities: set[tuple[int, int]] = set()
+    indexed_entry_names: set[str] = set()
     blocked_entries: set[str] = set()
     for raw_target in MARKDOWN_LINK.findall(index):
         windows_absolute = re.match(r"^[A-Za-z]:[\\/]", raw_target) is not None
@@ -763,7 +763,7 @@ def _validate_memory(root: Path) -> tuple[list[str], int]:
         if child.identity == readme_child.identity:
             issues.append(_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root))
             continue
-        indexed_identities.add(child.identity)
+        indexed_entry_names.add(key)
         if child.text is None or not _entry_has_schema(child.text):
             issues.append(_diagnostic("MEMORY_ENTRY_SCHEMA", candidate, root))
 
@@ -772,13 +772,14 @@ def _validate_memory(root: Path) -> tuple[list[str], int]:
 
     for entry in entries:
         path = memory / entry.name
-        if entry.identity == readme_child.identity:
+        if entry is readme_child:
             continue
-        if entry.identity not in indexed_identities:
+        key = name_key(entry.name)
+        if key not in indexed_entry_names:
             issues.append(_diagnostic("MEMORY_ENTRY_UNINDEXED", path, root))
         if KEBAB_MARKDOWN.fullmatch(entry.name) is None:
             issues.append(_diagnostic("MEMORY_ENTRY_FILENAME", path, root))
-        if entry.identity not in indexed_identities and (entry.text is None or not _entry_has_schema(entry.text)):
+        if key not in indexed_entry_names and (entry.text is None or not _entry_has_schema(entry.text)):
             issues.append(_diagnostic("MEMORY_ENTRY_SCHEMA", path, root))
 
     issues.extend(_validate_instruction_pointers(root))
