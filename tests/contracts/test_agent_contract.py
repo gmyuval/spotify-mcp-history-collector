@@ -255,7 +255,8 @@ private content was committed.
     def test_memory_lifecycle_integration(self) -> None:
         session_start = " ".join(self.read(".agents/skills/session-start/SKILL.md").split())
         pr_lifecycle = " ".join(self.read(".agents/skills/pr-lifecycle/SKILL.md").split())
-        end_session = " ".join(self.read(".agents/skills/end-session/SKILL.md").split())
+        end_session_source = self.read(".agents/skills/end-session/SKILL.md")
+        end_session = " ".join(end_session_source.split())
         review_checklist = " ".join(self.read("docs/agent/review-checklist.md").split())
 
         self.assert_terms(
@@ -286,6 +287,11 @@ private content was committed.
                 "bookmark whose state is recoverable from Git, GitHub, Linear, or the repository",
             ),
             "end-session repository-memory wind-down",
+        )
+        self.assertLess(
+            end_session_source.index("Read [`docs/agent/memory/README.md`"),
+            end_session_source.index("Update `docs/agent/current-state.md`"),
+            "end-session must read repository memory before deciding whether to update durable context",
         )
         self.assert_terms(
             review_checklist,

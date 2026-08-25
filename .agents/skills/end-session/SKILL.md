@@ -112,6 +112,11 @@ follow-up during wind-down.
 
 ## 6. Update durable repository context only when earned
 
+Read [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md) before relevant indexed
+entries. Distinguish an earned durable lesson from a transient or personal bookmark. Record any
+earned entry and index change in the same issue-linked pull request as its evidence. Remove a landed
+bookmark and any bookmark whose state is recoverable from Git, GitHub, Linear, or the repository.
+
 Before updating durable context, evaluate whether an owner request, a substantive escape or
 incident, or repeated evidence of a shared cause earns a retrospective. A single ordinary
 correction does not trigger one. When a trigger is present, read
@@ -122,11 +127,6 @@ Update `docs/agent/current-state.md` when the observed repository/deployed postu
 memory topic under `docs/agent/memory/` only for a non-obvious, evidence-backed lesson that is not
 already expressed by code, tests, Git history, an ADR, or this contract. Never store a transient
 resume bookmark or action-bearing instruction as durable memory.
-
-Read [`docs/agent/memory/README.md`](../../../docs/agent/memory/README.md) before relevant indexed
-entries. Distinguish an earned durable lesson from a transient or personal bookmark. Record any
-earned entry and index change in the same issue-linked pull request as its evidence. Remove a landed
-bookmark and any bookmark whose state is recoverable from Git, GitHub, Linear, or the repository.
 
 ## 7. Hand off
 
