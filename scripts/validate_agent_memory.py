@@ -191,28 +191,6 @@ def _diagnostic(code: str, path: Path, root: Path) -> str:
     return f"{code}: {rendered}"
 
 
-def _is_reparse_point(path: Path) -> bool:
-    try:
-        metadata = path.lstat()
-    except OSError:
-        return False
-    return stat.S_ISLNK(metadata.st_mode) or bool(getattr(metadata, "st_file_attributes", 0) & WINDOWS_REPARSE_POINT)
-
-
-def _has_reparse_component(path: Path, boundary: Path) -> bool:
-    try:
-        path.relative_to(boundary)
-    except ValueError:
-        return True
-    current = path
-    while True:
-        if _is_reparse_point(current):
-            return True
-        if current == boundary:
-            return False
-        current = current.parent
-
-
 def _index_body(readme: str) -> str | None:
     heading = re.search(r"^## Index[ \t]*$", readme, re.MULTILINE)
     if heading is None:
@@ -270,10 +248,39 @@ def _posix_directory_flags() -> int:
     return os.O_RDONLY | directory_flag | no_follow_flag
 
 
+def _capture_memory_boundary_posix(root: Path) -> tuple[tuple[int, int], ...]:
+    directory_flags = _posix_directory_flags()
+    identities: list[tuple[int, int]] = []
+    current_path = root
+    for component in (None, *MEMORY_RELATIVE.parts):
+        if component is not None:
+            current_path /= component
+        descriptor = os.open(current_path, directory_flags)
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise OSError(errno.ENOTDIR, "memory boundary is not a directory")
+            identities.append((metadata.st_dev, metadata.st_ino))
+        finally:
+            os.close(descriptor)
+    return tuple(identities)
+
+
+def _verify_posix_visible_directory(path: Path, descriptor: int) -> None:
+    retained = os.fstat(descriptor)
+    visible = os.stat(path, follow_symlinks=False)
+    if not stat.S_ISDIR(visible.st_mode) or (visible.st_dev, visible.st_ino) != (
+        retained.st_dev,
+        retained.st_ino,
+    ):
+        raise OSError(errno.ESTALE, "visible directory identity changed")
+
+
 def _read_posix_memory_child(memory: Path, memory_handle: int, child: _MemoryChild) -> _MemoryRead:
     no_follow_flag = getattr(os, "O_NOFOLLOW", 0)
     if no_follow_flag == 0:
         raise OSError(errno.ENOTSUP, "descriptor-bound no-follow reads are unavailable")
+    _verify_posix_visible_directory(memory, memory_handle)
     descriptor = os.open(child.name, os.O_RDONLY | no_follow_flag, dir_fd=memory_handle)
     try:
         metadata = os.fstat(descriptor)
@@ -289,25 +296,39 @@ def _read_posix_memory_child(memory: Path, memory_handle: int, child: _MemoryChi
         chunks: list[bytes] = []
         while chunk := os.read(descriptor, 64 * 1024):
             chunks.append(chunk)
+        after = os.fstat(descriptor)
+        _verify_posix_visible_directory(memory, memory_handle)
+        if (after.st_dev, after.st_ino) != child.identity:
+            raise OSError(errno.ESTALE, "memory child identity changed during read")
+        if after.st_nlink != 1:
+            return _MemoryRead(None, after.st_nlink)
         text = b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
-        return _MemoryRead(text, metadata.st_nlink)
+        return _MemoryRead(text, after.st_nlink)
     finally:
         os.close(descriptor)
 
 
-def _snapshot_memory_posix(root: Path) -> _MemorySnapshot:
+def _snapshot_memory_posix(
+    root: Path,
+    expected_boundary: tuple[tuple[int, int], ...],
+) -> _MemorySnapshot:
     directory_flags = _posix_directory_flags()
     descriptor = os.open(root, directory_flags)
     current_path = root
     try:
-        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+        root_metadata = os.fstat(descriptor)
+        if not stat.S_ISDIR(root_metadata.st_mode):
             raise OSError(errno.ENOTDIR, "repository root is not a directory")
-        for component in MEMORY_RELATIVE.parts:
+        if (root_metadata.st_dev, root_metadata.st_ino) != expected_boundary[0]:
+            raise OSError(errno.ESTALE, "repository root identity changed")
+        for index, component in enumerate(MEMORY_RELATIVE.parts, start=1):
             child_descriptor = os.open(component, directory_flags, dir_fd=descriptor)
             try:
                 metadata = os.fstat(child_descriptor)
                 if not stat.S_ISDIR(metadata.st_mode):
                     raise OSError(errno.ENOTDIR, "memory ancestor is not a directory")
+                if (metadata.st_dev, metadata.st_ino) != expected_boundary[index]:
+                    raise OSError(errno.ESTALE, "memory boundary identity changed")
                 current_path /= component
                 visible = os.stat(current_path, follow_symlinks=False)
                 if (visible.st_dev, visible.st_ino) != (metadata.st_dev, metadata.st_ino):
@@ -430,6 +451,29 @@ def _validate_win32_directory_handle(handle: int) -> _Win32HandleInfo:
     if not information.file_attributes & WINDOWS_DIRECTORY:
         raise OSError(errno.ENOTDIR, "memory boundary is not a directory")
     return information
+
+
+def _capture_memory_boundary_windows(root: Path) -> tuple[tuple[int, int], ...]:
+    identities: list[tuple[int, int]] = []
+    current_path = root
+    for component in (None, *MEMORY_RELATIVE.parts):
+        if component is not None:
+            current_path /= component
+        handle = _win32_open_directory(current_path)
+        try:
+            identities.append(_validate_win32_directory_handle(handle).identity)
+        finally:
+            _win32_close_handle(handle)
+    return tuple(identities)
+
+
+def _verify_win32_visible_directory(path: Path, expected_identity: tuple[int, int]) -> None:
+    handle = _win32_open_directory(path)
+    try:
+        if _validate_win32_directory_handle(handle).identity != expected_identity:
+            raise OSError(errno.ESTALE, "visible directory identity changed")
+    finally:
+        _win32_close_handle(handle)
 
 
 def _win32_memory_children(handle: int) -> list[_MemoryChild]:
@@ -572,7 +616,9 @@ def _read_win32_handle_text(handle: int, _name: str) -> str:
     return b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def _read_win32_memory_child(memory: Path, child: _MemoryChild) -> _MemoryRead:
+def _read_win32_memory_child(memory: Path, memory_handle: int, child: _MemoryChild) -> _MemoryRead:
+    parent_identity = _validate_win32_directory_handle(memory_handle).identity
+    _verify_win32_visible_directory(memory, parent_identity)
     handle = _win32_open_file(memory / child.name)
     try:
         information = _win32_handle_info(handle)
@@ -582,23 +628,35 @@ def _read_win32_memory_child(memory: Path, child: _MemoryChild) -> _MemoryRead:
             raise OSError(errno.ESTALE, "memory child identity changed")
         if information.link_count != 1:
             return _MemoryRead(None, information.link_count)
-        return _MemoryRead(_read_win32_handle_text(handle, child.name), information.link_count)
+        _verify_win32_visible_directory(memory, parent_identity)
+        text = _read_win32_handle_text(handle, child.name)
+        after = _win32_handle_info(handle)
+        _verify_win32_visible_directory(memory, parent_identity)
+        if after.identity != child.identity:
+            raise OSError(errno.ESTALE, "memory child identity changed during read")
+        if after.link_count != 1:
+            return _MemoryRead(None, after.link_count)
+        return _MemoryRead(text, after.link_count)
     finally:
         _win32_close_handle(handle)
 
 
 def _read_memory_child(memory: Path, memory_handle: int, child: _MemoryChild) -> _MemoryRead:
     if sys.platform == "win32":
-        return _read_win32_memory_child(memory, child)
+        return _read_win32_memory_child(memory, memory_handle, child)
     return _read_posix_memory_child(memory, memory_handle, child)
 
 
-def _snapshot_memory_windows(root: Path) -> _MemorySnapshot:
+def _snapshot_memory_windows(
+    root: Path,
+    expected_boundary: tuple[tuple[int, int], ...],
+) -> _MemorySnapshot:
     current_path = root
     handle = _win32_open_directory(root)
     try:
-        _validate_win32_directory_handle(handle)
-        for component in MEMORY_RELATIVE.parts:
+        if _validate_win32_directory_handle(handle).identity != expected_boundary[0]:
+            raise OSError(errno.ESTALE, "repository root identity changed")
+        for index, component in enumerate(MEMORY_RELATIVE.parts, start=1):
             matches = [child for child in _win32_memory_children(handle) if child.name == component]
             if len(matches) != 1:
                 raise OSError(errno.ENOENT, "memory boundary is missing")
@@ -614,6 +672,8 @@ def _snapshot_memory_windows(root: Path) -> _MemorySnapshot:
                 actual = _validate_win32_directory_handle(child_handle)
                 if actual.identity != expected.identity:
                     raise OSError(errno.ESTALE, "memory boundary identity changed")
+                if actual.identity != expected_boundary[index]:
+                    raise OSError(errno.ESTALE, "memory boundary changed after precheck")
             except BaseException:
                 _win32_close_handle(child_handle)
                 raise
@@ -647,10 +707,20 @@ def _snapshot_memory_windows(root: Path) -> _MemorySnapshot:
         _win32_close_handle(handle)
 
 
-def _snapshot_memory(root: Path) -> _MemorySnapshot:
+def _capture_memory_boundary(root: Path) -> tuple[tuple[int, int], ...]:
     if sys.platform == "win32":
-        return _snapshot_memory_windows(root)
-    return _snapshot_memory_posix(root)
+        return _capture_memory_boundary_windows(root)
+    return _capture_memory_boundary_posix(root)
+
+
+def _snapshot_memory(
+    root: Path,
+    expected_boundary: tuple[tuple[int, int], ...] | None = None,
+) -> _MemorySnapshot:
+    boundary = expected_boundary if expected_boundary is not None else _capture_memory_boundary(root)
+    if sys.platform == "win32":
+        return _snapshot_memory_windows(root, boundary)
+    return _snapshot_memory_posix(root, boundary)
 
 
 def _validate_repository_relative(relative: Path) -> None:
@@ -658,20 +728,90 @@ def _validate_repository_relative(relative: Path) -> None:
         raise OSError(errno.EINVAL, "repository file path is not a strict relative path")
 
 
-def _read_repository_file_posix(root: Path, relative: Path) -> str:
+def _capture_repository_file_boundary_posix(root: Path, relative: Path) -> tuple[tuple[int, int], ...]:
+    _validate_repository_relative(relative)
+    directory_flags = _posix_directory_flags()
+    identities: list[tuple[int, int]] = []
+    current_path = root
+    for component in (None, *relative.parts[:-1]):
+        if component is not None:
+            current_path /= component
+        descriptor = os.open(current_path, directory_flags)
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise OSError(errno.ENOTDIR, "repository ancestor is not a directory")
+            identities.append((metadata.st_dev, metadata.st_ino))
+        finally:
+            os.close(descriptor)
+
+    no_follow_flag = getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(current_path / relative.name, os.O_RDONLY | no_follow_flag)
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise OSError(errno.EINVAL, "repository instruction is not a unique regular file")
+        identities.append((metadata.st_dev, metadata.st_ino))
+    finally:
+        os.close(descriptor)
+    return tuple(identities)
+
+
+def _capture_repository_file_boundary_windows(root: Path, relative: Path) -> tuple[tuple[int, int], ...]:
+    _validate_repository_relative(relative)
+    identities: list[tuple[int, int]] = []
+    current_path = root
+    for component in (None, *relative.parts[:-1]):
+        if component is not None:
+            current_path /= component
+        handle = _win32_open_directory(current_path)
+        try:
+            identities.append(_validate_win32_directory_handle(handle).identity)
+        finally:
+            _win32_close_handle(handle)
+
+    handle = _win32_open_file(current_path / relative.name)
+    try:
+        information = _win32_handle_info(handle)
+        if information.file_attributes & (WINDOWS_REPARSE_POINT | WINDOWS_DIRECTORY):
+            raise OSError(errno.EINVAL, "repository instruction is not a regular file")
+        if information.link_count != 1:
+            raise OSError(errno.EINVAL, "repository instruction is not a unique regular file")
+        identities.append(information.identity)
+    finally:
+        _win32_close_handle(handle)
+    return tuple(identities)
+
+
+def _capture_repository_file_boundary(root: Path, relative: Path) -> tuple[tuple[int, int], ...]:
+    if sys.platform == "win32":
+        return _capture_repository_file_boundary_windows(root, relative)
+    return _capture_repository_file_boundary_posix(root, relative)
+
+
+def _read_repository_file_posix(
+    root: Path,
+    relative: Path,
+    expected_boundary: tuple[tuple[int, int], ...],
+) -> str:
     _validate_repository_relative(relative)
     directory_flags = _posix_directory_flags()
     descriptor = os.open(root, directory_flags)
     current_path = root
     try:
-        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+        root_metadata = os.fstat(descriptor)
+        if not stat.S_ISDIR(root_metadata.st_mode):
             raise OSError(errno.ENOTDIR, "repository root is not a directory")
-        for component in relative.parts[:-1]:
+        if (root_metadata.st_dev, root_metadata.st_ino) != expected_boundary[0]:
+            raise OSError(errno.ESTALE, "repository root identity changed")
+        for index, component in enumerate(relative.parts[:-1], start=1):
             child_descriptor = os.open(component, directory_flags, dir_fd=descriptor)
             try:
                 metadata = os.fstat(child_descriptor)
                 if not stat.S_ISDIR(metadata.st_mode):
                     raise OSError(errno.ENOTDIR, "repository ancestor is not a directory")
+                if (metadata.st_dev, metadata.st_ino) != expected_boundary[index]:
+                    raise OSError(errno.ESTALE, "repository ancestor identity changed")
                 current_path /= component
                 visible = os.stat(current_path, follow_symlinks=False)
                 if (visible.st_dev, visible.st_ino) != (metadata.st_dev, metadata.st_ino):
@@ -683,17 +823,24 @@ def _read_repository_file_posix(root: Path, relative: Path) -> str:
             descriptor = child_descriptor
 
         no_follow_flag = getattr(os, "O_NOFOLLOW", 0)
+        _verify_posix_visible_directory(current_path, descriptor)
         file_descriptor = os.open(relative.name, os.O_RDONLY | no_follow_flag, dir_fd=descriptor)
         try:
             metadata = os.fstat(file_descriptor)
             if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
                 raise OSError(errno.EINVAL, "repository instruction is not a unique regular file")
+            if (metadata.st_dev, metadata.st_ino) != expected_boundary[-1]:
+                raise OSError(errno.ESTALE, "repository instruction identity changed")
             visible = os.stat(current_path / relative.name, follow_symlinks=False)
             if (visible.st_dev, visible.st_ino) != (metadata.st_dev, metadata.st_ino):
                 raise OSError(errno.ESTALE, "visible repository file identity changed")
             chunks: list[bytes] = []
             while chunk := os.read(file_descriptor, 64 * 1024):
                 chunks.append(chunk)
+            after = os.fstat(file_descriptor)
+            _verify_posix_visible_directory(current_path, descriptor)
+            if (after.st_dev, after.st_ino) != (metadata.st_dev, metadata.st_ino) or after.st_nlink != 1:
+                raise OSError(errno.ESTALE, "repository instruction changed during read")
             return b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         finally:
             os.close(file_descriptor)
@@ -701,13 +848,18 @@ def _read_repository_file_posix(root: Path, relative: Path) -> str:
         os.close(descriptor)
 
 
-def _read_repository_file_windows(root: Path, relative: Path) -> str:
+def _read_repository_file_windows(
+    root: Path,
+    relative: Path,
+    expected_boundary: tuple[tuple[int, int], ...],
+) -> str:
     _validate_repository_relative(relative)
     current_path = root
     handle = _win32_open_directory(root)
     try:
-        _validate_win32_directory_handle(handle)
-        for component in relative.parts[:-1]:
+        if _validate_win32_directory_handle(handle).identity != expected_boundary[0]:
+            raise OSError(errno.ESTALE, "repository root identity changed")
+        for index, component in enumerate(relative.parts[:-1], start=1):
             matches = [child for child in _win32_memory_children(handle) if child.name == component]
             if len(matches) != 1:
                 raise OSError(errno.ENOENT, "repository ancestor is missing")
@@ -723,6 +875,8 @@ def _read_repository_file_windows(root: Path, relative: Path) -> str:
                 actual = _validate_win32_directory_handle(child_handle)
                 if actual.identity != expected.identity:
                     raise OSError(errno.ESTALE, "repository ancestor identity changed")
+                if actual.identity != expected_boundary[index]:
+                    raise OSError(errno.ESTALE, "repository ancestor changed after precheck")
             except BaseException:
                 _win32_close_handle(child_handle)
                 raise
@@ -737,7 +891,9 @@ def _read_repository_file_windows(root: Path, relative: Path) -> str:
             raise OSError(errno.EINVAL, "repository instruction is not a regular file")
         if expected.file_attributes & WINDOWS_REPARSE_POINT:
             raise OSError(errno.ELOOP, "repository instruction is a reparse point")
-        result = _read_win32_memory_child(current_path, expected)
+        if expected.identity != expected_boundary[-1]:
+            raise OSError(errno.ESTALE, "repository instruction changed after precheck")
+        result = _read_win32_memory_child(current_path, handle, expected)
         if result.link_count != 1 or result.text is None:
             raise OSError(errno.EINVAL, "repository instruction is not a unique regular file")
         return result.text
@@ -745,11 +901,18 @@ def _read_repository_file_windows(root: Path, relative: Path) -> str:
         _win32_close_handle(handle)
 
 
-def _read_repository_file(root: Path, relative: Path) -> str | None:
+def _read_repository_file(
+    root: Path,
+    relative: Path,
+    expected_boundary: tuple[tuple[int, int], ...] | None = None,
+) -> str | None:
     try:
+        boundary = (
+            expected_boundary if expected_boundary is not None else _capture_repository_file_boundary(root, relative)
+        )
         if sys.platform == "win32":
-            return _read_repository_file_windows(root, relative)
-        return _read_repository_file_posix(root, relative)
+            return _read_repository_file_windows(root, relative, boundary)
+        return _read_repository_file_posix(root, relative, boundary)
     except OSError, UnicodeError:
         return None
 
@@ -787,11 +950,12 @@ def _scan_memory_tree(
 def _validate_instruction_pointers(root: Path) -> list[str]:
     issues: list[str] = []
     for relative, concepts in INSTRUCTION_POINTER_RULES.items():
-        instruction = root / relative
-        if _has_reparse_component(instruction, root):
+        try:
+            expected_boundary = _capture_repository_file_boundary(root, relative)
+        except OSError:
             issues.append(f"MEMORY_INSTRUCTION_POINTER: {relative.as_posix()}: instruction path boundary")
             continue
-        text = _read_repository_file(root, relative)
+        text = _read_repository_file(root, relative, expected_boundary)
         if text is None:
             issues.append(f"MEMORY_INSTRUCTION_POINTER: {relative.as_posix()}: instruction path boundary")
             continue
@@ -806,13 +970,10 @@ def _validate_memory(root: Path) -> tuple[list[str], int]:
     root = root.absolute()
     memory = root / MEMORY_RELATIVE
     readme_path = root / README_RELATIVE
-    if _has_reparse_component(memory, root):
-        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)], 0
-    if _is_reparse_point(readme_path):
-        return [_diagnostic("MEMORY_INDEX_LINK_INVALID", readme_path, root)], 0
 
     try:
-        snapshot = _snapshot_memory(root)
+        expected_boundary = _capture_memory_boundary(root)
+        snapshot = _snapshot_memory(root, expected_boundary)
     except OSError, UnicodeError:
         return [_diagnostic("MEMORY_TREE_SCAN", memory, root)], 0
 

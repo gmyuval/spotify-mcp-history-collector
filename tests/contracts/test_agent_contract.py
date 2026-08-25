@@ -470,53 +470,40 @@ private content was committed.
                 )
 
     def test_memory_instruction_reparse_is_rejected_before_external_content_read(self) -> None:
-        reparse_cases = (
-            ("POSIX symlink", stat.S_IFLNK, 0),
-            ("Windows reparse", stat.S_IFREG, WINDOWS_REPARSE_POINT),
-        )
-        for name, mode, attributes in reparse_cases:
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                self.memory_fixture(root)
-                instruction = root / "CLAUDE.md"
-                real_lstat = Path.lstat
-                real_read = agent_memory._read_repository_file
-                read_paths: list[Path] = []
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            real_capture = agent_memory._capture_repository_file_boundary
+            real_read = agent_memory._read_repository_file
+            read_paths: list[Path] = []
 
-                def fake_lstat(
-                    path: Path,
-                    target: Path = instruction,
-                    target_mode: int = mode,
-                    target_attributes: int = attributes,
-                    delegate=real_lstat,
-                ) -> object:
-                    if path == target:
-                        return SimpleNamespace(
-                            st_mode=target_mode,
-                            st_file_attributes=target_attributes,
-                        )
-                    return delegate(path)
+            def reject_reparse(repository: Path, relative: Path):
+                if relative == Path("CLAUDE.md"):
+                    raise OSError("reparse boundary")
+                return real_capture(repository, relative)
 
-                def fake_read(
-                    repository: Path,
-                    relative: Path,
-                    observed: list[Path] = read_paths,
-                    delegate=real_read,
-                ) -> str | None:
-                    observed.append(relative)
-                    return delegate(repository, relative)
+            def observed_read(
+                repository: Path,
+                relative: Path,
+                expected_boundary: tuple[tuple[int, int], ...],
+            ) -> str | None:
+                read_paths.append(relative)
+                return real_read(repository, relative, expected_boundary)
 
-                with (
-                    patch.object(Path, "lstat", new=fake_lstat),
-                    patch("scripts.validate_agent_memory._read_repository_file", side_effect=fake_read),
-                ):
-                    issues = agent_memory.validate_memory(root)
+            with (
+                patch(
+                    "scripts.validate_agent_memory._capture_repository_file_boundary",
+                    side_effect=reject_reparse,
+                ),
+                patch("scripts.validate_agent_memory._read_repository_file", side_effect=observed_read),
+            ):
+                issues = agent_memory.validate_memory(root)
 
-                self.assertEqual(
-                    ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: instruction path boundary"],
-                    issues,
-                )
-                self.assertNotIn(Path("CLAUDE.md"), read_paths, "reparse instruction content must not be read")
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: instruction path boundary"],
+                issues,
+            )
+            self.assertNotIn(Path("CLAUDE.md"), read_paths, "reparse instruction content must not be read")
 
     def test_memory_instruction_ancestor_replacement_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -548,14 +535,18 @@ private content was committed.
                     original.rename(agent)
                     replaced = False
 
-            def replace_before_safe_read(repository: Path, relative: Path) -> str | None:
+            def replace_before_safe_read(
+                repository: Path,
+                relative: Path,
+                expected_boundary: tuple[tuple[int, int], ...],
+            ) -> str | None:
                 if relative != Path("docs/agent/tool-policy.md"):
                     self.assertIsNotNone(real_safe_read)
-                    return real_safe_read(repository, relative)
+                    return real_safe_read(repository, relative, expected_boundary)
                 replace_agent()
                 try:
                     self.assertIsNotNone(real_safe_read)
-                    return real_safe_read(repository, relative)
+                    return real_safe_read(repository, relative, expected_boundary)
                 finally:
                     restore_agent()
 
@@ -574,6 +565,50 @@ private content was committed.
                 issues,
             )
             self.assertNotIn("external-sensitive-name", "\n".join(issues))
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows path-open replacement semantics")
+    def test_memory_instruction_ordinary_ancestor_replacement_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            agent = root / "docs" / "agent"
+            original = root / "agent-original"
+            real_read = agent_memory._read_win32_memory_child
+            replaced = False
+
+            def replace_before_content_open(*args: object, **kwargs: object):
+                nonlocal replaced
+                child = args[-1]
+                if child.name != "tool-policy.md":
+                    return real_read(*args, **kwargs)
+                agent.rename(original)
+                agent.mkdir()
+                (original / child.name).rename(agent / child.name)
+                replaced = True
+                try:
+                    return real_read(*args, **kwargs)
+                finally:
+                    (agent / child.name).rename(original / child.name)
+                    agent.rmdir()
+                    original.rename(agent)
+                    replaced = False
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._read_win32_memory_child",
+                    side_effect=replace_before_content_open,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    (agent / "tool-policy.md").rename(original / "tool-policy.md")
+                    agent.rmdir()
+                    original.rename(agent)
+
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: docs/agent/tool-policy.md: instruction path boundary"],
+                issues,
+            )
 
     def test_memory_index_mutations_fail_closed(self) -> None:
         cases = (
@@ -912,11 +947,14 @@ private content was committed.
             scanned: list[Path] = []
             replaced = False
 
-            def replace_after_root_scan(repository: Path):
+            def replace_after_root_scan(
+                repository: Path,
+                expected_boundary: tuple[tuple[int, int], ...],
+            ):
                 nonlocal replaced
                 scanned.append(repository)
                 self.assertIsNotNone(real_snapshot)
-                snapshot = real_snapshot(repository)
+                snapshot = real_snapshot(repository, expected_boundary)
                 nested.rename(original)
                 self.create_directory_link(nested, outside)
                 replaced = True
@@ -990,6 +1028,69 @@ private content was committed.
                 issues,
             )
             self.assertNotIn("external-secret.md", "\n".join(issues))
+
+    def test_ordinary_memory_root_replacement_before_snapshot_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            original = root / "memory-original"
+            outside = root / "outside-memory"
+            shutil.copytree(memory, outside)
+            real_snapshot = agent_memory._snapshot_memory
+            replaced = False
+
+            def replace_before_snapshot(*args: object, **kwargs: object):
+                nonlocal replaced
+                memory.rename(original)
+                outside.rename(memory)
+                replaced = True
+                return real_snapshot(*args, **kwargs)
+
+            try:
+                with patch("scripts.validate_agent_memory._snapshot_memory", side_effect=replace_before_snapshot):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    memory.rename(outside)
+                    original.rename(memory)
+
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows path-open replacement semantics")
+    def test_ordinary_memory_root_replacement_before_content_open_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            memory = root / "docs" / "agent" / "memory"
+            self.memory_fixture(root)
+            original = root / "memory-original"
+            real_read = agent_memory._read_memory_child
+            replaced = False
+
+            def replace_before_content_open(*args: object, **kwargs: object):
+                nonlocal replaced
+                if not replaced:
+                    memory.rename(original)
+                    memory.mkdir()
+                    for child in original.iterdir():
+                        child.rename(memory / child.name)
+                    replaced = True
+                return real_read(*args, **kwargs)
+
+            try:
+                with patch(
+                    "scripts.validate_agent_memory._read_memory_child",
+                    side_effect=replace_before_content_open,
+                ):
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    for child in memory.iterdir():
+                        child.rename(original / child.name)
+                    memory.rmdir()
+                    original.rename(memory)
+
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
 
     def test_memory_ancestor_replacement_fails_without_external_name_leakage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1129,29 +1230,28 @@ private content was committed.
                 root = Path(temporary)
                 self.memory_fixture(root)
                 reparse = root / relative_reparse
-                real_lstat = Path.lstat
-
-                def fake_lstat(
-                    path: Path,
-                    reparse_path: Path = reparse,
-                    delegate=real_lstat,
-                ) -> object:
-                    if path == reparse_path:
-                        return SimpleNamespace(
-                            st_mode=stat.S_IFDIR,
-                            st_file_attributes=WINDOWS_REPARSE_POINT,
-                        )
-                    return delegate(path)
-
-                with patch.object(Path, "lstat", new=fake_lstat):
+                original = root / f"{reparse.name}-original"
+                outside = root / f"outside-{reparse.name}"
+                outside.mkdir()
+                (outside / "external-sensitive-name.md").write_text(
+                    "must never be imported",
+                    encoding="utf-8",
+                )
+                reparse.rename(original)
+                self.create_directory_link(reparse, outside)
+                try:
                     issues = agent_memory.validate_memory(root)
+                finally:
+                    self.remove_directory_link(reparse)
+                    original.rename(reparse)
 
                 self.assertEqual(
-                    ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"],
+                    ["MEMORY_TREE_SCAN: docs/agent/memory"],
                     issues,
                 )
+                self.assertNotIn("external-sensitive-name.md", "\n".join(issues))
 
-    def test_memory_index_reparse_is_rejected_before_reading(self) -> None:
+    def test_memory_index_reparse_metadata_is_rejected(self) -> None:
         reparse_cases = (
             ("POSIX symlink", stat.S_IFLNK, 0),
             ("Windows reparse", stat.S_IFREG, WINDOWS_REPARSE_POINT),
@@ -1159,46 +1259,27 @@ private content was committed.
         for name, mode, attributes in reparse_cases:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
-                readme, _ = self.memory_fixture(root)
-                real_lstat = Path.lstat
-                real_read = agent_memory._read_memory_child
-                read_names: list[str] = []
+                self.memory_fixture(root)
+                snapshot = agent_memory._MemorySnapshot(
+                    (
+                        agent_memory._MemoryChild(
+                            "README.md",
+                            mode,
+                            attributes,
+                            (1, 1),
+                            1,
+                            None,
+                        ),
+                    )
+                )
 
-                def fake_lstat(
-                    path: Path,
-                    target: Path = readme,
-                    target_mode: int = mode,
-                    target_attributes: int = attributes,
-                    delegate=real_lstat,
-                ) -> object:
-                    if path == target:
-                        return SimpleNamespace(
-                            st_mode=target_mode,
-                            st_file_attributes=target_attributes,
-                        )
-                    return delegate(path)
-
-                def fake_read(
-                    memory_path: Path,
-                    memory_handle: int,
-                    child: agent_memory._MemoryChild,
-                    observed: list[str] = read_names,
-                    delegate=real_read,
-                ) -> agent_memory._MemoryRead:
-                    observed.append(child.name)
-                    return delegate(memory_path, memory_handle, child)
-
-                with (
-                    patch.object(Path, "lstat", new=fake_lstat),
-                    patch("scripts.validate_agent_memory._read_memory_child", side_effect=fake_read),
-                ):
+                with patch("scripts.validate_agent_memory._snapshot_memory", return_value=snapshot):
                     issues = agent_memory.validate_memory(root)
 
                 self.assertEqual(
                     ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"],
                     issues,
                 )
-                self.assertNotIn(readme.name, read_names, "reparse index content must not be read")
 
     def test_case_variant_readme_target_does_not_alias_canonical_index(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1309,6 +1390,51 @@ private content was committed.
                 issues,
             )
 
+    def test_hardlink_created_during_content_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            readme, entry = self.memory_fixture(root)
+            external_alias = root / "external-hardlink.md"
+            linked = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def create_link_during_read(handle: int, name: str) -> str:
+                    nonlocal linked
+                    if name == entry.name and not linked:
+                        external_alias.hardlink_to(entry)
+                        linked = True
+                    return real_read(handle, name)
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=create_link_during_read,
+                )
+                expected = [f"MEMORY_INDEX_LINK_INVALID: docs/agent/memory/{entry.name}"]
+            else:
+                real_read = agent_memory.os.read
+
+                def create_link_during_read(descriptor: int, size: int) -> bytes:
+                    nonlocal linked
+                    if not linked:
+                        external_alias.hardlink_to(readme)
+                        linked = True
+                    return real_read(descriptor, size)
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=create_link_during_read)
+                expected = ["MEMORY_INDEX_LINK_INVALID: docs/agent/memory/README.md"]
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if external_alias.exists():
+                    external_alias.unlink()
+
+            self.assertTrue(linked)
+            self.assertEqual(expected, issues)
+
     def test_memory_index_target_case_must_match_directory_entry(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1337,8 +1463,11 @@ private content was committed.
             _, entry = self.memory_fixture(root)
             real_snapshot = agent_memory._snapshot_memory
 
-            def fake_snapshot(repository: Path):
-                snapshot = real_snapshot(repository)
+            def fake_snapshot(
+                repository: Path,
+                expected_boundary: tuple[tuple[int, int], ...],
+            ):
+                snapshot = real_snapshot(repository, expected_boundary)
                 children = tuple(
                     agent_memory._MemoryChild(
                         child.name,
