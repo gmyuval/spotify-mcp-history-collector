@@ -26,8 +26,8 @@ This guide covers deploying the Spotify MCP History Collector system, which cons
 2. Click **Create App**.
 3. Fill in the app name and description. For Redirect URI, enter `http://localhost:8000/auth/callback` (you will update this for production later).
 4. Note the **Client ID** and **Client Secret** from the app settings page.
-5. Under **Users and Access**, add every Spotify account that will use the system. This is required while the app is in Development Mode. Spotify limits development apps to explicitly added users only.
-6. If you need more than 25 users, you must submit your app for Spotify's Extended Quota Mode review.
+5. Under **Users and Access**, add every Spotify account that will use the system. Current Development Mode requires the app owner to have Premium and permits up to five allowlisted users.
+6. Extended Quota Mode removes the allowlist and supports unlimited users, but current eligibility is organization-focused. See Spotify's current [quota-mode documentation](https://developer.spotify.com/documentation/web-api/concepts/quota-modes) before choosing an operating mode. The July 2026 limit of 25 applies to Client IDs per developer, not app users.
 
 ---
 
@@ -175,7 +175,7 @@ curl -X POST http://localhost:8000/admin/users/{user_id}/import \
   -F "file=@my_spotify_data.zip"
 ```
 
-Replace `{user_id}` with the user's Spotify user ID (visible in the admin frontend).
+Replace `{user_id}` with the application's internal numeric user ID (visible in the admin frontend), not a Spotify account identifier.
 
 ### Import Notes
 

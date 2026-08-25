@@ -2,14 +2,21 @@
 
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
+import respx
 
 from shared.audio.provider import (
     AudioFeaturesData,
     ChainedAudioFeaturesProvider,
     SoundchartsAudioFeaturesProvider,
+    SpotifyAudioFeaturesProvider,
 )
+from shared.cache.backend import CacheBackend
+from shared.soundcharts.client import SoundchartsClient
+from shared.soundcharts.constants import SC_API_BASE
 from shared.soundcharts.models import SoundchartsAudioFeatures
+from shared.spotify.exceptions import SpotifyRequestError
 
 
 @pytest.mark.asyncio
@@ -85,3 +92,38 @@ async def test_soundcharts_provider_disabled_when_client_disabled() -> None:
 
     provider = SoundchartsAudioFeaturesProvider(mock_client)
     assert provider.disabled is True
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_spotify_403_falls_through_to_soundcharts_provider() -> None:
+    """The concrete provider chain preserves the external fallback after Spotify rejects access."""
+    spotify_client = AsyncMock()
+    spotify_client.get_audio_features.side_effect = SpotifyRequestError(403, "Forbidden")
+
+    async def spotify_client_factory(_user_id: int, _session: object) -> AsyncMock:
+        return spotify_client
+
+    cache = AsyncMock(spec=CacheBackend)
+    cache.get.return_value = None
+    soundcharts_client = SoundchartsClient(app_id="test-app", api_key="test-key", cache=cache)
+    respx.get(f"{SC_API_BASE}/song/by-platform/spotify/track1").mock(
+        return_value=httpx.Response(200, json={"object": {"uuid": "sc-uuid-1", "name": "Test Song"}})
+    )
+    respx.get(f"{SC_API_BASE}/song/sc-uuid-1/spotify/audio-features").mock(
+        return_value=httpx.Response(200, json={"object": {"danceability": 0.75, "energy": 0.82}})
+    )
+    chain = ChainedAudioFeaturesProvider(
+        [
+            SpotifyAudioFeaturesProvider(spotify_client_factory),
+            SoundchartsAudioFeaturesProvider(soundcharts_client),
+        ]
+    )
+
+    try:
+        result = await chain.get_features(["track1"], user_id=1, session=object())
+    finally:
+        await soundcharts_client.close()
+
+    assert result["track1"].danceability == 0.75
+    assert result["track1"].energy == 0.82

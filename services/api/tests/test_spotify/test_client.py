@@ -10,6 +10,7 @@ import respx
 from shared.spotify.client import SpotifyClient
 from shared.spotify.exceptions import (
     SpotifyAuthError,
+    SpotifyQuotaExceededError,
     SpotifyRateLimitError,
     SpotifyRequestError,
     SpotifyServerError,
@@ -135,6 +136,42 @@ async def test_429_exhausted_raises_rate_limit_error() -> None:
     client = SpotifyClient("test-token", max_retries=1, retry_base_delay=0.0)
     with pytest.raises(SpotifyRateLimitError):
         await client.get_recently_played()
+
+
+@respx.mock
+async def test_quota_exhaustion_raises_without_retrying() -> None:
+    """A developer quota exhaustion is not retried as a rolling-window limit."""
+    route = respx.get("https://api.spotify.com/v1/me/player/recently-played").mock(
+        return_value=httpx.Response(
+            429,
+            json={"error": {"status": 429, "message": "Quota exhausted", "reason": "QUOTA_EXCEEDED"}},
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=2, retry_base_delay=0.0)
+    with pytest.raises(SpotifyQuotaExceededError):
+        await client.get_recently_played()
+
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_malformed_retry_after_uses_backoff_fallback() -> None:
+    """A malformed Retry-After value cannot escape as ValueError."""
+    respx.get("https://api.spotify.com/v1/me/player/recently-played").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "not-a-number"}),
+            httpx.Response(200, json=_recently_played_json(1)),
+        ]
+    )
+
+    client = SpotifyClient("test-token", max_retries=1, retry_base_delay=0.0)
+    try:
+        result = await client.get_recently_played()
+    except ValueError as exc:
+        pytest.fail(f"malformed Retry-After escaped the Spotify client: {exc}")
+
+    assert len(result.items) == 1
 
 
 @respx.mock
