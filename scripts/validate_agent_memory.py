@@ -608,13 +608,13 @@ def _win32_open_file(path: Path) -> int:
     )
     create_file.restype = wintypes.HANDLE
     generic_read = 0x80000000
-    file_share_all = 0x0001 | 0x0002 | 0x0004
+    file_share_read = 0x0001
     open_existing = 3
     file_flag_open_reparse_point = 0x00200000
     handle = create_file(
         str(path),
         generic_read,
-        file_share_all,
+        file_share_read,
         None,
         open_existing,
         file_flag_open_reparse_point,
