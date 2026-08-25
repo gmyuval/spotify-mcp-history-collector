@@ -289,9 +289,14 @@ private content was committed.
             "end-session repository-memory wind-down",
         )
         self.assertLess(
-            end_session_source.index("Read [`docs/agent/memory/README.md`"),
+            end_session_source.index("Update `docs/agent/current-state.md`"),
             end_session_source.index("Reconcile scope and sensitive content"),
             "end-session must finish durable-context edits before final scope and sensitive review",
+        )
+        self.assertLess(
+            end_session_source.index("Read [`docs/agent/memory/README.md`"),
+            end_session_source.index("Reconcile scope and sensitive content"),
+            "end-session must retrieve repository memory before final scope and sensitive review",
         )
         self.assertLess(
             end_session_source.index("Read [`docs/agent/memory/README.md`"),
