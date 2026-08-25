@@ -1,5 +1,6 @@
 """Dependency-free checks for the repository's vendor-neutral agent contract."""
 
+import os
 import shutil
 import stat
 import subprocess
@@ -562,6 +563,110 @@ private content was committed.
 
             self.assertEqual(
                 ["MEMORY_INSTRUCTION_POINTER: docs/agent/tool-policy.md: instruction path boundary"],
+                issues,
+            )
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
+
+    def test_memory_instruction_path_replacement_during_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            instruction = root / "CLAUDE.md"
+            original = root / "CLAUDE-original.md"
+            target_identity = instruction.stat().st_ino
+            replaced = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def replace_after_read(handle: int, name: str) -> str:
+                    nonlocal replaced
+                    text = real_read(handle, name)
+                    if name == instruction.name and not replaced:
+                        instruction.rename(original)
+                        instruction.write_text("external-sensitive-name", encoding="utf-8")
+                        replaced = True
+                    return text
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=replace_after_read,
+                )
+            else:
+                real_read = agent_memory.os.read
+
+                def replace_after_read(descriptor: int, size: int) -> bytes:
+                    nonlocal replaced
+                    chunk = real_read(descriptor, size)
+                    if os.fstat(descriptor).st_ino == target_identity and chunk and not replaced:
+                        instruction.rename(original)
+                        instruction.write_text("external-sensitive-name", encoding="utf-8")
+                        replaced = True
+                    return chunk
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=replace_after_read)
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    instruction.unlink()
+                    original.rename(instruction)
+
+            self.assertTrue(replaced)
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: instruction path boundary"],
+                issues,
+            )
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
+
+    def test_memory_instruction_in_place_rewrite_during_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.memory_fixture(root)
+            instruction = root / "CLAUDE.md"
+            original_text = instruction.read_text(encoding="utf-8")
+            target_identity = instruction.stat().st_ino
+            rewritten = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def rewrite_after_read(handle: int, name: str) -> str:
+                    nonlocal rewritten
+                    text = real_read(handle, name)
+                    if name == instruction.name and not rewritten:
+                        instruction.write_text("external-sensitive-name", encoding="utf-8")
+                        rewritten = True
+                    return text
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=rewrite_after_read,
+                )
+            else:
+                real_read = agent_memory.os.read
+
+                def rewrite_after_read(descriptor: int, size: int) -> bytes:
+                    nonlocal rewritten
+                    chunk = real_read(descriptor, size)
+                    if os.fstat(descriptor).st_ino == target_identity and chunk and not rewritten:
+                        instruction.write_text("external-sensitive-name", encoding="utf-8")
+                        rewritten = True
+                    return chunk
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=rewrite_after_read)
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                instruction.write_text(original_text, encoding="utf-8")
+
+            self.assertTrue(rewritten)
+            self.assertEqual(
+                ["MEMORY_INSTRUCTION_POINTER: CLAUDE.md: instruction path boundary"],
                 issues,
             )
             self.assertNotIn("external-sensitive-name", "\n".join(issues))
@@ -1434,6 +1539,102 @@ private content was committed.
 
             self.assertTrue(linked)
             self.assertEqual(expected, issues)
+
+    def test_memory_child_path_replacement_during_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            original = root / "topic-original.md"
+            target_identity = entry.stat().st_ino
+            replaced = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def replace_after_read(handle: int, name: str) -> str:
+                    nonlocal replaced
+                    text = real_read(handle, name)
+                    if name == entry.name and not replaced:
+                        entry.rename(original)
+                        entry.write_text("external-sensitive-name", encoding="utf-8")
+                        replaced = True
+                    return text
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=replace_after_read,
+                )
+            else:
+                real_read = agent_memory.os.read
+
+                def replace_after_read(descriptor: int, size: int) -> bytes:
+                    nonlocal replaced
+                    chunk = real_read(descriptor, size)
+                    if os.fstat(descriptor).st_ino == target_identity and chunk and not replaced:
+                        entry.rename(original)
+                        entry.write_text("external-sensitive-name", encoding="utf-8")
+                        replaced = True
+                    return chunk
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=replace_after_read)
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                if replaced:
+                    entry.unlink()
+                    original.rename(entry)
+
+            self.assertTrue(replaced)
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
+
+    def test_memory_child_in_place_rewrite_during_read_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, entry = self.memory_fixture(root)
+            original_text = entry.read_text(encoding="utf-8")
+            target_identity = entry.stat().st_ino
+            rewritten = False
+
+            if sys.platform == "win32":
+                real_read = agent_memory._read_win32_handle_text
+
+                def rewrite_after_read(handle: int, name: str) -> str:
+                    nonlocal rewritten
+                    text = real_read(handle, name)
+                    if name == entry.name and not rewritten:
+                        entry.write_text("external-sensitive-name", encoding="utf-8")
+                        rewritten = True
+                    return text
+
+                patcher = patch(
+                    "scripts.validate_agent_memory._read_win32_handle_text",
+                    side_effect=rewrite_after_read,
+                )
+            else:
+                real_read = agent_memory.os.read
+
+                def rewrite_after_read(descriptor: int, size: int) -> bytes:
+                    nonlocal rewritten
+                    chunk = real_read(descriptor, size)
+                    if os.fstat(descriptor).st_ino == target_identity and chunk and not rewritten:
+                        entry.write_text("external-sensitive-name", encoding="utf-8")
+                        rewritten = True
+                    return chunk
+
+                patcher = patch("scripts.validate_agent_memory.os.read", side_effect=rewrite_after_read)
+
+            try:
+                with patcher:
+                    issues = agent_memory.validate_memory(root)
+            finally:
+                entry.write_text(original_text, encoding="utf-8")
+
+            self.assertTrue(rewritten)
+            self.assertEqual(["MEMORY_TREE_SCAN: docs/agent/memory"], issues)
+            self.assertNotIn("external-sensitive-name", "\n".join(issues))
 
     def test_memory_index_target_case_must_match_directory_entry(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

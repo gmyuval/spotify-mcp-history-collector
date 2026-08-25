@@ -227,6 +227,8 @@ class _Win32HandleInfo:
     file_attributes: int
     identity: tuple[int, int]
     link_count: int
+    file_size: int
+    last_write_time: int
 
 
 @dataclass(frozen=True)
@@ -276,6 +278,27 @@ def _verify_posix_visible_directory(path: Path, descriptor: int) -> None:
         raise OSError(errno.ESTALE, "visible directory identity changed")
 
 
+def _verify_posix_file_after_read(
+    path: Path,
+    descriptor: int,
+    before: os.stat_result,
+    expected_identity: tuple[int, int],
+) -> os.stat_result:
+    after = os.fstat(descriptor)
+    visible = os.stat(path, follow_symlinks=False)
+    if (after.st_dev, after.st_ino) != expected_identity:
+        raise OSError(errno.ESTALE, "file identity changed during read")
+    if not stat.S_ISREG(visible.st_mode) or (visible.st_dev, visible.st_ino) != expected_identity:
+        raise OSError(errno.ESTALE, "visible file identity changed during read")
+    if (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (
+        before.st_size,
+        before.st_mtime_ns,
+        before.st_ctime_ns,
+    ):
+        raise OSError(errno.ESTALE, "file content metadata changed during read")
+    return after
+
+
 def _read_posix_memory_child(memory: Path, memory_handle: int, child: _MemoryChild) -> _MemoryRead:
     no_follow_flag = getattr(os, "O_NOFOLLOW", 0)
     if no_follow_flag == 0:
@@ -296,12 +319,11 @@ def _read_posix_memory_child(memory: Path, memory_handle: int, child: _MemoryChi
         chunks: list[bytes] = []
         while chunk := os.read(descriptor, 64 * 1024):
             chunks.append(chunk)
-        after = os.fstat(descriptor)
         _verify_posix_visible_directory(memory, memory_handle)
-        if (after.st_dev, after.st_ino) != child.identity:
-            raise OSError(errno.ESTALE, "memory child identity changed during read")
+        after = os.fstat(descriptor)
         if after.st_nlink != 1:
             return _MemoryRead(None, after.st_nlink)
+        after = _verify_posix_file_after_read(memory / child.name, descriptor, metadata, child.identity)
         text = b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         return _MemoryRead(text, after.st_nlink)
     finally:
@@ -437,10 +459,14 @@ def _win32_handle_info(handle: int) -> _Win32HandleInfo:
     if not get_information(wintypes.HANDLE(handle), ctypes.byref(information)):
         raise ctypes.WinError(ctypes.get_last_error())
     file_id = (information.file_index_high << 32) | information.file_index_low
+    file_size = (information.file_size_high << 32) | information.file_size_low
+    last_write_time = (information.last_write_time.dwHighDateTime << 32) | information.last_write_time.dwLowDateTime
     return _Win32HandleInfo(
         information.file_attributes,
         (information.volume_serial_number, file_id),
         information.number_of_links,
+        file_size,
+        last_write_time,
     )
 
 
@@ -472,6 +498,18 @@ def _verify_win32_visible_directory(path: Path, expected_identity: tuple[int, in
     try:
         if _validate_win32_directory_handle(handle).identity != expected_identity:
             raise OSError(errno.ESTALE, "visible directory identity changed")
+    finally:
+        _win32_close_handle(handle)
+
+
+def _verify_win32_visible_file(path: Path, expected_identity: tuple[int, int]) -> None:
+    handle = _win32_open_file(path)
+    try:
+        information = _win32_handle_info(handle)
+        if information.file_attributes & (WINDOWS_REPARSE_POINT | WINDOWS_DIRECTORY):
+            raise OSError(errno.EINVAL, "visible file is not a no-follow regular file")
+        if information.identity != expected_identity:
+            raise OSError(errno.ESTALE, "visible file identity changed during read")
     finally:
         _win32_close_handle(handle)
 
@@ -636,6 +674,9 @@ def _read_win32_memory_child(memory: Path, memory_handle: int, child: _MemoryChi
             raise OSError(errno.ESTALE, "memory child identity changed during read")
         if after.link_count != 1:
             return _MemoryRead(None, after.link_count)
+        _verify_win32_visible_file(memory / child.name, child.identity)
+        if (after.file_size, after.last_write_time) != (information.file_size, information.last_write_time):
+            raise OSError(errno.ESTALE, "memory child content metadata changed during read")
         return _MemoryRead(text, after.link_count)
     finally:
         _win32_close_handle(handle)
@@ -837,10 +878,16 @@ def _read_repository_file_posix(
             chunks: list[bytes] = []
             while chunk := os.read(file_descriptor, 64 * 1024):
                 chunks.append(chunk)
-            after = os.fstat(file_descriptor)
             _verify_posix_visible_directory(current_path, descriptor)
-            if (after.st_dev, after.st_ino) != (metadata.st_dev, metadata.st_ino) or after.st_nlink != 1:
+            after = os.fstat(file_descriptor)
+            if after.st_nlink != 1:
                 raise OSError(errno.ESTALE, "repository instruction changed during read")
+            _verify_posix_file_after_read(
+                current_path / relative.name,
+                file_descriptor,
+                metadata,
+                (metadata.st_dev, metadata.st_ino),
+            )
             return b"".join(chunks).decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         finally:
             os.close(file_descriptor)
