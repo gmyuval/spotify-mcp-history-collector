@@ -79,16 +79,18 @@ required linear history before every merge; do not mutate them while selecting a
 
 ## Production packaging boundary
 
-SPM-2 preserved the production packaging path. Production Dockerfiles still install committed
-pip-tools `requirements*.txt` files through their existing Compose build contexts, and the manual
-deploy workflow retains its pip-based pre-deployment gates. `docker-requirements.lock` records
-package metadata and requirement-file digests so this temporary boundary fails closed on drift.
+SPM-2 preserved the current production packaging path. Production Dockerfiles still install
+committed pip-tools `requirements*.txt` files through their existing Compose build contexts, and
+the manual deploy workflow retains its pip-based pre-deployment gates. `docker-requirements.lock`
+records package metadata and requirement-file digests so this temporary implemented boundary fails
+closed on drift.
 
-Normal runtime requirement regeneration self-constrains the committed production pins and carries
-forward explicit environment markers. Development requirement generation is constrained by each
-service's runtime output. SPM-4 owns the accepted-plan decision between direct `uv.lock`
-consumption and pip-compatible exports; do not change Docker or deployment consumption before that
-decision.
+[SPM-4's accepted ADR 0002](../decisions/0002-azure-target-architecture-and-migration-boundaries.md) selects
+direct package-scoped synchronization from the root `uv.lock` for the future production images.
+That decision does not change the current Dockerfiles by itself. Its implementation requires a
+strict root `.dockerignore` and build-context tests, pinned uv 0.12.3 and base-image digests,
+locked production-only non-editable synchronization, multi-stage runtime copying, provenance, and
+service-cache proof before the pip-compatible artifacts can be retired.
 
 ## Manual production deployment posture
 

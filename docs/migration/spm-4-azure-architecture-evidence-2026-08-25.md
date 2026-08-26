@@ -1,6 +1,6 @@
 # SPM-4 Azure architecture evidence - 2026-08-25 UTC
 
-This dated artifact supports the Proposed ADR for SPM-4. It records volatile repository, service,
+This dated artifact supports the Accepted ADR for SPM-4. It records volatile repository, service,
 region, and public-price evidence separately so the ADR can remain a durable decision. It grants no
 Azure, deployment, production, credential, provider, migration, or deletion authority.
 
@@ -42,7 +42,8 @@ Evidence labels:
 
 ## Official Azure constraints
 
-Sources were read on 2026-08-25 UTC.
+Sources were read on 2026-08-25 UTC and the regional pricing and capability evidence was refreshed
+on 2026-08-26 UTC.
 
 | Area | Measured constraint | Primary source |
 |---|---|---|
@@ -65,8 +66,41 @@ Sources were read on 2026-08-25 UTC.
 | IaC state | Terraform's AzureRM backend stores remote state in Blob Storage and supports state locking; ownership, access, recovery, and force-unlock remain operational duties. | [AzureRM backend](https://developer.hashicorp.com/terraform/language/backend/azurerm), [state locking](https://developer.hashicorp.com/terraform/language/state/locking) |
 | Bicep preview | Bicep uses Azure deployment history rather than client state. `what-if` previews can include false positives and require deployment permissions. | [Terraform and Bicep comparison](https://learn.microsoft.com/en-us/azure/developer/terraform/get-started/comparing-terraform-and-bicep), [Bicep what-if](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deploy-what-if) |
 | uv packaging | uv supports locked/frozen container synchronization and deterministic exports. Docker recommends excluding irrelevant or sensitive build-context content. | [uv Docker guide](https://docs.astral.sh/uv/guides/integration/docker/), [uv export](https://docs.astral.sh/uv/reference/cli/), [Docker build cache/context](https://docs.docker.com/build/cache/optimize/) |
+| Container Apps in Israel | The rendered Consumption-plan region selector lists and prices Israel Central: USD 0.000034 per active vCPU-second, USD 0.000004 per active GiB-second, and USD 0.40 per million requests at retrieval time. | [Container Apps pricing](https://azure.microsoft.com/en-us/pricing/details/container-apps/) |
+| PostgreSQL in Israel | The rendered Flexible Server region selector lists Israel Central and displayed a B1ms compute price of USD 16.06/month at retrieval time. | [PostgreSQL Flexible Server pricing](https://azure.microsoft.com/en-us/pricing/details/postgresql/flexible-server/) |
+| Israel PostgreSQL recovery | Israel Central supports zone-redundant and same-zone HA but not geo-redundant backup. | [PostgreSQL region capabilities](https://learn.microsoft.com/en-us/azure/postgresql/overview) |
+| Israel regional resilience | Israel Central has availability zones but is not region-paired. A France contingency is not automatic replication or failover. | [Availability zones](https://learn.microsoft.com/en-us/azure/reliability/availability-zones-overview), [Azure region pairs](https://learn.microsoft.com/en-us/azure/reliability/regions-paired) |
 
 ## Region and public list-price snapshot
+
+### 2026-08-26 Israel Central decision evidence
+
+The current rendered official pricing selectors resolve an ambiguity in the earlier provider
+capture: ordinary Azure Container Apps Consumption and PostgreSQL Flexible Server are both listed
+and priced in Israel Central. The earlier West/North comparison remains useful historical option
+evidence, but it no longer excludes Israel Central.
+
+A local, interleaved TCP-connect probe from the current Israeli access path used 20 observations
+per Azure regional monitoring endpoint and discarded the two highest and lowest values. It measured
+an Israel Central median of about 3.8 ms and trimmed average of 4.1 ms, compared with Italy North at
+48.4/48.7 ms and France Central at 52.8/52.8 ms. This is a point-in-time network observation, not an
+application latency SLO or substitute for pre-apply and pre-cutover testing.
+
+Using the same warm API/collector workload assumptions below, Israel Central's displayed Container
+Apps rates produce USD 75.222/month of backend compute after the published grant. Adding the
+displayed B1ms compute price of USD 16.06/month, the dated USD 5.067 ACR Basic planning assumption,
+and USD 9 Static Web Apps yields an incomplete floor of about USD 105.35/month. PostgreSQL storage,
+backups, Azure Files, traffic, DNS, private endpoints, monitoring ingestion, support, HA, taxes,
+discounts, and contingency-region resources are excluded. This is not a quote or a production
+sizing recommendation.
+
+Israel Central is therefore the selected primary. France Central is an unprovisioned contingency,
+chosen for target-service coverage, Bicep precedent, and recovery maturity rather than its small
+latency difference from Italy North. Because Israel Central has no PostgreSQL geo-redundant backup,
+the contingency does not establish cross-region data recovery; that requires a separate accepted
+plan.
+
+### 2026-08-25 West/North alternative snapshot
 
 SPM-20's sanitized subscription capture found viable compute, Container Apps, and PostgreSQL
 inventory in West Europe and North Europe. It did not find the required PostgreSQL tiers in Germany
@@ -164,29 +198,60 @@ topology during migration.
 
 ## Option-specific evidence conclusions
 
-- **Inferred - VM:** lowest behavioural change and strongest initial traffic rollback, but retains
-  single-host availability and patch/backup/capacity work.
-- **Inferred - Container Apps:** revision rollback and managed identity improve application
-  operations. The 240-second ingress timeout, auth edge, shared upload mount, and continuously warm
-  collector remain hard gates. Scale-to-zero is not a safe production assumption.
-- **Inferred - hybrid:** separating static React delivery from backend compute decouples UI
-  replacement from MCP and upload migration. It costs more topology and origin/auth validation.
-- **Inferred - packaging:** hashed, production-only service exports from `uv.lock` preserve current
-  narrow contexts. Direct workspace synchronization should wait for a root build-context and
-  `.dockerignore` privacy review.
+- **Inferred - VM:** lowest behavioural change, but retains single-host availability and
+  patch/backup/capacity work and creates a strong risk that the managed split is postponed. The
+  owner rejected it as a standing target or fallback.
+- **Accepted - Container Apps:** separate warm API/MCP and collector Container Apps are the target.
+  Revision rollback and managed identity improve application operations. The 240-second ingress
+  timeout, auth edge, shared upload mount, and worker lifecycle remain release gates; a failed gate
+  blocks or triggers an ADR amendment rather than silently switching to a VM.
+- **Accepted - hybrid product shape:** Static Web Apps separates React delivery from backend
+  compute, while API/MCP and collector use workload-specific Container Apps. It costs more topology
+  and origin/auth validation but supports contract-first staged replacement.
+- **Accepted - packaging:** direct package-scoped synchronization from the root `uv.lock` is the
+  production dependency boundary after a strict root `.dockerignore`, context tests, immutable uv
+  0.12.3 and base-image pins, and multi-stage production-only installation are implemented.
 - **Inferred - cache:** PostgreSQL fallback should be benchmarked before adding a managed cache,
   especially because the legacy Azure Cache product is retiring.
+
+## Local Bicep and backend-language evidence
+
+- **Measured:** the sibling LARP Store checkout was clean at
+  `89feabb9d096157365fc0a799d1793057d512189`. It contains 18 Bicep/Bicep-parameter files covering
+  subscription bootstrap, networking, ACR, Key Vault, PostgreSQL Flexible Server, observability,
+  Container Apps, migration jobs, application workloads, and shared DNS.
+- **Measured:** its workflows separate read/preview and apply identities, use OIDC, run pull-request
+  `what-if`, deploy immutable application revisions, verify the serving commit, and require typed
+  confirmation for DNS writes.
+- **Measured:** its operating documents record ARM incremental non-deletion, imperative Entra/OIDC
+  reconciliation, a provider-noise baseline, targeted guards beyond `what-if`, application traffic
+  rollback, prior-template reapplication, and database restore. No Terraform source or historical
+  Terraform precedent was found in the examined local repository history.
+- **Inferred:** Bicep is the lower-complexity fit for this deliberately Azure-only target only when
+  those controls are adopted; native tooling does not remove imperative or destructive-operation
+  ownership.
+- **Measured:** the current Python backend has broad functional tests but no dedicated profiling or
+  benchmark harness. Spotify latency/rate limiting, PostgreSQL query and connection behaviour,
+  sequential ORM work, ZIP parsing/normalization, and current resource limits are candidate costs;
+  none is established as the dominant bottleneck.
+- **Accepted evidence rule:** profile the API/MCP, collector, database, and import paths with a
+  production-shaped synthetic or sanitized workload, then compare a representative Rust
+  proof-of-value under the same semantic and failure-recovery contract. Missing or incomparable
+  evidence blocks a language choice rather than defaulting to Python.
 
 ## Unresolved evidence
 
 1. Current subscription policy, discount, quota, approved SKUs, allocation, and provider invoice.
-2. Residency, measured Israel/user latency, budget, uptime, maintenance, RPO, and RTO requirements.
+2. Final residency, budget, uptime, maintenance, RPO, and RTO requirements and target-subscription
+   availability for the selected Israel Central SKUs.
 3. Maximum real MCP/SSE connection duration and supported-client reconnect behaviour.
 4. DNS registrar, Google OAuth, and Spotify OAuth ownership and parallel-callback capability.
 5. Upload retention, deletion, checksum, backup, legal, and privacy requirements.
 6. Production load and cost of the PostgreSQL fallback without Valkey.
 7. Log/trace PII policy, retention, ingestion volume, alerts, and synthetic-check budget.
-8. The organization-wide Terraform-default evidence and the product-repository Bicep precedent.
-   No Bicep or Terraform source was found in this checkout or visible Git history.
-9. A tested post-first-write reverse synchronization path. The Proposed ADR deliberately selects
+8. The exact Spotify Bicep module design, least-privilege assignments, provider-noise baseline,
+   imperative Entra reconciliation, and recovery runbooks. The LARP precedent informs but does not
+   implement those controls here.
+9. A tested post-first-write reverse synchronization path. The Accepted ADR deliberately selects
    forward recovery in Azure rather than pretending this path exists.
+10. Comparable profiling and Rust proof-of-value results, and the dedicated accepted language ADR.
