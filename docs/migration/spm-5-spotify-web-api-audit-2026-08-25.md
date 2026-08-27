@@ -299,8 +299,9 @@ ADR 0004 accepts provider-identity separation and minimized profile retention, A
 restricted Development common denominator and internal quota-policy target, and ADR 0006 accepts
 the complete playlist-write scope bundle. ADR 0007 accepts the track-only media boundary, and ADR
 0008 accepts staged embed retirement. ADR 0009 accepts the Soundcharts-default Audio Features
-target and explicitly authorizes SPM-18 adapter rework, but not provider-account access,
-credentials, subscription spend, live-provider proof, deployment, or production mutation.
+target. SPM-18 implementation still requires its separately reviewed plan and applicable authority,
+including separate approval for provider-account access, credentials, subscription spend,
+live-provider proof, deployment, or production mutation.
 
 No behavior change is authorized by this audit for public MCP/API defaults and shapes, app-mode or
 quota-policy implementation, playlist-scope or playlist-media implementation, unofficial-embed

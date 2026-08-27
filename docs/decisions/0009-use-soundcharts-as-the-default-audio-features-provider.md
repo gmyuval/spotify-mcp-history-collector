@@ -114,8 +114,9 @@ Use Soundcharts as the default Audio Features provider.
 10. Treat provider cost as part of the application operating cost. Record actual request volume,
     cache effectiveness, coverage, and incremental monthly cost without track or user identifiers.
     Revalidate current plans and terms before activation and before every plan change.
-11. Implement and deliver this policy only through reviewed issue work. This ADR authorizes the
-    target and the SPM-18 adapter rework, but grants no provider-account, credential, real-track,
+11. Implement and deliver this policy only through reviewed issue work. This ADR records the
+    accepted target, but SPM-18 implementation still requires its separately reviewed plan and
+    applicable authority. It grants no provider-account, credential, real-track,
     subscription-spend, deployment, production, cloud, public-contract, or unrelated database
     migration authority.
 
