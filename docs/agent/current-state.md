@@ -1,8 +1,9 @@
 # Current repository state
 
-Last verified: 2026-08-23 (UTC), after integrating `origin/main` at
-`12d6198095eeeaa8a37ca8903e4694a1bb08d886` into `codex/spm-3-orchestration-contract`. The
-resulting reviewed integration merge is `25d8e4780bbadd1db9e5e80c8700ef69adb08676`.
+Last verified: 2026-08-27 (UTC), in `codex/spm-4-architecture-decision` against `origin/main`
+`137dd54f0a82b21759ce3e9bb506204314f202a8`. This verification describes the SPM-4 candidate
+before repository delivery; revalidate the live branch, pull request, and remote state before
+relying on it.
 
 This is volatile orientation, not a work queue, architecture decision, or deployment record. Linear
 team **SPM**, project **Spotify MCP modernization**, is authoritative for planned work, ownership,
@@ -20,6 +21,16 @@ against the named source before using it for a consequential decision.
 - Azure, deployment, infrastructure, cloud retirement, secrets/auth/OAuth, database schema or data
   movement, public MCP/API compatibility, Spotify account data, retention, and broad framework
   changes remain plan-first boundaries.
+
+SPM-4's constituent owner choices now point to an Azure Static Web Apps Free frontend, an API
+Container App scaled from zero to one replica, and a ten-minute scheduled collector Container Apps
+Job. PostgreSQL Flexible Server uses private VNet integration; Blob Storage retains one private
+endpoint. Images use a neutral organization-shared ACR whose platform lifecycle is outside this
+repository, while Spotify owns its repository namespaces, immutable digests, publishing, and pull
+permissions. The current small-cohort forecast is about USD 40 per month within a USD 31-46
+planning range and a USD 60 initial budget alert. These are binding target choices in
+[Accepted ADR 0002](../decisions/0002-azure-target-architecture-and-migration-boundaries.md),
+not authority to provision, deploy, migrate, or delete cloud resources.
 
 ## Observed service layout
 
@@ -79,16 +90,19 @@ required linear history before every merge; do not mutate them while selecting a
 
 ## Production packaging boundary
 
-SPM-2 preserved the production packaging path. Production Dockerfiles still install committed
-pip-tools `requirements*.txt` files through their existing Compose build contexts, and the manual
-deploy workflow retains its pip-based pre-deployment gates. `docker-requirements.lock` records
-package metadata and requirement-file digests so this temporary boundary fails closed on drift.
+SPM-2 preserved the current production packaging path. Production Dockerfiles still install
+committed pip-tools `requirements*.txt` files through their existing Compose build contexts, and
+the manual deploy workflow retains its pip-based pre-deployment gates. `docker-requirements.lock`
+records package metadata and requirement-file digests so this temporary implemented boundary fails
+closed on drift.
 
-Normal runtime requirement regeneration self-constrains the committed production pins and carries
-forward explicit environment markers. Development requirement generation is constrained by each
-service's runtime output. SPM-4 owns the accepted-plan decision between direct `uv.lock`
-consumption and pip-compatible exports; do not change Docker or deployment consumption before that
-decision.
+[SPM-4's Accepted ADR 0002](../decisions/0002-azure-target-architecture-and-migration-boundaries.md)
+records the owner's constituent choice of direct package-scoped synchronization from the root
+`uv.lock` for future production images. This choice does not change the current Dockerfiles by
+itself. Implementation requires a strict root `.dockerignore` and
+build-context tests, pinned uv 0.12.3 and base-image digests, locked production-only non-editable
+synchronization, multi-stage runtime copying, provenance, and service-cache proof before the
+pip-compatible artifacts can be retired.
 
 ## Manual production deployment posture
 
