@@ -1,6 +1,7 @@
 """Tests for Spotify embed-based playlist track fetcher."""
 
 import json
+import logging
 
 import httpx
 import pytest
@@ -135,3 +136,35 @@ class TestFetchPlaylistTracks:
         client = SpotifyEmbedClient(min_request_interval=0)
         with pytest.raises(SpotifyEmbedError, match="Failed to fetch"):
             await client.fetch_playlist_tracks("pl_conn")
+
+    @respx.mock
+    async def test_fetch_ordinary_logs_redact_playlist_id(self, caplog: pytest.LogCaptureFixture) -> None:
+        """HTTP client request logging must not expose the outbound playlist identifier."""
+        from app.logging import configure_logging
+
+        playlist_id = "sensitive_playlist_identifier"
+        tracks_data = [
+            {"uid": "spotify:track:t1", "title": "Track One", "subtitle": "Artist", "duration": 180000},
+        ]
+        html = _build_embed_html(tracks_data)
+        respx.get(f"https://open.spotify.com/embed/playlist/{playlist_id}").mock(
+            return_value=httpx.Response(200, text=html)
+        )
+
+        root_logger = logging.getLogger()
+        httpx_logger = logging.getLogger("httpx")
+        original_handlers = root_logger.handlers[:]
+        original_root_level = root_logger.level
+        original_httpx_level = httpx_logger.level
+        try:
+            configure_logging()
+            root_logger.addHandler(caplog.handler)
+            client = SpotifyEmbedClient(min_request_interval=0)
+            await client.fetch_playlist_tracks(playlist_id)
+
+            assert "Extracted 1 tracks from embed page" in caplog.text
+            assert playlist_id not in caplog.text
+        finally:
+            root_logger.handlers[:] = original_handlers
+            root_logger.setLevel(original_root_level)
+            httpx_logger.setLevel(original_httpx_level)

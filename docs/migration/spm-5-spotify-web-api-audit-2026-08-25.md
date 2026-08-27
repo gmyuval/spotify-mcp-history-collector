@@ -69,7 +69,7 @@ named.
 | `GET /audio-features?ids=` | Spotify-first collector enrichment. | Deprecated and unavailable to affected/new Development access; existing Extended integrations were declared unaffected. |
 | `GET /me/top/artists` | `spotify.get_top` MCP handler. | Current. Removed fields remain optional locally. |
 | `GET /me/top/tracks` | `spotify.get_top` MCP handler. | Current. Removed fields remain optional locally. |
-| `GET /search` | MCP search and collector resolver. | Current range is 0-10 and default is 5. Shared and advertised MCP contracts both differ; correction remains owner/ADR-blocked. |
+| `GET /search` | MCP search and collector resolver. | Current range is 0-10 and default is 5. ADR 0010 freezes that v1 behavior and accepts a corrected v2 range of 1-10 with default 5; implementation and client migration remain plan-first. |
 | `GET /tracks/{id}` | MCP and Explorer track detail. | Current. Popularity can be absent under affected Development access. |
 | `GET /artists/{id}` | MCP and Explorer artist detail. | Current. Genres, popularity, and followers can be absent under affected Development access. |
 | `GET /albums/{id}` | MCP and Explorer album detail. | Current. Label and popularity can be absent under affected Development access. |
@@ -80,7 +80,7 @@ named.
 | `POST /playlists/{id}/items` | MCP add, max 100, snapshot response. | Current path. Track or episode URIs are accepted upstream. |
 | `DELETE /playlists/{id}/items` | MCP remove, max 100, snapshot response; no optional `snapshot_id` precondition. | Current path. Adding the precondition is optional maintenance, not required for compliance. |
 | `PUT /playlists/{id}` | MCP playlist detail update. | Current. |
-| Unofficial `GET open.spotify.com/embed/playlist/{id}` | `shared/spotify/embed.py`; parses private `__NEXT_DATA__`, rate-limits and retries. | Not a documented Web API contract. Support/retirement is an owner decision. |
+| Unofficial `GET open.spotify.com/embed/playlist/{id}` | `shared/spotify/embed.py`; parses private `__NEXT_DATA__`, rate-limits and retries. | Not a documented Web API contract. ADR 0008 accepts staged retirement; current-public authorization is enforced now, while the kill switch, replacement import, evidence, and final owner retirement gate remain future reviewed work. |
 
 No currently-playing, playback-state, device, queue, or corresponding OAuth-scope use exists.
 
@@ -230,11 +230,10 @@ and Soundcharts provider adapters: a Spotify 403 falls through and returns Sound
 It does not change provider order, defaults, credentials, paid calls, cache policy, or production
 behaviour.
 
-Treating Audio Features as unavailable by default still needs an owner policy because disabling the
-Spotify-first path can remove enrichment for installations without paid Soundcharts credentials.
-The choice must state supported app modes, paid-provider opt-in/cost, credential/privacy boundary,
-cache/retention, whether a 403 disablement persists across cycles, and behaviour when no provider is
-available. Spotify publishes no replacement or sunset date.
+ADR 0009 now selects Soundcharts as the sole default Audio Features provider and removes Spotify
+Audio Features from the supported target chain. SPM-18 owns the separately reviewed adapter,
+credential/privacy, quota/cost, cache/retention, degradation, and rollout implementation. Spotify
+publishes no replacement or sunset date, but that no longer leaves the provider/default policy open.
 
 ## `account_id` identity impact
 
@@ -253,8 +252,9 @@ official contract says not to use for account linking.
 additive migration: preserve internal `users.id`, add a nullable unique `account_id`, claim exactly
 one unambiguous legacy row during reauthorization, fail closed on every conflict, and make
 `account_id` authoritative only after the complete initial active-user cohort passes a finite
-rollout gate. It preserves `spotify_user_id` storage and public fields pending separate retention
-and compatibility decisions. No schema, OAuth behavior, production account, or user data was
+rollout gate. It preserves `spotify_user_id` storage and current public response fields as
+transitional runtime compatibility; ADR 0004 and ADR 0010 govern their separately reviewed
+contraction and version migration. No schema, OAuth behavior, production account, or user data was
 changed by the audit or ADR.
 
 [ADR 0004](../decisions/0004-separate-provider-identities-and-minimize-profile-retention.md)
@@ -268,7 +268,7 @@ contraction gates pass.
 accepts restricted Development Mode as the common denominator, treats the unused batch track and
 artist methods as outside the target supported surface, and keeps Extended-only or postponed legacy
 access out of the product contract. Batch-method retirement and quota coordination remain reviewed
-implementation work; Audio Features remains a separate provider/default decision.
+implementation work; ADR 0009 and SPM-18 now govern the Audio Features provider and implementation.
 
 [ADR 0007](../decisions/0007-keep-playlist-media-contract-track-only.md) accepts an explicit
 track-only media boundary: playlist requests do not opt into episodes, and unexpected episodes or
@@ -292,6 +292,10 @@ separately authorized live proof; this decision does not purchase, activate, or 
   rate-limit base type, with focused RED and GREEN tests.
 - Defensive malformed `Retry-After` fallback, with focused RED and GREEN tests.
 - Concrete Spotify-403-to-Soundcharts fallback coverage without changing provider policy.
+- Current-request `public: true` authorization for the transitional embed fallback, with private,
+  null, metadata-failed, and cached-only paths failing closed.
+- Removal of raw MCP arguments and playlist/embed identifiers from ordinary application logs,
+  including suppression of `httpx` INFO request URLs at the API logging boundary.
 - Current Development/Extended user-limit operator guidance, correction of internal import user ID,
   and documented audio-enrichment environment settings.
 
@@ -308,12 +312,13 @@ SPM-18 implementation still requires its separately reviewed plan and applicable
 including separate approval for provider-account access, credentials, subscription spend,
 live-provider proof, deployment, or production mutation.
 
-No behavior change is authorized by this audit for public MCP/API defaults and shapes, app-mode or
-quota-policy implementation, playlist-scope or playlist-media implementation, unofficial-embed
-retirement, batch endpoint retirement, or current runtime Audio Features behavior. ADR 0010 records
-the accepted public-contract target; implementation, real-client migration, and v1 removal remain
-behind their applicable plan-first and authority gates recorded through Linear. The ADR index
-assigns 0010 to the accepted public-contract versioning policy and reserves 0011 next.
+Apart from the compatible quota and privacy repairs listed above, no behavior change is authorized
+by this audit for public MCP/API defaults and shapes, app-mode or quota-policy implementation,
+playlist-scope or playlist-media implementation, unofficial-embed retirement, batch endpoint
+retirement, or current runtime Audio Features behavior. ADR 0010 records the accepted
+public-contract target; implementation, real-client migration, and v1 removal remain behind their
+applicable plan-first and authority gates recorded through Linear. The ADR index assigns 0010 to
+the accepted public-contract versioning policy and reserves 0011 next.
 
 ## Validation boundary
 

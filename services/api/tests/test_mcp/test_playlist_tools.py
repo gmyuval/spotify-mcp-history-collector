@@ -1,5 +1,6 @@
 """Tests for spotify info + playlist tools invoked through the MCP dispatcher."""
 
+import logging
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -1099,12 +1100,17 @@ def test_create_playlist_no_token(client: TestClient, seeded_user: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user: int) -> None:
+def test_get_playlist_403_embed_fallback_success(
+    client: TestClient,
+    seeded_user: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """get_playlist uses embed only when current official metadata proves the playlist is public."""
     from app.mcp.tools.playlist_tools import _instance as playlist_instance
     from shared.spotify.exceptions import SpotifyRequestError
     from shared.spotify.models import EmbedTrackItem
 
+    caplog.set_level(logging.INFO, logger="app.mcp.tools.playlist_tools")
     with (
         patch(
             "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
@@ -1153,6 +1159,11 @@ def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user
         assert data["result"]["tracks"][0]["name"] == "Track 1"
         assert data["result"]["tracks_source"] == "embed"
         assert "tracks_restricted" not in data["result"]
+        playlist_logs = "\n".join(
+            record.getMessage() for record in caplog.records if record.name == "app.mcp.tools.playlist_tools"
+        )
+        assert "Embed fallback returned 2 tracks" in playlist_logs
+        assert "pl_embed" not in playlist_logs
 
 
 @pytest.mark.parametrize("visibility", [False, None], ids=["private", "unknown"])

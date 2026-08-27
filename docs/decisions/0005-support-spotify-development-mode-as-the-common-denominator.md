@@ -170,8 +170,6 @@ caching, coalescing, prioritization, and background deferral.
   bounded active-cohort reauthorization path.
 - [ADR 0004](0004-separate-provider-identities-and-minimize-profile-retention.md) governs provider
   identity separation, profile retention, and OAuth-scope contraction.
-- [ADR 0010](0010-version-the-public-mcp-api-contract-before-correction.md) freezes v1 and governs
-  corrected v2 Search, quota-error, and response-shape semantics plus evidence-gated retirement.
 - [ADR 0006](0006-bundle-both-playlist-modification-scopes-for-write-access.md) subsequently bundles
   both playlist-modification scopes for every write-enabled initial user.
 - [ADR 0007](0007-keep-playlist-media-contract-track-only.md) keeps playlist media track-only.
