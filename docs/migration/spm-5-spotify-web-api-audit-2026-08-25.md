@@ -59,17 +59,17 @@ named.
 
 | Method and path | Repository consumer and contract | August 2026 classification |
 |---|---|---|
-| Browser `GET accounts.spotify.com/authorize` | `services/api/src/app/auth/service.py`; code, redirect URI, state, eight scopes, optional dialog. | Grant shape remains current. Scope policy has decision blockers below. |
+| Browser `GET accounts.spotify.com/authorize` | `services/api/src/app/auth/service.py`; code, redirect URI, state, eight scopes, optional dialog. | Grant shape remains current. ADR 0004 accepts scope contraction after its cohort and compatibility gates; implementation remains plan-first. |
 | `POST accounts.spotify.com/api/token`, authorization-code grant | `auth/service.py`; access token, type, expiry, optional refresh token and scope. | Grant shape remains current. Generic HTTP error handling only. |
 | Same token endpoint, refresh grant | Independent API and collector implementations in `auth/tokens.py` and `collector/tokens.py`. | API persists rotated refresh token and scope; collector persists rotated refresh token but not returned scope. No quota-reason handling. |
 | `GET /me` | Direct auth call; persists `id`, display name, email, country, and product. | `account_id` is ignored. Email/country/product are unavailable to affected Development access. [ADR 0003](../decisions/0003-adopt-staged-account-id-migration.md) accepts a bounded additive identity migration; implementation remains plan-first. |
 | `GET /me/player/recently-played` | Polling and initial sync; limit 50 and cursor paging. | Current and compliant; no podcast episodes are returned. |
-| `GET /tracks?ids=` | Batch client method; no non-test production consumer found. | Removed for affected/new Development access; available to Extended and possibly postponed existing integrations. Do not remove until the supported-mode decision. |
-| `GET /artists?ids=` | Batch client method; no non-test production consumer found. | Same mode qualification as batch tracks. |
+| `GET /tracks?ids=` | Batch client method; no non-test production consumer found. | Removed for affected/new Development access; available to Extended and possibly postponed existing integrations. ADR 0005 excludes it from the target supported surface; retirement remains separately reviewed implementation work. |
+| `GET /artists?ids=` | Batch client method; no non-test production consumer found. | Same accepted target and reviewed retirement gate as batch tracks. |
 | `GET /audio-features?ids=` | Spotify-first collector enrichment. | Deprecated and unavailable to affected/new Development access; existing Extended integrations were declared unaffected. |
 | `GET /me/top/artists` | `spotify.get_top` MCP handler. | Current. Removed fields remain optional locally. |
 | `GET /me/top/tracks` | `spotify.get_top` MCP handler. | Current. Removed fields remain optional locally. |
-| `GET /search` | MCP search and collector resolver. | Current range is 0-10 and default is 5. ADR 0010 freezes that v1 behavior and accepts a corrected v2 range of 1-10 with default 5; implementation and client migration remain plan-first. |
+| `GET /search` | MCP search and collector resolver. | Frozen repository v1 advertises default 10 and range 1-50, while the handler clamps to that range; the collector explicitly requests 5, and Spotify's current endpoint defaults to 5 with maximum 10. ADR 0010 accepts corrected v2 range 1-10 with default 5; implementation and client migration remain plan-first. |
 | `GET /tracks/{id}` | MCP and Explorer track detail. | Current. Popularity can be absent under affected Development access. |
 | `GET /artists/{id}` | MCP and Explorer artist detail. | Current. Genres, popularity, and followers can be absent under affected Development access. |
 | `GET /albums/{id}` | MCP and Explorer album detail. | Current. Label and popularity can be absent under affected Development access. |
