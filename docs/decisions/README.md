@@ -15,7 +15,8 @@ They do not grant implementation authority and do not replace Linear work tracki
 | 0006 | [Bundle both playlist modification scopes for write access](0006-bundle-both-playlist-modification-scopes-for-write-access.md) | Accepted |
 | 0007 | [Keep the playlist media contract track-only](0007-keep-playlist-media-contract-track-only.md) | Accepted |
 | 0008 | [Stage retirement of undocumented playlist embed scraping](0008-stage-retirement-of-undocumented-playlist-embed-scraping.md) | Accepted |
+| 0009 | [Use Soundcharts as the default Audio Features provider](0009-use-soundcharts-as-the-default-audio-features-provider.md) | Accepted |
 
 ## Next number
 
-0009
+0010

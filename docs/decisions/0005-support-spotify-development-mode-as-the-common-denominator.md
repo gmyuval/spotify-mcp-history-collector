@@ -119,7 +119,8 @@ Select Development Mode as the common denominator.
   its absence from production call paths makes that the YAGNI-aligned target.
 - Audio Features, episode/embed handling, playlist scopes, and public MCP/API compatibility are not
   decided indirectly by an app-mode choice; playlist scopes are subsequently resolved by ADR 0006,
-  playlist media by ADR 0007, and staged embed retirement by ADR 0008.
+  playlist media by ADR 0007, staged embed retirement by ADR 0008, and the Soundcharts-default
+  Audio Features policy by ADR 0009.
 
 ## Validation
 
@@ -167,6 +168,7 @@ caching, coalescing, prioritization, and background deferral.
 - [ADR 0007](0007-keep-playlist-media-contract-track-only.md) keeps playlist media track-only.
 - [ADR 0008](0008-stage-retirement-of-undocumented-playlist-embed-scraping.md) makes the unofficial
   embed parser transitional compatibility debt with an explicit retirement gate.
+- [ADR 0009](0009-use-soundcharts-as-the-default-audio-features-provider.md) subsequently selects
+  Soundcharts as the sole default Audio Features provider without relying on Spotify entitlement.
 - The dedicated public MCP/API compatibility decision owns Search limits/defaults, outward quota
-  errors, and public warning text. Audio Features provider/default policy remains a separate owner
-  decision.
+  errors, and public warning text.

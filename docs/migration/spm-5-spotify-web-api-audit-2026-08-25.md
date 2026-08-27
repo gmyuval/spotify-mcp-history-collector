@@ -216,6 +216,12 @@ Spotify again. Soundcharts resolves a Spotify ID, fetches provider features, cac
 disables on provider authorization failure. MusicBrainz is metadata enrichment, not an Audio
 Features fallback.
 
+Fresh Soundcharts documentation reviewed on 2026-08-27 returns the Soundcharts UUID, song metadata,
+and Audio Features through the versioned platform-ID request. The repository's second
+`/song/{uuid}/spotify/audio-features` path is absent from the current provider OpenAPI document, so
+the existing adapter is stale until SPM-18 updates and verifies its contract. This is documentation
+evidence, not a live-provider or credential probe.
+
 This branch documents the actual environment settings and adds a test using the concrete Spotify
 and Soundcharts provider adapters: a Spotify 403 falls through and returns Soundcharts features.
 It does not change provider order, defaults, credentials, paid calls, cache policy, or production
@@ -269,6 +275,13 @@ accepts staged retirement of the private embed parser after a kill switch, priva
 evidence, a usable user-supplied URI/list import, and a later explicit owner gate. Neither record
 changes current runtime behavior.
 
+[ADR 0009](../decisions/0009-use-soundcharts-as-the-default-audio-features-provider.md)
+accepts Soundcharts as the sole default Audio Features provider, requires removal of Spotify from
+the supported provider chain, and sends only a Spotify track identifier to the external provider.
+The application must degrade only enrichment when credentials, quota, or provider availability is
+missing. SPM-18 owns the current-contract adapter, bounded quota/cost controls, provenance, and
+separately authorized live proof; this decision does not purchase, activate, or access Soundcharts.
+
 ## Delivered safe maintenance
 
 - Non-retrying internal `QUOTA_EXCEEDED` classification that preserves the existing outward
@@ -285,15 +298,16 @@ the sole tracker for their disposition. ADR 0003 accepts the staged `account_id`
 ADR 0004 accepts provider-identity separation and minimized profile retention, ADR 0005 accepts the
 restricted Development common denominator and internal quota-policy target, and ADR 0006 accepts
 the complete playlist-write scope bundle. ADR 0007 accepts the track-only media boundary, and ADR
-0008 accepts staged embed retirement. None authorizes implementation, rollout, public compatibility
-change, provider/account access, or data contraction.
+0008 accepts staged embed retirement. ADR 0009 accepts the Soundcharts-default Audio Features
+target and explicitly authorizes SPM-18 adapter rework, but not provider-account access,
+credentials, subscription spend, live-provider proof, deployment, or production mutation.
 
 No behavior change is authorized by this audit for public MCP/API defaults and shapes, app-mode or
 quota-policy implementation, playlist-scope or playlist-media implementation, unofficial-embed
-retirement, batch endpoint retirement, or Audio Features provider/default policy. The unresolved
-public MCP/API and Audio Features choices remain behind owner-approved decisions; all implementation
-remains behind the applicable plan-first gate recorded through Linear. The ADR index assigns 0007
-to the accepted track-only media policy, 0008 to staged embed retirement, and reserves 0009 next.
+retirement, batch endpoint retirement, or current runtime Audio Features behavior. Public MCP/API
+compatibility remains behind an owner-approved decision; all implementation remains behind its
+applicable plan-first gate recorded through Linear. The ADR index assigns 0009 to the accepted
+Soundcharts-default Audio Features policy and reserves 0010 next.
 
 ## Validation boundary
 

@@ -77,10 +77,17 @@ classifies the private `__NEXT_DATA__` parser as transitional compatibility debt
 requires a kill switch, privacy-safe aggregate evidence, a usable user-supplied URI/list import,
 and a later explicit owner gate. No embed, import, Azure, or production behavior has changed.
 
-Public MCP/API compatibility and Audio Features provider/default policy remain decision-blocked.
+[Accepted ADR 0009](../decisions/0009-use-soundcharts-as-the-default-audio-features-provider.md)
+selects Soundcharts as the sole default Audio Features provider and removes Spotify Audio Features
+from the supported provider chain. SPM-18 owns the stale-adapter correction, quota controls,
+provenance, and operational proof. The current runtime remains Spotify-first with an optional
+Soundcharts fallback until that separately reviewed implementation lands; no provider account,
+credentials, spend, real tracks, deployment, or production state were accessed or changed.
+
+Public MCP/API compatibility remains decision-blocked.
 Implementing the accepted identity, OAuth, profile-retention, app-mode/quota, playlist-media, and
-embed-retirement decisions remains plan-first. Do not infer production entitlements or account
-state from mocked tests or public documentation.
+embed-retirement decisions remains plan-first, as does operationalizing the Soundcharts policy.
+Do not infer production entitlements or account state from mocked tests or public documentation.
 
 ## Observed service layout
 
