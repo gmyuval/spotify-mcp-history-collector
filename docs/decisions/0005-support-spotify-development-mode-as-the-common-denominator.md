@@ -140,8 +140,8 @@ The implementation and rollout plans must include:
   developer-budget pressure;
 - sanitized observability proving metrics and logs contain no tokens, Spotify identifiers,
   listening data, or other PII and do not claim an unpublished quota; and
-- public-contract regression tests proving MCP/API errors, Search behavior, and response shapes do
-  not change before their dedicated accepted decision.
+- public-contract regression tests proving the frozen v1 MCP/API errors, Search behavior, and
+  response shapes remain compatible while ADR 0010's corrected v2 is introduced separately.
 
 ## Rollback / revisit trigger
 
@@ -163,6 +163,8 @@ caching, coalescing, prioritization, and background deferral.
   bounded active-cohort reauthorization path.
 - [ADR 0004](0004-separate-provider-identities-and-minimize-profile-retention.md) governs provider
   identity separation, profile retention, and OAuth-scope contraction.
+- [ADR 0010](0010-version-the-public-mcp-api-contract-before-correction.md) freezes v1 and governs
+  corrected v2 Search, quota-error, and response-shape semantics plus evidence-gated retirement.
 - [ADR 0006](0006-bundle-both-playlist-modification-scopes-for-write-access.md) subsequently bundles
   both playlist-modification scopes for every write-enabled initial user.
 - [ADR 0007](0007-keep-playlist-media-contract-track-only.md) keeps playlist media track-only.
@@ -170,5 +172,5 @@ caching, coalescing, prioritization, and background deferral.
   embed parser transitional compatibility debt with an explicit retirement gate.
 - [ADR 0009](0009-use-soundcharts-as-the-default-audio-features-provider.md) subsequently selects
   Soundcharts as the sole default Audio Features provider without relying on Spotify entitlement.
-- The dedicated public MCP/API compatibility decision owns Search limits/defaults, outward quota
-  errors, and public warning text.
+- [ADR 0010](0010-version-the-public-mcp-api-contract-before-correction.md) governs versioned Search
+  limits/defaults, outward quota errors, public warning text, and v1 retirement.

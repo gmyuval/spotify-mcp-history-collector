@@ -124,4 +124,5 @@ playlist operation, or an approved product requirement needs mixed-media playlis
   for supported track-oriented playlist mutations.
 - [ADR 0008](0008-stage-retirement-of-undocumented-playlist-embed-scraping.md) governs the separate
   source-of-data question for the unofficial embed fallback.
-- The dedicated public MCP/API compatibility decision owns exact response and error envelopes.
+- [ADR 0010](0010-version-the-public-mcp-api-contract-before-correction.md) governs versioned
+  response and error envelopes while keeping both versions track-only.

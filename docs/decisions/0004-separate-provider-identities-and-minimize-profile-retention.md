@@ -181,8 +181,9 @@ data, or privacy/legal requirements demand a different retention period.
 - [ADR 0003](0003-adopt-staged-account-id-migration.md) owns Spotify `account_id` linking and the
   Spotify-side active-cohort migration.
 - [ADR 0005](0005-support-spotify-development-mode-as-the-common-denominator.md) selects the restricted
-  Development common denominator while leaving the public Search contract separately gated.
+  Development common denominator.
 - [ADR 0006](0006-bundle-both-playlist-modification-scopes-for-write-access.md) retains both
   demonstrated playlist-modification scopes as one initial product capability.
-- Public removal or renaming of `spotify_user_id`, email, country, or product response fields
-  remains part of the dedicated public MCP/API compatibility decision.
+- [ADR 0010](0010-version-the-public-mcp-api-contract-before-correction.md) freezes v1 identity and
+  profile response fields and requires any corrected v2 shape to migrate known consumers before v1
+  retirement.

@@ -84,9 +84,16 @@ provenance, and operational proof. The current runtime remains Spotify-first wit
 Soundcharts fallback until that separately reviewed implementation lands; no provider account,
 credentials, spend, real tracks, deployment, or production state were accessed or changed.
 
-Public MCP/API compatibility remains decision-blocked.
+[Accepted ADR 0010](../decisions/0010-version-the-public-mcp-api-contract-before-correction.md)
+freezes the current Action and native MCP contract as v1, selects explicit versioned v2 endpoints
+for corrected Search, structured errors, and playlist-fidelity semantics, and targets evidence-gated
+v1 retirement. The current runtime remains v1-only. V2 implementation, live-client migration, the
+30-day zero-v1-call observation window, and eventual v1 removal remain separately reviewed and
+authorized work.
+
 Implementing the accepted identity, OAuth, profile-retention, app-mode/quota, playlist-media, and
-embed-retirement decisions remains plan-first, as does operationalizing the Soundcharts policy.
+embed-retirement decisions remains plan-first, as do v2 migration and operationalizing the
+Soundcharts policy.
 Do not infer production entitlements or account state from mocked tests or public documentation.
 
 ## Observed service layout

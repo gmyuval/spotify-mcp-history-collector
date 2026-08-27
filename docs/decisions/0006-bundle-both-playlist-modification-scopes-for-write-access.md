@@ -150,5 +150,7 @@ or privacy/security requirements demand a narrower grant model.
   mutation surface track-only.
 - [ADR 0008](0008-stage-retirement-of-undocumented-playlist-embed-scraping.md) governs the separate
   transitional source used after official playlist-content access fails.
-- The dedicated public MCP/API compatibility decision continues to own outward tool/error behavior.
-  Audio Features provider/default policy remains a separate owner decision.
+- [ADR 0010](0010-version-the-public-mcp-api-contract-before-correction.md) governs outward
+  tool/error behavior and v1 retirement.
+- [ADR 0009](0009-use-soundcharts-as-the-default-audio-features-provider.md) governs the
+  Audio Features provider/default policy.

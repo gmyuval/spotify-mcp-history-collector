@@ -84,8 +84,10 @@ Stage retirement of undocumented playlist embed scraping.
 8. Retire the parser only after the replacement is validated, aggregate usage evidence is reviewed,
    and the owner explicitly approves the retirement gate. Record that decision in an amendment or
    superseding ADR; do not infer approval from elapsed time or low traffic.
-9. Public removal of `tracks_source="embed"`, embed-specific warnings, or documented fallback
-   behavior remains owned by the dedicated public MCP/API compatibility decision.
+9. [ADR 0010](0010-version-the-public-mcp-api-contract-before-correction.md) freezes v1
+   `tracks_source="embed"` compatibility and gives v2 a source-neutral transitional fidelity
+   contract. Actual parser retirement and any claim that the transitional source is unreachable
+   still require this ADR's replacement evidence and explicit owner gate.
 10. This decision grants no production, provider-account, credential, real-playlist, cloud,
     deployment, public-contract, or data-migration authority.
 
@@ -139,7 +141,8 @@ remaining workflow does not justify the migration period.
   Development Mode as the common denominator and excludes unsupported access assumptions.
 - [ADR 0007](0007-keep-playlist-media-contract-track-only.md) keeps the media model track-only
   regardless of whether a playlist item comes from an official or transitional source.
-- The dedicated public MCP/API compatibility decision owns removal or versioning of embed-visible
-  fields, warnings, and failure behavior.
+- [ADR 0010](0010-version-the-public-mcp-api-contract-before-correction.md) governs versioning of
+  embed-visible fields, warnings, and failure behavior while preserving this ADR's parser-retirement
+  gate.
 - [ADR 0002](0002-azure-target-architecture-and-migration-boundaries.md) governs Azure migration and
   does not receive deployment authority from this record.

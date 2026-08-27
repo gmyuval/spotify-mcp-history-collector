@@ -188,8 +188,10 @@ advertises 1-50 with default 10, and the handler accepts 50. RED observations re
 
 An attempted shared-client correction was deliberately removed before delivery because changing
 that client would change public MCP behavior indirectly. Resolve the shared and MCP contracts
-together through a dedicated accepted public-compatibility ADR; ADR 0003 is limited to the
-`account_id` identity migration.
+together through [ADR 0010](../decisions/0010-version-the-public-mcp-api-contract-before-correction.md):
+freeze the current Action and native MCP behavior as v1, introduce corrected explicit v2 endpoints,
+migrate every known consumer, and retire v1 only after the accepted evidence and owner gates. ADR
+0003 remains limited to the `account_id` identity migration.
 
 ## Playlist audit
 
@@ -299,16 +301,17 @@ ADR 0004 accepts provider-identity separation and minimized profile retention, A
 restricted Development common denominator and internal quota-policy target, and ADR 0006 accepts
 the complete playlist-write scope bundle. ADR 0007 accepts the track-only media boundary, and ADR
 0008 accepts staged embed retirement. ADR 0009 accepts the Soundcharts-default Audio Features
-target. SPM-18 implementation still requires its separately reviewed plan and applicable authority,
+target. ADR 0010 accepts a frozen-v1, corrected-v2, migrate-then-retire public compatibility target.
+SPM-18 implementation still requires its separately reviewed plan and applicable authority,
 including separate approval for provider-account access, credentials, subscription spend,
 live-provider proof, deployment, or production mutation.
 
 No behavior change is authorized by this audit for public MCP/API defaults and shapes, app-mode or
 quota-policy implementation, playlist-scope or playlist-media implementation, unofficial-embed
-retirement, batch endpoint retirement, or current runtime Audio Features behavior. Public MCP/API
-compatibility remains behind an owner-approved decision; all implementation remains behind its
-applicable plan-first gate recorded through Linear. The ADR index assigns 0009 to the accepted
-Soundcharts-default Audio Features policy and reserves 0010 next.
+retirement, batch endpoint retirement, or current runtime Audio Features behavior. ADR 0010 records
+the accepted public-contract target; implementation, real-client migration, and v1 removal remain
+behind their applicable plan-first and authority gates recorded through Linear. The ADR index
+assigns 0010 to the accepted public-contract versioning policy and reserves 0011 next.
 
 ## Validation boundary
 
