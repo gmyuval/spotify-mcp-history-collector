@@ -1,8 +1,9 @@
 # Current repository state
 
 Last verified: 2026-08-27 (UTC), in `codex/spm-4-architecture-decision` against `origin/main`
-`137dd54f0a82b21759ce3e9bb506204314f202a8`. The SPM-4 decision package remains unmerged;
-revalidate its worktree and remote state before relying on it.
+`137dd54f0a82b21759ce3e9bb506204314f202a8`. This verification describes the SPM-4 candidate
+before repository delivery; revalidate the live branch, pull request, and remote state before
+relying on it.
 
 This is volatile orientation, not a work queue, architecture decision, or deployment record. Linear
 team **SPM**, project **Spotify MCP modernization**, is authoritative for planned work, ownership,
