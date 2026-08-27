@@ -8,6 +8,11 @@ Owner evidence: after reviewing the compatibility, indefinite-transition, confli
 trade-offs, Yuval Moran accepted the staged additive migration with "staged approach is best" on
 2026-08-27 UTC.
 
+Amendment evidence: after reviewing the current-head CodeRabbit identity-conflict finding and the
+dual-read, fail-closed alternative, Yuval Moran approved the exact amendment-and-fix package with
+"I do" on 2026-08-27 UTC. This amendment clarifies callback selection; it does not authorize the
+schema or OAuth rollout.
+
 ## Context
 
 The current OAuth callback treats Spotify profile `id` as the account-linking key. The `users`
@@ -61,13 +66,15 @@ Adopt the bounded staged additive migration.
 
 1. Add a nullable, unique `users.account_id` in an expand migration. Preserve `users.id` as the
    internal primary and foreign-key root. Do not rewrite existing foreign keys.
-2. During the bounded conversion period, resolve OAuth callbacks in this order:
-   - match an existing non-null `account_id` first;
-   - otherwise, when exactly one row matches the returned legacy profile `id` and its
-     `account_id` is null, claim that row once by setting `account_id`;
-   - when the two keys point to different rows, a key is duplicated, or the result is otherwise
-     ambiguous, fail closed and require reviewed recovery; do not merge rows or create a
-     replacement account automatically; and
+2. During the bounded conversion period, read both identity candidates before selecting an
+   account:
+   - independently resolve every row matching the returned non-null `account_id` and every row
+     matching the returned legacy profile `id`;
+   - reject duplicate matches for either key, cross-row matches, or any other inconsistent result
+     as ambiguous before selecting or mutating a row;
+   - prefer the `account_id` match only after both lookups prove the identities are consistent;
+   - when no `account_id` row exists and exactly one legacy row matches with a null `account_id`,
+     claim that row once by setting `account_id`; and
    - create a new internal user only when neither identity key matches.
 3. Keep the latest Spotify profile `id` as compatibility metadata during this decision's scope. It
    is not authoritative for account linking after the authority switch. Preserve the

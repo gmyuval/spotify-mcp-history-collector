@@ -1100,7 +1100,7 @@ def test_create_playlist_no_token(client: TestClient, seeded_user: int) -> None:
 
 
 def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user: int) -> None:
-    """get_playlist falls back to embed endpoint when all API paths return 403."""
+    """get_playlist uses embed only when current official metadata proves the playlist is public."""
     from app.mcp.tools.playlist_tools import _instance as playlist_instance
     from shared.spotify.exceptions import SpotifyRequestError
     from shared.spotify.models import EmbedTrackItem
@@ -1115,32 +1115,19 @@ def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user
             new_callable=AsyncMock,
         ),
     ):
+        mock_playlist = SpotifyPlaylist(
+            id="pl_embed",
+            name="Embed Playlist",
+            public=True,
+            owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+            snapshot_id="snap_embed",
+            tracks=SpotifyPlaylistTracks(items=[], total=2),
+        )
         mock_client = AsyncMock()
-        mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
 
         mock_get_client.return_value = mock_client
-
-        # Seed cache via list_playlists
-        mock_client.get_user_playlists = AsyncMock(
-            return_value=UserPlaylistsResponse(
-                items=[
-                    SpotifyPlaylistSimplified(
-                        id="pl_embed",
-                        name="Embed Playlist",
-                        public=True,
-                        owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
-                        snapshot_id="snap_embed",
-                        tracks={"total": 2},
-                    )
-                ],
-                total=1,
-            )
-        )
-        client.post(
-            "/mcp/call",
-            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
-        )
 
         # Mock embed to return tracks
         embed_tracks = [
@@ -1166,6 +1153,117 @@ def test_get_playlist_403_embed_fallback_success(client: TestClient, seeded_user
         assert data["result"]["tracks"][0]["name"] == "Track 1"
         assert data["result"]["tracks_source"] == "embed"
         assert "tracks_restricted" not in data["result"]
+
+
+@pytest.mark.parametrize("visibility", [False, None], ids=["private", "unknown"])
+def test_get_playlist_non_public_403_does_not_use_embed(
+    client: TestClient,
+    seeded_user: int,
+    visibility: bool | None,
+) -> None:
+    """A current private or unknown classification fails closed without an embed request."""
+    from app.mcp.tools.playlist_tools import _instance as playlist_instance
+    from shared.spotify.exceptions import SpotifyRequestError
+
+    mock_playlist = SpotifyPlaylist(
+        id="pl_private",
+        name="Private Playlist",
+        public=visibility,
+        owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+        snapshot_id="snap_private",
+        tracks=SpotifyPlaylistTracks(items=[], total=2),
+    )
+
+    with (
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+            new_callable=AsyncMock,
+        ) as mock_get_client,
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._force_refresh_token",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            playlist_instance._embed_client,
+            "fetch_playlist_tracks",
+            new_callable=AsyncMock,
+        ) as mock_embed,
+    ):
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
+        mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_get_client.return_value = mock_client
+
+        response = client.post(
+            "/mcp/call",
+            json={"tool": "spotify.get_playlist", "user_id": seeded_user, "playlist_id": "pl_private"},
+        )
+
+    data = response.json()
+    assert data["success"] is True
+    assert data["result"]["tracks_restricted"] is True
+    assert data["result"]["tracks_source"] == "restricted"
+    mock_embed.assert_not_awaited()
+
+
+def test_get_playlist_cached_public_403_does_not_use_embed(client: TestClient, seeded_user: int) -> None:
+    """Cached visibility cannot substitute for current official public metadata."""
+    from app.mcp.tools.playlist_tools import _instance as playlist_instance
+    from shared.spotify.exceptions import SpotifyRequestError
+
+    with (
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._get_client",
+            new_callable=AsyncMock,
+        ) as mock_get_client,
+        patch(
+            "app.mcp.tools.playlist_tools.PlaylistToolHandlers._force_refresh_token",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            playlist_instance._embed_client,
+            "fetch_playlist_tracks",
+            new_callable=AsyncMock,
+        ) as mock_embed,
+    ):
+        mock_client = AsyncMock()
+        mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_user_playlists = AsyncMock(
+            return_value=UserPlaylistsResponse(
+                items=[
+                    SpotifyPlaylistSimplified(
+                        id="pl_cached_public",
+                        name="Cached Public Playlist",
+                        public=True,
+                        owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+                        snapshot_id="snap_cached_public",
+                        tracks={"total": 2},
+                    )
+                ],
+                total=1,
+            )
+        )
+        mock_get_client.return_value = mock_client
+
+        client.post(
+            "/mcp/call",
+            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
+        )
+        response = client.post(
+            "/mcp/call",
+            json={
+                "tool": "spotify.get_playlist",
+                "user_id": seeded_user,
+                "playlist_id": "pl_cached_public",
+            },
+        )
+
+    data = response.json()
+    assert data["success"] is True
+    assert data["result"]["tracks_restricted"] is True
+    assert data["result"]["tracks_source"] == "restricted"
+    mock_embed.assert_not_awaited()
 
 
 def test_get_playlist_unavailable_tracks_placeholder(client: TestClient, seeded_user: int) -> None:
@@ -1338,32 +1436,19 @@ def test_get_playlist_embed_unavailable_placeholder(client: TestClient, seeded_u
             new_callable=AsyncMock,
         ),
     ):
+        mock_playlist = SpotifyPlaylist(
+            id="pl_emb_unavail",
+            name="Embed Unavail",
+            public=True,
+            owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
+            snapshot_id="snap_eu",
+            tracks=SpotifyPlaylistTracks(items=[], total=3),
+        )
         mock_client = AsyncMock()
-        mock_client.get_playlist = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
+        mock_client.get_playlist = AsyncMock(return_value=mock_playlist)
         mock_client.get_playlist_all_tracks = AsyncMock(side_effect=SpotifyRequestError(403, "Forbidden"))
 
         mock_get_client.return_value = mock_client
-
-        # Seed cache via list_playlists
-        mock_client.get_user_playlists = AsyncMock(
-            return_value=UserPlaylistsResponse(
-                items=[
-                    SpotifyPlaylistSimplified(
-                        id="pl_emb_unavail",
-                        name="Embed Unavail",
-                        public=True,
-                        owner=SpotifyPlaylistOwner(id="user1", display_name="User One"),
-                        snapshot_id="snap_eu",
-                        tracks={"total": 3},
-                    )
-                ],
-                total=1,
-            )
-        )
-        client.post(
-            "/mcp/call",
-            json={"tool": "spotify.list_playlists", "user_id": seeded_user, "limit": 50},
-        )
 
         embed_tracks = [
             EmbedTrackItem(track_id="t1", name="Track 1", artists=["Artist A"], duration_ms=180000),

@@ -11,6 +11,11 @@ clean break, Yuval Moran selected a modified parallel-versioning approach with:
 > I'd go with modified option B - freeze v1, introduce v2, ensure nothing breaks, retire v1. In
 > general, not much is currently connected to the MCP
 
+Amendment evidence: after reviewing the MCP 2025-11-25 error distinction, authentication-boundary
+telemetry, and the existing raw-argument log, Yuval Moran approved the exact amendment-and-fix
+package with "I do" on 2026-08-27 UTC. The raw-argument removal is an immediate compatible privacy
+repair; v2 and live-client migration remain separately reviewed work.
+
 ## Context
 
 The repository exposes two related public integration surfaces:
@@ -117,8 +122,10 @@ an explicit removal gate.
    - `QUOTA_EXCEEDED` maps to a non-retryable `spotify_quota_exhausted` error. Ordinary rolling
      rate limits remain distinct and may be retryable only when the operation and provider evidence
      permit it. No quota size, reset time, or retry delay is invented.
-   - Native MCP failures set `isError: true`, preserve a useful text content block, and provide
-     structured content and output schemas where supported.
+   - Native MCP tool-execution failures set `isError: true`, preserve a useful text content block,
+     and provide structured content and output schemas where supported. Malformed requests,
+     unknown tools, and unsupported protocol operations remain standard JSON-RPC protocol errors;
+     they are not encoded as ordinary tool results.
    - The v2 Action keeps transport/authentication failures distinct from tool-execution failures.
      Tool failures use a stable JSON envelope rather than exposing exception class names.
    - The stale approximate 100-track Development warning is removed. Playlist restriction and
@@ -149,13 +156,16 @@ an explicit removal gate.
    - Changing a real ChatGPT/Claude configuration, using credentials or real Spotify data, and
      exercising production traffic remain separately authorized external effects.
 
-6. Add privacy-safe version observability before migration. Count every non-health request to a v1
-   route, including requests rejected during authentication, and classify aggregate authentication
-   outcome, successes, error codes, and latency by contract version and tool class. This prevents a
-   dormant client returning with an expired credential from disappearing from retirement evidence.
-   Do not place user IDs, account IDs, tokens, playlist or track IDs, queries, arguments, result
-   data, or other PII in metric labels or ordinary logs. V1 deprecation notices may use headers or
-   server metadata only when they do not alter the frozen response body.
+6. Add privacy-safe version observability before migration. Instrument the authentication or edge
+   boundary separately for `GET /mcp/tools`, `POST /mcp/call`, and the `/mcp/v1` native mount so
+   every non-health request is counted, including requests rejected before a handler runs. Classify
+   aggregate authentication outcome, successes, error codes, and latency by contract version and
+   tool class. This prevents a dormant client returning with an expired credential from disappearing
+   from retirement evidence. Remove the current `MCPRouter.call_tool` raw-argument log immediately
+   and keep a regression proving argument values cannot enter ordinary logs. Do not place user IDs,
+   account IDs, tokens, playlist or track IDs, queries, arguments, result data, or other PII in
+   metric labels or ordinary logs. V1 deprecation notices may use headers or server metadata only
+   when they do not alter the frozen response body.
 
 7. Retire v1 as a planned contraction, not automatically:
 
@@ -213,7 +223,8 @@ The implementation and rollout plans must include:
 - playlist restriction, completeness, track-only, and transitional-source tests consistent with
   ADRs 0007 and 0008;
 - user-isolation, authorization, write-confirmation, sensitive-data redaction, and privacy-safe
-  version-metric tests;
+  version-metric tests, including rejected authentication at all three v1 route boundaries and a
+  negative ordinary-log assertion for MCP arguments;
 - a named consumer inventory and per-consumer migration checklist in Linear, not in this ADR;
 - authorized compatibility evidence for each real client before its cutover, plus rollback proof;
   and

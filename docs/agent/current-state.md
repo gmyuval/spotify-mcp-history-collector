@@ -42,8 +42,9 @@ fallback coverage, and corrected operator/configuration guidance.
 
 [Accepted ADR 0003](../decisions/0003-adopt-staged-account-id-migration.md) selects a bounded
 additive migration from Spotify profile `id` linking to authoritative `account_id` linking. It
-preserves internal `users.id`, requires a finite all-active-cohort reauthorization gate, fails
-closed on conflicting identity evidence, and initially preserves `spotify_user_id` compatibility.
+preserves internal `users.id`, requires a finite all-active-cohort reauthorization gate, reads both
+identity candidates before selection, fails closed on duplicate or cross-row evidence, and initially
+preserves `spotify_user_id` compatibility.
 No schema, OAuth, production-account, token, credential, or user-data change has been made.
 
 [Accepted ADR 0004](../decisions/0004-separate-provider-identities-and-minimize-profile-retention.md)
@@ -55,7 +56,8 @@ authorized contraction gates. `user-read-private` remains only while an accepted
 requires it. No implementation or data contraction has occurred.
 
 [Accepted ADR 0005](../decisions/0005-support-spotify-development-mode-as-the-common-denominator.md)
-selects current restricted Development Mode as the one-to-five-user common denominator. Extended
+selects current restricted Development Mode as the common denominator for at most five authenticated
+users total; an authenticating app owner consumes one of those slots. Extended
 installations run the same path; postponed legacy access and Extended-only endpoints are not product
 contracts. `QUOTA_EXCEEDED` remains non-retrying, while coordinated caching, coalescing, foreground
 priority, resumable background deferral, and sanitized budget-pressure observability are
@@ -75,7 +77,10 @@ preserve position as unsupported placeholders rather than crash, masquerade as t
 [Accepted ADR 0008](../decisions/0008-stage-retirement-of-undocumented-playlist-embed-scraping.md)
 classifies the private `__NEXT_DATA__` parser as transitional compatibility debt. Retirement
 requires a kill switch, privacy-safe aggregate evidence, a usable user-supplied URI/list import,
-and a later explicit owner gate. No embed, import, Azure, or production behavior has changed.
+and a later explicit owner gate. This branch now requires current official metadata proving
+`public: true` before each embed request; cached, private, unknown, or failed visibility returns the
+restricted/manual-import path. No kill switch, replacement import, Azure, or production behavior
+has changed.
 
 [Accepted ADR 0009](../decisions/0009-use-soundcharts-as-the-default-audio-features-provider.md)
 selects Soundcharts as the sole default Audio Features provider and removes Spotify Audio Features
@@ -87,7 +92,10 @@ credentials, spend, real tracks, deployment, or production state were accessed o
 [Accepted ADR 0010](../decisions/0010-version-the-public-mcp-api-contract-before-correction.md)
 freezes the current Action and native MCP contract as v1, selects explicit versioned v2 endpoints
 for corrected Search, structured errors, and playlist-fidelity semantics, and targets evidence-gated
-v1 retirement. The current runtime remains v1-only. V2 implementation, live-client migration, the
+v1 retirement. It distinguishes JSON-RPC protocol errors from native tool-execution `isError`
+results, requires telemetry at all v1 authentication boundaries, and prohibits raw MCP arguments
+in ordinary logs. This branch removes the existing v1 raw-argument log; the runtime remains v1-only.
+V2 implementation, live-client migration, the
 30-day observation window with zero non-health v1 requests, and eventual v1 removal remain
 separately reviewed and authorized work.
 

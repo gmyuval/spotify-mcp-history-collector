@@ -200,7 +200,8 @@ migrate every known consumer, and retire v1 only after the accepted evidence and
 - Content pagination honors Spotify's current maximum 50, absolute `next`, a manual-offset fallback,
   duplicate-page protection, and a 10,000-item local safety cap.
 - Non-owned/non-collaborative contents receive 403 under the current official contract. The embed
-  fallback is unofficial and layout-dependent.
+  fallback is unofficial and layout-dependent; this branch now requires current official metadata
+  to prove `public: true` before making an outbound embed request.
 - `playlist_tools.py` still emits a public warning that Development Mode limits retrieval to about
   100 items. Current official behavior is ownership/collaboration authorization, not a documented
   100-item cap. Correcting that public MCP text is grouped with the compatibility ADR rather than
@@ -274,8 +275,9 @@ track-only media boundary: playlist requests do not opt into episodes, and unexp
 future types preserve position as unsupported placeholders rather than becoming tracks or
 disappearing. [ADR 0008](../decisions/0008-stage-retirement-of-undocumented-playlist-embed-scraping.md)
 accepts staged retirement of the private embed parser after a kill switch, privacy-safe aggregate
-evidence, a usable user-supplied URI/list import, and a later explicit owner gate. Neither record
-changes current runtime behavior.
+evidence, a usable user-supplied URI/list import, and a later explicit owner gate. ADR 0007 remains
+unimplemented here; ADR 0008's amended current-public proof is implemented as a compatible privacy
+repair, while the kill switch, replacement import, and retirement gate remain future reviewed work.
 
 [ADR 0009](../decisions/0009-use-soundcharts-as-the-default-audio-features-provider.md)
 accepts Soundcharts as the sole default Audio Features provider, requires removal of Spotify from

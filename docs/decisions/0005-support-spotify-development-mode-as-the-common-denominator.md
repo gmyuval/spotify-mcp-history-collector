@@ -8,11 +8,17 @@ Owner evidence: after reviewing a Development-common-denominator baseline, mode-
 tiers, and an Extended-first product, Yuval Moran selected the Development-common-denominator
 option with "A" on 2026-08-27 UTC.
 
+Amendment evidence: after reviewing Spotify's five-authenticated-user wording and the distinction
+between app ownership and app use, Yuval Moran approved the exact amendment-and-fix package with
+"I do" on 2026-08-27 UTC. This amendment is a factual quota-mode clarification only.
+
 ## Context
 
 The initial product is a personal-and-friends system for one to five named users. Spotify's current
-Development Mode requires a Premium app owner and permits up to five allowlisted authenticated
-users. Extended Quota Mode removes that user cap and receives a higher quota, but current
+Development Mode requires a Premium app owner and permits up to five authenticated users total,
+each allowlisted. The owner consumes one of those five user slots when they authenticate through
+the app; app ownership does not create a sixth authenticated-user slot. Extended Quota Mode removes
+that user cap and receives a higher quota, but current
 eligibility is organization-focused and requires a launched service with a much larger audience.
 Spotify also applies Development quota across Client IDs owned by the same developer and does not
 publish a numeric quota, reset time, stable bucket grouping, or a guaranteed reset signal for
@@ -68,9 +74,10 @@ and would optimize for scale the product does not yet have.
 
 Select Development Mode as the common denominator.
 
-1. The initial supported operating shape is current restricted Development Mode for one to five
-   named, allowlisted users. Operator documentation must state the Premium-owner and allowlist
-   requirements without asserting that every allowlisted user needs Premium.
+1. The initial supported operating shape is current restricted Development Mode for no more than
+   five authenticated users total, each named and allowlisted. The app owner must have Premium and
+   counts among those five only when they authenticate through the app. Operator documentation must
+   not imply a sixth owner slot or assert that every allowlisted user needs Premium.
 2. The supported core path may depend only on endpoints and response fields confirmed for current
    restricted Development access. Extended installations remain compatible by running that same
    path; Extended Mode is neither required nor advertised as a separate feature tier.

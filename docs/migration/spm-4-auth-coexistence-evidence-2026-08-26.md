@@ -92,10 +92,12 @@ receive the current Google identity header.
 
 Do not deploy `oauth2-proxy` to Azure. Enable Google on the public API/MCP Container App, but set
 platform authorization to allow unauthenticated requests. Container Apps owns only Google login,
-callback, session, and trusted identity headers. A narrow API bridge accepts those headers only
-after platform validation, enforces the approved email/account-link policy, and issues the existing
-application JWT cookies. The application continues to authorize REST/admin routes and continues to
-validate Spotify OAuth, JWTs, API tokens, and MCP bearer tokens.
+callback, session, and trusted identity headers. At the time of this analysis, the proposed narrow
+API bridge accepted those headers after platform validation and referred to a provisional
+email/account-link policy. ADR 0004 subsequently replaced that target with verified Google issuer
+and stable provider-subject linking; email remains only a separate allowlist input. The bridge
+issues the existing application JWT cookies. The application continues to authorize REST/admin
+routes and validate Spotify OAuth, JWTs, API tokens, and MCP bearer tokens.
 
 Use sibling custom hosts such as `app.<domain>` and `api.<domain>`. React calls the API host with
 credentials. Keep the application cookies host-only to the API where possible. The API uses an
@@ -118,8 +120,10 @@ no wildcard origins. `/.auth/*` belongs to the platform; the API owns all applic
 - `Allow unauthenticated` means the application is the authorization enforcement point. One
   missing route dependency could expose data, so a deny-by-default route inventory and negative
   tests are mandatory.
-- Google authentication alone does not preserve the current email allowlist or DB-account link;
-  the bridge must enforce both. The single-user fallback must be explicitly accepted or disabled.
+- Google authentication alone does not preserve the current email allowlist or application account
+  authorization. Under ADR 0004, the bridge must enforce the separate email allowlist and link the
+  verified Google issuer plus stable provider subject; email equality is not an account-link key,
+  and the single-user fallback is disabled at the authority switch.
 - Separate frontend/API origins require exact CORS, cookies, CSRF, callbacks, and browser tests.
 - It introduces an Azure-specific login adapter, although the application's JWT/RBAC core remains
   portable.

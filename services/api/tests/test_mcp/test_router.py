@@ -117,6 +117,29 @@ def test_call_unknown_tool(client: TestClient) -> None:
     assert "Unknown tool" in data["error"]
 
 
+def test_call_does_not_log_arguments(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
+    """Ordinary MCP logs identify the tool without recording request arguments."""
+    caplog.set_level("INFO", logger="app.mcp.router")
+
+    client.post(
+        "/mcp/call",
+        json={
+            "tool": "nonexistent.tool",
+            "arguments": {
+                "user_id": 731,
+                "playlist_id": "review-sensitive-playlist",
+                "query": "review-sensitive-query",
+            },
+        },
+    )
+
+    assert "MCP call rejected: unknown tool" in caplog.text
+    assert "nonexistent.tool" not in caplog.text
+    assert "731" not in caplog.text
+    assert "review-sensitive-playlist" not in caplog.text
+    assert "review-sensitive-query" not in caplog.text
+
+
 def test_call_history_top_artists(client: TestClient, seeded_user: int) -> None:
     resp = client.post(
         "/mcp/call",
@@ -221,8 +244,13 @@ def test_call_tool_exception_includes_message(client: TestClient, seeded_user: i
         assert "Something specific went wrong" in data["error"]
 
 
-def test_call_tool_exception_redacts_sensitive_data(client: TestClient, seeded_user: int) -> None:
+def test_call_tool_exception_redacts_sensitive_data(
+    client: TestClient,
+    seeded_user: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Sensitive data (tokens, emails, IPs) in exception messages is redacted."""
+    caplog.set_level("INFO", logger="app.mcp.router")
     with patch(
         "app.mcp.tools.spotify_tools.SpotifyToolHandlers._get_client",
         new_callable=AsyncMock,
@@ -260,3 +288,9 @@ def test_call_tool_exception_redacts_sensitive_data(client: TestClient, seeded_u
         # IPv6 redacted
         assert "2001:0db8" not in data["error"]
         assert "[redacted ipv6]" in data["error"]
+        assert "BQD1234" not in caplog.text
+        assert "user@example.com" not in caplog.text
+        assert "192.168.1.100" not in caplog.text
+        assert "secret123" not in caplog.text
+        assert "tok456" not in caplog.text
+        assert "2001:0db8" not in caplog.text

@@ -2,6 +2,7 @@
 
 import json
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -165,13 +166,15 @@ async def test_malformed_retry_after_uses_backoff_fallback() -> None:
         ]
     )
 
-    client = SpotifyClient("test-token", max_retries=1, retry_base_delay=0.0)
-    try:
-        result = await client.get_recently_played()
-    except ValueError as exc:
-        pytest.fail(f"malformed Retry-After escaped the Spotify client: {exc}")
+    client = SpotifyClient("test-token", max_retries=1, retry_base_delay=0.25)
+    with patch("shared.spotify.client.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        try:
+            result = await client.get_recently_played()
+        except ValueError as exc:
+            pytest.fail(f"malformed Retry-After escaped the Spotify client: {exc}")
 
     assert len(result.items) == 1
+    mock_sleep.assert_awaited_once_with(0.25)
 
 
 @respx.mock

@@ -313,8 +313,11 @@ Format Notes section to reflect both formats are accepted.
 - Added `memory.backfill_playlist` to Playlist Ledger table
 
 **Behavioral notes:**
-- `spotify.get_playlist` now returns a `tracks_source` field: `"api"` or `"embed"`
-- When Spotify API returns 403, tracks are fetched from Spotify's embed page (no auth required)
+- `spotify.get_playlist` returns a `tracks_source` field: `"api"`, `"api_metadata"`, `"embed"`,
+  or `"restricted"`
+- After an official items 403, tracks may be fetched from Spotify's embed page only when current
+  official metadata proves the playlist is public; private, unknown, failed, or cached-only
+  visibility returns the restricted/manual-import path instead
 - `memory.backfill_playlist` imports an existing Spotify playlist into the memory ledger in a single call — fetches tracks automatically
 - Backfill is idempotent: calling it twice for the same playlist returns the existing record
 

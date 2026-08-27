@@ -8,6 +8,11 @@ Owner evidence: after reviewing staged retirement, indefinite best-effort retent
 retirement of the unofficial playlist embed fallback, Yuval Moran selected staged retirement with
 "Decision 2 - A" on 2026-08-27 UTC.
 
+Amendment evidence: after reviewing the privacy risk of private, unknown, or stale-cached playlist
+visibility, Yuval Moran approved the exact amendment-and-fix package with "I do" on 2026-08-27 UTC.
+The fallback remains staged compatibility debt, but current official metadata must prove public
+visibility before each outbound embed request.
+
 ## Context
 
 Spotify now documents `GET /playlists/{id}/items` as available only when the authenticated user
@@ -55,9 +60,9 @@ risk for data written into persistent playlist memory.
 
 ### Retire it immediately
 
-Remove embed fetching and allow only official owned/collaborative access plus current manual
-backfill. This reaches the clean boundary fastest but abruptly removes a real workflow before a
-usable replacement exists.
+Remove embed fetching and allow only official access to owned or collaborative playlists plus
+current manual backfill. This reaches the clean boundary fastest but abruptly removes a real
+workflow before a usable replacement exists.
 
 ## Decision
 
@@ -74,7 +79,12 @@ Stage retirement of undocumented playlist embed scraping.
    outcomes. Do not log or label metrics with user IDs, playlist IDs, playlist names, track IDs,
    Spotify account data, or content metadata.
 5. Continue to prefer the official Spotify API. The fallback may run only after the accepted
-   official-access failure conditions and must remain explicitly best-effort and partial-capable.
+   official-access failure conditions and only when official metadata obtained during the current
+   request reports `public: true`. Private, null, unknown, failed, or cached-only visibility cannot
+   authorize an embed request and must fail closed to the restricted/manual-import path. Keep the
+   bounded fallback initially enabled behind its planned operator kill switch; this amendment does
+   not invent a separate compliance-approval mechanism or default it off before the replacement is
+   ready. Eligible fallback results remain explicitly best-effort and partial-capable.
 6. Before retirement, provide the smallest practical user-supplied track URI/list import path for
    non-owned reference playlists. Its public schema, validation, privacy, and persistence behavior
    require their own accepted plan and Linear delivery work before implementation.
@@ -101,6 +111,8 @@ Stage retirement of undocumented playlist embed scraping.
 - Aggregate metrics and a kill switch add small implementation and operational cost.
 - The fallback can still break or return partial data during migration; its output must never be
   described as complete solely because parsing succeeded.
+- Some genuinely public playlists require manual import when current official metadata cannot
+  prove their visibility; stale cached visibility is deliberately insufficient.
 - After retirement, automatic content retrieval is limited to Spotify's supported ownership and
   collaboration boundary; non-owned reference playlists require user-supplied input.
 
@@ -111,6 +123,8 @@ The implementation and rollout plans must include:
 - kill-switch tests proving disabled mode makes no request to `open.spotify.com`;
 - official-first tests proving embed retrieval never precedes or replaces an eligible official API
   request;
+- negative tests proving private, null, unknown, metadata-failed, and cached-only visibility make
+  no outbound embed request;
 - aggregate observability tests proving every outcome is counted without sensitive labels or log
   fields;
 - partial-result and parser-failure tests proving incomplete data cannot be reported as complete;
@@ -124,8 +138,11 @@ The implementation and rollout plans must include:
 
 ## Rollback / revisit trigger
 
-Recording this ADR changes no runtime behavior. Before the parser is retired, rollback of a kill
-switch, metrics, or replacement-import implementation may restore the preceding application
+The original acceptance of this ADR changed no runtime behavior. The 2026-08-27 amendment and its
+reviewed implementation now fail closed unless current official metadata proves `public: true`.
+Rolling that privacy gate back requires another accepted amendment; cached or unknown visibility
+must not silently regain authority. Before the parser is retired, rollback of a kill switch,
+metrics, or replacement-import implementation may otherwise restore the preceding application
 revision without changing Spotify accounts or persisted playlist memory. After retirement, do not
 silently restore scraping; a rollback that re-enables embed retrieval requires the same explicit
 owner gate and policy review as retirement.
