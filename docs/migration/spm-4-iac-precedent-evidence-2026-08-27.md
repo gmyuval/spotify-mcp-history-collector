@@ -272,9 +272,10 @@ repository evidence, not a fresh cloud verification by SPM-4.**
 
 ## Limited Bicep comparison
 
-The current LARP checkout contains **19** Bicep or Bicep-parameter files, not the 18 recorded in the
-2026-08-25 SPM-4 evidence snapshot. The extra current file is part of the later runtime/migrator
-identity split. This note corrects the count without attempting to replace the root orchestrator's
+The pinned current LARP checkout contains exactly **18** Bicep or Bicep-parameter files, matching
+the 2026-08-25 SPM-4 evidence snapshot. This total includes both files in the later
+runtime/migrator identity split. The count was revalidated at
+`89feabb9d096157365fc0a799d1793057d512189` without attempting to replace the root orchestrator's
 full LARP audit.
 
 ### What the LARP precedent already demonstrates

@@ -201,10 +201,11 @@ topology during migration.
 - **Inferred - VM:** lowest behavioural change, but retains single-host availability and
   patch/backup/capacity work and creates a strong risk that the managed split is postponed. The
   owner rejected it as a standing target or fallback.
-- **Accepted - Container Apps:** separate warm API/MCP and collector Container Apps are the target.
+- **Accepted - Container Apps:** the API/MCP Container App starts at `minReplicas: 0` and
+  `maxReplicas: 1`; the collector runs one finite scheduled Container Apps Job every ten minutes.
   Revision rollback and managed identity improve application operations. The 240-second ingress
-  timeout, auth edge, shared upload mount, and worker lifecycle remain release gates; a failed gate
-  blocks or triggers an ADR amendment rather than silently switching to a VM.
+  timeout, cold starts, auth edge, transient Blob handoff, and finite-job lifecycle remain release
+  gates; a failed gate blocks or triggers an ADR amendment rather than silently switching to a VM.
 - **Accepted - hybrid product shape:** Static Web Apps separates React delivery from backend
   compute, while API/MCP and collector use workload-specific Container Apps. It costs more topology
   and origin/auth validation but supports contract-first staged replacement.

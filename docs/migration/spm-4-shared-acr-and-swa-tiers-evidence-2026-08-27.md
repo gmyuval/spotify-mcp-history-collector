@@ -249,7 +249,7 @@ serviceName eq 'Container Registry' and armRegionName eq 'israelcentral' and pri
 The selected current meters were Basic Registry Unit `$0.1666/1 day`, Standard Registry Unit
 `$0.6666/1 day`, Premium Registry Unit `$1.6666/1 day`, and Data Stored `$0.10/GB-month`.
 
-## ACR monthly cost adjustment
+## Superseded warm-topology ACR monthly cost adjustment
 
 The existing cost note includes ACR Basic at `$5.0674/month` in low and expected cases, and
 `$6.0674/month` in the conservative case because that case adds 10 GiB excess storage
@@ -261,10 +261,11 @@ The existing cost note includes ACR Basic at `$5.0674/month` in low and expected
 | Already-paid shared registry, included storage has headroom | `-$5.0674/month`; conservative case `-$6.0674` if all additional 10 GiB also fits included shared storage | Low `$69.84-$74.77`; expected `$91.22-$96.62`; conservative `$335.43` if excess is absorbed. |
 | Already-paid shared registry, but Spotify's conservative 10 GiB is excess | `-$5.0674/month`; retain `$1.00/month` excess storage | Low `$69.84-$74.77`; expected `$91.22-$96.62`; conservative `$336.43`. |
 
-These adjusted totals subtract exact line items from the cost note's displayed rounded totals, so
-they are scenario sensitivities, not a new subscription quote. The initial production forecast
-would move from about `$105` to about `$100`; the `$130` planning envelope should remain until
-measured use and shared-registry ownership are proven.
+These preserved adjusted totals subtract exact line items from the cost note's superseded warm
+topology, so they are historical scenario sensitivities, not a new subscription quote or the
+approved budget. The later owner-approved small-cohort model replaces them with an approximately
+`$40/month` forecast, a `$31-$46/month` sensitivity, and a `$60/month` app budget; see the
+[current cost estimate](spm-4-azure-cost-estimate-2026-08-27.md#owner-approved-small-cohort-revision---2026-08-27).
 
 ## Static Web Apps Free versus Standard
 
@@ -421,7 +422,7 @@ automatic or pre-authorized upgrade threshold; and owner acceptance of the no-SL
 window. A practical owner threshold should be chosen below 100 GB after measuring other apps and
 telemetry delay.
 
-### Cost sensitivity
+### Superseded warm-topology cost sensitivity
 
 | Decision | Exact line-item adjustment | Approximate production total from the displayed baseline |
 |---|---:|---:|
@@ -430,10 +431,12 @@ telemetry delay.
 | Free plus already-paid shared ACR, included storage headroom | `-$14.9674/month` in low/expected; `-$15.9674` in the conservative case if its 10 GiB excess also fits | Low `$59.94-$64.87`; expected `$81.32-$86.72`; conservative `$325.53` if excess is absorbed. |
 | Free plus shared ACR, conservative excess retained | `-$14.9674/month` | Low `$59.94-$64.87`; expected `$81.32-$86.72`; conservative `$326.53`. |
 
-Free alone moves the approximately `$105` production forecast to about `$95`; Free plus the fixed
-shared-registry saving moves it to about `$90`. Keep the `$130` combined planning envelope until
-subscription grants, shared-resource headroom, and 14/30-day measured use are known. The user's
-stated current-cost benchmark remains user-provided context and is not re-queried here.
+In the superseded warm model, Free alone moved the approximately `$105` production forecast to
+about `$95`, while Free plus the fixed shared-registry saving moved it to about `$90`. These values
+and the old `$130` envelope are retained only as historical sensitivity evidence. The approved
+small-cohort target instead uses an approximately `$40/month` forecast, a `$31-$46/month`
+sensitivity, and a `$60/month` app budget, with re-estimation after 14 and 30 complete days. The
+user's stated current-cost benchmark remains user-provided context and is not re-queried here.
 
 ## Measured, inferred, and unresolved summary
 
