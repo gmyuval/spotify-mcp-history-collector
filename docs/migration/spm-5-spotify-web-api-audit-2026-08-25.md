@@ -257,29 +257,19 @@ contraction gates pass.
 - Current Development/Extended user-limit operator guidance, correction of internal import user ID,
   and documented audio-enrichment environment settings.
 
-## Plan-first and decision-blocked work
+## Plan-first decision boundary
 
-1. Implementing ADR 0003's `account_id` expand/claim/authority-switch flow, including the finite
-   cohort plan, conflict recovery, migrations, monitoring, and rollback. Profile retention and
-   public API compatibility remain separate decisions.
-2. Implementing ADR 0004's stable Google provider link, proof-of-control cohort rollout,
-   `user-read-email` removal, profile-ingestion stop, and separately authorized contraction.
-   One-versus-both playlist modification scopes remain a separate owner decision.
-3. Public MCP/API Search limits/defaults, deprecated-field shape, playlist warning text, episode
-   shape, or quota-exhaustion response changes.
-4. Supported new Development, postponed/grandfathered Development, Extended, or multi-mode contract.
-5. Coordinated quota budgeting across developer accounts and per-user credentials.
-6. Audio Features default/order, paid Soundcharts opt-in/cost/credentials/cache policy, and
-   cross-cycle disablement.
-7. Support or retirement of the unofficial embed scrape.
-8. Mode-based removal of batch track/artist calls while Spotify's existing-Development guidance
-   remains contradictory.
+This audit records measured gaps and decision boundaries; it is not a work queue. Linear SPM-5 is
+the sole tracker for their disposition. ADR 0003 accepts the staged `account_id` identity target,
+and ADR 0004 accepts provider-identity separation and minimized profile retention. Neither ADR
+authorizes its implementation, rollout, public compatibility change, or data contraction.
 
-Items 1 and 2 have accepted identity and retention decisions but still need separately reviewed
-implementation, rollout, compatibility, and contraction plans. The playlist modification-scope
-choice in item 2 and items 3 through 8 still need owner decisions and the applicable accepted ADR
-before implementation. The ADR index now assigns 0004 to provider identity/profile retention and
-reserves 0005 next.
+No behavior change is authorized by this audit for public MCP/API defaults and shapes, supported
+Spotify app modes and quota budgeting, playlist modification scopes, episode or unofficial-embed
+handling, batch endpoint retirement, or Audio Features provider/default policy. Each remains behind
+the applicable owner-approved decision and plan-first gate recorded through Linear before
+implementation. The ADR index assigns 0004 to provider identity/profile retention and reserves
+0005 next.
 
 ## Validation boundary
 

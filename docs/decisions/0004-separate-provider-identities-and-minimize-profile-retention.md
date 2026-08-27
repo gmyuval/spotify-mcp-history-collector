@@ -96,8 +96,7 @@ Select data-minimized provider-identity separation.
    end, communication, recovery, and rollback. Reaching the end without linking every active user
    blocks the authority switch and returns the exception to the owner; it does not extend
    email-only linking indefinitely.
-7. After every active cohort member has both an unambiguous ADR 0003 Spotify link and an explicit
-   Google provider link:
+7. After every active cohort member has an explicit, unambiguous Google provider link:
    - make the stable Google provider link authoritative for browser-to-application exchange;
    - remove `user-read-email` from new Spotify authorization requests and reauthorize the active
      cohort so stored grants no longer depend on that scope;
