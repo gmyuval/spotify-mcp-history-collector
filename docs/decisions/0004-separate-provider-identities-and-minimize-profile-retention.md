@@ -182,5 +182,7 @@ data, or privacy/legal requirements demand a different retention period.
   Spotify-side active-cohort migration.
 - [ADR 0005](0005-support-spotify-development-mode-as-the-common-denominator.md) selects the restricted
   Development common denominator while leaving the public Search contract separately gated.
+- [ADR 0006](0006-bundle-both-playlist-modification-scopes-for-write-access.md) retains both
+  demonstrated playlist-modification scopes as one initial product capability.
 - Public removal or renaming of `spotify_user_id`, email, country, or product response fields
   remains part of the dedicated public MCP/API compatibility decision.

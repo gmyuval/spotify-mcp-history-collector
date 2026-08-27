@@ -142,5 +142,7 @@ identity surface.
   provider identity separation, Spotify profile retention, and the `user-read-email` target.
 - [ADR 0005](0005-support-spotify-development-mode-as-the-common-denominator.md) subsequently resolves
   the supported app-mode and internal quota-policy target.
-- The SPM-5 audit's remaining public MCP/API, episode/embed, playlist-scope, and Audio Features
-  choices require their own accepted decisions before implementation.
+- [ADR 0006](0006-bundle-both-playlist-modification-scopes-for-write-access.md) subsequently resolves
+  playlist modification-scope semantics for the initial product.
+- The SPM-5 audit's remaining public MCP/API, episode/embed, and Audio Features choices require
+  their own accepted decisions before implementation.

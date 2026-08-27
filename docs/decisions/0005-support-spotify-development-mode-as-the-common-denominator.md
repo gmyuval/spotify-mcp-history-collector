@@ -117,8 +117,8 @@ Select Development Mode as the common denominator.
   be promised from public documentation alone.
 - Batch track and artist client code becomes retirement debt rather than a supported capability;
   its absence from production call paths makes that the YAGNI-aligned target.
-- Audio Features, episode/embed handling, playlist scopes, and public MCP/API compatibility remain
-  unresolved rather than being decided indirectly by an app-mode choice.
+- Audio Features, episode/embed handling, playlist scopes, and public MCP/API compatibility are not
+  decided indirectly by an app-mode choice; playlist scopes are subsequently resolved by ADR 0006.
 
 ## Validation
 
@@ -161,6 +161,8 @@ caching, coalescing, prioritization, and background deferral.
   bounded active-cohort reauthorization path.
 - [ADR 0004](0004-separate-provider-identities-and-minimize-profile-retention.md) governs provider
   identity separation, profile retention, and OAuth-scope contraction.
+- [ADR 0006](0006-bundle-both-playlist-modification-scopes-for-write-access.md) subsequently bundles
+  both playlist-modification scopes for every write-enabled initial user.
 - The dedicated public MCP/API compatibility decision owns Search limits/defaults, outward quota
-  errors, and public warning text. Playlist modification scopes, episode/embed behavior, and Audio
-  Features provider/default policy remain separate owner decisions.
+  errors, and public warning text. Episode/embed behavior and Audio Features provider/default
+  policy remain separate owner decisions.

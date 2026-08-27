@@ -133,10 +133,13 @@ Configured scopes in `services/api/src/app/constants.py`:
 | `playlist-modify-public` | Public playlist mutations. |
 | `playlist-modify-private` | Private playlist mutations. |
 
-The MCP write checker currently requires both modification scopes for every playlist mutation.
-Official pages associate scopes with playlist visibility, but reviewed sources do not state the
-exact boolean combination for a token with only one modify scope. Any correction changes an OAuth
-authorization boundary and is blocked pending an accepted decision.
+[ADR 0006](../decisions/0006-bundle-both-playlist-modification-scopes-for-write-access.md)
+accepts the current complete-bundle policy: every initial write-enabled user grants both
+modification scopes, and every playlist mutation fails locally if either is absent. This avoids a
+metadata request or undocumented visibility rule while preserving the complete public-and-private
+feature set. The bundle is not proof of ownership or other resource authority. It formalizes
+current behavior and authorizes no OAuth rollout, provider/account access, or public-contract
+change.
 
 ## Rate-limit and quota audit
 
@@ -271,16 +274,17 @@ implementation work; Audio Features remains a separate provider/default decision
 
 This audit records measured gaps and decision boundaries; it is not a work queue. Linear SPM-5 is
 the sole tracker for their disposition. ADR 0003 accepts the staged `account_id` identity target,
-ADR 0004 accepts provider-identity separation and minimized profile retention, and ADR 0005 accepts
-the restricted Development common denominator and internal quota-policy target. None authorizes
-implementation, rollout, public compatibility change, or data contraction.
+ADR 0004 accepts provider-identity separation and minimized profile retention, ADR 0005 accepts the
+restricted Development common denominator and internal quota-policy target, and ADR 0006 accepts
+the complete playlist-write scope bundle. None authorizes implementation, rollout, public
+compatibility change, or data contraction.
 
 No behavior change is authorized by this audit for public MCP/API defaults and shapes, app-mode or
-quota-policy implementation, playlist modification scopes, episode or unofficial-embed handling,
+quota-policy implementation, playlist-scope implementation, episode or unofficial-embed handling,
 batch endpoint retirement, or Audio Features provider/default policy. The unresolved public,
-playlist-scope, episode/embed, and Audio Features choices remain behind owner-approved decisions;
-all implementation remains behind the applicable plan-first gate recorded through Linear. The ADR
-index assigns 0005 to the accepted app-mode/quota policy and reserves 0006 next.
+episode/embed, and Audio Features choices remain behind owner-approved decisions; all
+implementation remains behind the applicable plan-first gate recorded through Linear. The ADR
+index assigns 0006 to the accepted playlist-scope policy and reserves 0007 next.
 
 ## Validation boundary
 

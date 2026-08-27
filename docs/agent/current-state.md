@@ -62,10 +62,16 @@ priority, resumable background deferral, and sanitized budget-pressure observabi
 implementation gates. No dashboard/account access, mode change, or quota-policy implementation has
 occurred.
 
-Public MCP/API compatibility, playlist modification-scope semantics, episode/embed behavior, and
-Audio Features provider/default policy remain decision-blocked. Implementing the accepted identity,
-OAuth, profile-retention, app-mode/quota, and contraction decisions remains plan-first. Do not infer
-production entitlements or account state from mocked tests or public documentation.
+[Accepted ADR 0006](../decisions/0006-bundle-both-playlist-modification-scopes-for-write-access.md)
+retains `playlist-modify-public` and `playlist-modify-private` as one complete write-capability
+bundle for every initial user. Partial grants fail locally before a Spotify request; the bundle is
+not proof of playlist ownership or other resource authority. This formalizes current behavior and
+does not authorize OAuth rollout or provider/account access.
+
+Public MCP/API compatibility, episode/embed behavior, and Audio Features provider/default policy
+remain decision-blocked. Implementing the accepted identity, OAuth, profile-retention,
+app-mode/quota, and contraction decisions remains plan-first. Do not infer production entitlements
+or account state from mocked tests or public documentation.
 
 ## Observed service layout
 
