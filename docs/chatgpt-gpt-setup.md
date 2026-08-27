@@ -314,11 +314,13 @@ Format Notes section to reflect both formats are accepted.
 
 **Behavioral notes:**
 - `spotify.get_playlist` returns a `tracks_source` field: `"api"`, `"api_metadata"`, `"embed"`,
-  or `"restricted"`
+  or `"restricted"`; it never returns `"manual"`
 - After an official items 403, tracks may be fetched from Spotify's embed page only when current
   official metadata proves the playlist is public; private, unknown, failed, or cached-only
   visibility returns the restricted/manual-import path instead
-- `memory.backfill_playlist` imports an existing Spotify playlist into the memory ledger in a single call — fetches tracks automatically
+- When creating a new ledger entry, `memory.backfill_playlist` reports `tracks_source` as `"api"`,
+  `"api_metadata"`, `"embed"`, or `"restricted"` when it fetches through `spotify.get_playlist`,
+  and `"manual"` only when the caller supplies `track_ids` and `name`
 - Backfill is idempotent: calling it twice for the same playlist returns the existing record
 
 ### Phase 12 — Admin-Configurable Settings + Private Playlist Fix (current)

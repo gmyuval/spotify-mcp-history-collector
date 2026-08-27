@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import math
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -136,7 +137,10 @@ class SpotifyClient:
                 delay = self._retry_base_delay * (2**attempt)
                 if retry_after_header:
                     try:
-                        delay = float(retry_after_header)
+                        retry_after = float(retry_after_header)
+                        if not math.isfinite(retry_after) or retry_after < 0:
+                            raise ValueError
+                        delay = retry_after
                     except ValueError:
                         logger.warning("Spotify returned an invalid Retry-After header; using exponential backoff")
                 last_retry_after = delay

@@ -474,19 +474,19 @@ services/
 
 ## Testing
 
-The current branch collects 878 package tests plus the dependency-free contract suite. The
+The current branch collects 882 package tests plus the dependency-free contract suite. The
 package total is the measured pytest collection; it supersedes the earlier 874-function static
 orientation count.
 
 | Suite | Tests | Command |
 |---|---|---|
 | Shared | 25 | `uv run --locked pytest services/shared/tests/` |
-| API | 632 (625 unit + 7 integration) | `uv run --locked pytest services/api/tests/` |
+| API | 636 (629 unit + 7 integration) | `uv run --locked pytest services/api/tests/` |
 | Collector | 53 | `uv run --locked pytest services/collector/tests/` |
 | Admin Frontend | 66 | `uv run --locked pytest services/frontend/tests/` |
 | Explorer | 102 | `uv run --locked pytest services/explorer/tests/` |
 | Dependency-free contracts | 206 (4 skipped) | `uv run --locked python -m unittest discover -s tests/contracts -p "test_*.py"` |
-| **All package suites** | **878** | `make test` |
+| **All package suites** | **882** | `make test` |
 
 **Important:** Run package suites separately (or via `make test`) because their fixtures can
 conflict when collected together from the repository root. `make check` adds the uv-workflow contract,

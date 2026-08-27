@@ -157,11 +157,16 @@ async def test_quota_exhaustion_raises_without_retrying() -> None:
 
 
 @respx.mock
-async def test_malformed_retry_after_uses_backoff_fallback() -> None:
-    """A malformed Retry-After value cannot escape as ValueError."""
+@pytest.mark.parametrize(
+    "retry_after",
+    ["not-a-number", "-1", "nan", "inf", "-inf"],
+    ids=["malformed", "negative", "nan", "positive-infinity", "negative-infinity"],
+)
+async def test_invalid_retry_after_uses_backoff_fallback(retry_after: str) -> None:
+    """Malformed, negative, or non-finite Retry-After values use bounded backoff."""
     respx.get("https://api.spotify.com/v1/me/player/recently-played").mock(
         side_effect=[
-            httpx.Response(429, headers={"Retry-After": "not-a-number"}),
+            httpx.Response(429, headers={"Retry-After": retry_after}),
             httpx.Response(200, json=_recently_played_json(1)),
         ]
     )
@@ -171,7 +176,7 @@ async def test_malformed_retry_after_uses_backoff_fallback() -> None:
         try:
             result = await client.get_recently_played()
         except ValueError as exc:
-            pytest.fail(f"malformed Retry-After escaped the Spotify client: {exc}")
+            pytest.fail(f"invalid Retry-After escaped the Spotify client: {exc}")
 
     assert len(result.items) == 1
     mock_sleep.assert_awaited_once_with(0.25)
