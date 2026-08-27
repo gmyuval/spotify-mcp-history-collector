@@ -149,18 +149,21 @@ an explicit removal gate.
    - Changing a real ChatGPT/Claude configuration, using credentials or real Spotify data, and
      exercising production traffic remain separately authorized external effects.
 
-6. Add privacy-safe version observability before migration. Count authenticated calls, successes,
-   error codes, and latency by contract version and tool class. Do not place user IDs, account IDs,
-   tokens, playlist or track IDs, queries, arguments, result data, or other PII in metric labels or
-   ordinary logs. V1 deprecation notices may use headers or server metadata only when they do not
-   alter the frozen response body.
+6. Add privacy-safe version observability before migration. Count every non-health request to a v1
+   route, including requests rejected during authentication, and classify aggregate authentication
+   outcome, successes, error codes, and latency by contract version and tool class. This prevents a
+   dormant client returning with an expired credential from disappearing from retirement evidence.
+   Do not place user IDs, account IDs, tokens, playlist or track IDs, queries, arguments, result
+   data, or other PII in metric labels or ordinary logs. V1 deprecation notices may use headers or
+   server metadata only when they do not alter the frozen response body.
 
 7. Retire v1 as a planned contraction, not automatically:
 
    - every known consumer is inventoried, migrated, and verified on v2;
    - the owner confirms that the inventory includes every intended connection;
-   - authenticated v1 call telemetry shows zero calls for 30 consecutive days after the last known
-     consumer migrates; any v1 call resets the observation window and is investigated;
+   - privacy-safe v1 route telemetry shows zero non-health requests for 30 consecutive days after
+     the last known consumer migrates, including zero requests rejected during authentication; any
+     such request resets the observation window and is investigated;
    - v2 has no unresolved migration incident and all contract, security, and client-compatibility
      gates are green;
    - a tested rollback can restore the v1 route from a known repository/deployment revision; and
