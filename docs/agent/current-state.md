@@ -54,11 +54,18 @@ and puts legacy-value deletion behind public-nullability, rollback, finite-cohor
 authorized contraction gates. `user-read-private` remains only while an accepted Search contract
 requires it. No implementation or data contraction has occurred.
 
-Public MCP/API compatibility, supported Spotify app modes and quota policy, playlist modification
-scope semantics, episode/embed behavior, and Audio Features provider/default policy remain
-decision-blocked. Implementing the accepted identity, OAuth, profile-retention, and contraction
-decisions remains plan-first. Do not infer production entitlements or account state from mocked
-tests or public documentation.
+[Accepted ADR 0005](../decisions/0005-support-spotify-development-mode-as-the-common-denominator.md)
+selects current restricted Development Mode as the one-to-five-user common denominator. Extended
+installations run the same path; postponed legacy access and Extended-only endpoints are not product
+contracts. `QUOTA_EXCEEDED` remains non-retrying, while coordinated caching, coalescing, foreground
+priority, resumable background deferral, and sanitized budget-pressure observability are
+implementation gates. No dashboard/account access, mode change, or quota-policy implementation has
+occurred.
+
+Public MCP/API compatibility, playlist modification-scope semantics, episode/embed behavior, and
+Audio Features provider/default policy remain decision-blocked. Implementing the accepted identity,
+OAuth, profile-retention, app-mode/quota, and contraction decisions remains plan-first. Do not infer
+production entitlements or account state from mocked tests or public documentation.
 
 ## Observed service layout
 

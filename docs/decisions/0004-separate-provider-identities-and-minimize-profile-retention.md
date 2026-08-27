@@ -180,5 +180,7 @@ data, or privacy/legal requirements demand a different retention period.
   Container Apps Google-authentication bridge and leaves this account-link policy as a release gate.
 - [ADR 0003](0003-adopt-staged-account-id-migration.md) owns Spotify `account_id` linking and the
   Spotify-side active-cohort migration.
+- [ADR 0005](0005-support-spotify-development-mode-as-the-common-denominator.md) selects the restricted
+  Development common denominator while leaving the public Search contract separately gated.
 - Public removal or renaming of `spotify_user_id`, email, country, or product response fields
   remains part of the dedicated public MCP/API compatibility decision.

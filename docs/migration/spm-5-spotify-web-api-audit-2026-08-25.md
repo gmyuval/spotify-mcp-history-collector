@@ -169,9 +169,13 @@ The complete repository retry inventory is:
   `TokenRefreshError` and persists returned scope plus a rotated refresh token. The collector raises
   `RuntimeError` and persists a rotated refresh token, but not returned scope.
 
-The repository still has no quota-mode setting or metadata showing which per-user Client IDs share
-a developer quota pool. Coordinated quota pacing and a new outward MCP/API error contract require
-an accepted operating-mode/public-contract decision.
+[ADR 0005](../decisions/0005-support-spotify-development-mode-as-the-common-denominator.md)
+selects the current restricted Development surface as the common denominator for the initial
+one-to-five-user product. Extended installations run the same path, while postponed legacy access
+and Extended-only endpoints are not supported contracts. It keeps `QUOTA_EXCEEDED` terminal for the
+current operation and requires coordinated caching, coalescing, foreground priority, jittered and
+resumable background deferral, and sanitized developer-budget observability before release. It does
+not authorize implementation or change the outward MCP/API rate-limit shape.
 
 ## Search maintenance and public boundary
 
@@ -248,6 +252,12 @@ cohort is explicitly linked, and stops ingesting Spotify email, country, and pro
 values remain frozen until the public-nullability, rollback, cohort, and separately authorized
 contraction gates pass.
 
+[ADR 0005](../decisions/0005-support-spotify-development-mode-as-the-common-denominator.md)
+accepts restricted Development Mode as the common denominator, treats the unused batch track and
+artist methods as outside the target supported surface, and keeps Extended-only or postponed legacy
+access out of the product contract. Batch-method retirement and quota coordination remain reviewed
+implementation work; Audio Features remains a separate provider/default decision.
+
 ## Delivered safe maintenance
 
 - Non-retrying internal `QUOTA_EXCEEDED` classification that preserves the existing outward
@@ -261,15 +271,16 @@ contraction gates pass.
 
 This audit records measured gaps and decision boundaries; it is not a work queue. Linear SPM-5 is
 the sole tracker for their disposition. ADR 0003 accepts the staged `account_id` identity target,
-and ADR 0004 accepts provider-identity separation and minimized profile retention. Neither ADR
-authorizes its implementation, rollout, public compatibility change, or data contraction.
+ADR 0004 accepts provider-identity separation and minimized profile retention, and ADR 0005 accepts
+the restricted Development common denominator and internal quota-policy target. None authorizes
+implementation, rollout, public compatibility change, or data contraction.
 
-No behavior change is authorized by this audit for public MCP/API defaults and shapes, supported
-Spotify app modes and quota budgeting, playlist modification scopes, episode or unofficial-embed
-handling, batch endpoint retirement, or Audio Features provider/default policy. Each remains behind
-the applicable owner-approved decision and plan-first gate recorded through Linear before
-implementation. The ADR index assigns 0004 to provider identity/profile retention and reserves
-0005 next.
+No behavior change is authorized by this audit for public MCP/API defaults and shapes, app-mode or
+quota-policy implementation, playlist modification scopes, episode or unofficial-embed handling,
+batch endpoint retirement, or Audio Features provider/default policy. The unresolved public,
+playlist-scope, episode/embed, and Audio Features choices remain behind owner-approved decisions;
+all implementation remains behind the applicable plan-first gate recorded through Linear. The ADR
+index assigns 0005 to the accepted app-mode/quota policy and reserves 0006 next.
 
 ## Validation boundary
 

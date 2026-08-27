@@ -11,7 +11,8 @@ They do not grant implementation authority and do not replace Linear work tracki
 | 0002 | [Choose the Azure target architecture and migration boundaries](0002-azure-target-architecture-and-migration-boundaries.md) | Accepted |
 | 0003 | [Adopt a staged `account_id` identity migration](0003-adopt-staged-account-id-migration.md) | Accepted |
 | 0004 | [Separate provider identities and minimize Spotify profile retention](0004-separate-provider-identities-and-minimize-profile-retention.md) | Accepted |
+| 0005 | [Support Spotify Development Mode as the common denominator](0005-support-spotify-development-mode-as-the-common-denominator.md) | Accepted |
 
 ## Next number
 
-0005
+0006
