@@ -88,8 +88,8 @@ credentials, spend, real tracks, deployment, or production state were accessed o
 freezes the current Action and native MCP contract as v1, selects explicit versioned v2 endpoints
 for corrected Search, structured errors, and playlist-fidelity semantics, and targets evidence-gated
 v1 retirement. The current runtime remains v1-only. V2 implementation, live-client migration, the
-30-day zero-v1-call observation window, and eventual v1 removal remain separately reviewed and
-authorized work.
+30-day observation window with zero non-health v1 requests, and eventual v1 removal remain
+separately reviewed and authorized work.
 
 Implementing the accepted identity, OAuth, profile-retention, app-mode/quota, playlist-media, and
 embed-retirement decisions remains plan-first, as do v2 migration and operationalizing the

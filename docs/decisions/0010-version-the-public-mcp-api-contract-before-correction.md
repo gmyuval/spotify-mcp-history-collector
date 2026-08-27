@@ -186,8 +186,8 @@ an explicit removal gate.
   to v1.
 - The small number of known connections makes one-at-a-time migration practical.
 - Temporary dual maintenance increases route, schema, documentation, and test work.
-- The 30-day zero-use window may dominate the retirement schedule, but it is inexpensive and
-  protects dormant clients.
+- The 30-day window with zero non-health v1 requests may dominate the retirement schedule, but it
+  is inexpensive and protects dormant clients.
 - V1 cannot receive new product features, preventing the migration bridge from becoming a permanent
   second product surface.
 - V2's source-neutral playlist fidelity contract avoids another public breaking change when the
@@ -217,8 +217,8 @@ The implementation and rollout plans must include:
 - a named consumer inventory and per-consumer migration checklist in Linear, not in this ADR;
 - authorized compatibility evidence for each real client before its cutover, plus rollback proof;
   and
-- retirement evidence covering owner-confirmed inventory, the complete 30-day zero-call window,
-  v2 health, rollback readiness, and fresh Standards and Spec reviews.
+- retirement evidence covering owner-confirmed inventory, the complete 30-day window with zero
+  non-health v1 requests, v2 health, rollback readiness, and fresh Standards and Spec reviews.
 
 ## Rollback / revisit trigger
 
