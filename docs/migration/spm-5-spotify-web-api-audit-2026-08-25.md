@@ -126,8 +126,8 @@ Configured scopes in `services/api/src/app/constants.py`:
 |---|---|
 | `user-read-recently-played` | Polling and initial sync. |
 | `user-top-read` | Top artists and tracks. |
-| `user-read-email` | Persists `/me` email and supports the Google email-to-user exchange. |
-| `user-read-private` | Persists country/product and is listed by the current Search reference. |
+| `user-read-email` | Currently persists `/me` email and supports the email-to-user Google exchange. [ADR 0004](../decisions/0004-separate-provider-identities-and-minimize-profile-retention.md) selects removal after every active user has an explicit stable Google provider link. |
+| `user-read-private` | Currently persists country/product and is listed by the current Search reference. ADR 0004 stops profile-field retention but retains this scope only while an accepted Search contract requires it. |
 | `playlist-read-private` | Private playlists and local 403 diagnosis. |
 | `playlist-read-collaborative` | Collaborative playlists in the current-user list. |
 | `playlist-modify-public` | Public playlist mutations. |
@@ -241,6 +241,13 @@ rollout gate. It preserves `spotify_user_id` storage and public fields pending s
 and compatibility decisions. No schema, OAuth behavior, production account, or user data was
 changed by the audit or ADR.
 
+[ADR 0004](../decisions/0004-separate-provider-identities-and-minimize-profile-retention.md)
+separates the Google provider subject from the Spotify identity and internal user, prohibits
+email-only or single-user automatic linking, selects removal of `user-read-email` after the active
+cohort is explicitly linked, and stops ingesting Spotify email, country, and product. Existing
+values remain frozen until the public-nullability, rollback, cohort, and separately authorized
+contraction gates pass.
+
 ## Delivered safe maintenance
 
 - Non-retrying internal `QUOTA_EXCEEDED` classification that preserves the existing outward
@@ -255,8 +262,9 @@ changed by the audit or ADR.
 1. Implementing ADR 0003's `account_id` expand/claim/authority-switch flow, including the finite
    cohort plan, conflict recovery, migrations, monitoring, and rollback. Profile retention and
    public API compatibility remain separate decisions.
-2. OAuth scope or profile-data storage changes, Google email exchange, and one-versus-both playlist
-   modification scopes.
+2. Implementing ADR 0004's stable Google provider link, proof-of-control cohort rollout,
+   `user-read-email` removal, profile-ingestion stop, and separately authorized contraction.
+   One-versus-both playlist modification scopes remain a separate owner decision.
 3. Public MCP/API Search limits/defaults, deprecated-field shape, playlist warning text, episode
    shape, or quota-exhaustion response changes.
 4. Supported new Development, postponed/grandfathered Development, Extended, or multi-mode contract.
@@ -267,9 +275,11 @@ changed by the audit or ADR.
 8. Mode-based removal of batch track/artist calls while Spotify's existing-Development guidance
    remains contradictory.
 
-Item 1 has an accepted identity decision but still needs a separately reviewed implementation and
-rollout plan. Items 2 through 8 need owner decisions and the applicable accepted ADR before
-implementation. The ADR index now assigns 0003 to the identity decision and reserves 0004 next.
+Items 1 and 2 have accepted identity and retention decisions but still need separately reviewed
+implementation, rollout, compatibility, and contraction plans. The playlist modification-scope
+choice in item 2 and items 3 through 8 still need owner decisions and the applicable accepted ADR
+before implementation. The ADR index now assigns 0004 to provider identity/profile retention and
+reserves 0005 next.
 
 ## Validation boundary
 

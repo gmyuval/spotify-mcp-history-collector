@@ -6,6 +6,12 @@ This note evaluates the browser-authentication edge for ADR 0002. It does not au
 apply, Google or Spotify console mutation, credential access, production access, public-contract
 change, or deployment.
 
+Subsequent decision: [ADR 0004](../decisions/0004-separate-provider-identities-and-minimize-profile-retention.md)
+resolves the account-link and single-user-fallback gates. References below to existing-user email
+matching describe the measured baseline or the then-provisional minimum adapter, not the accepted
+target. The target uses a verified stable Google provider subject, never email equality, and
+disables the single-user fallback at its authority switch.
+
 - **Measured** - observed in this repository at the current SPM-4 worktree head.
 - **Official** - stated by current Microsoft or oauth2-proxy documentation retrieved on
   2026-08-26 UTC.

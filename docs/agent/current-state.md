@@ -46,10 +46,19 @@ preserves internal `users.id`, requires a finite all-active-cohort reauthorizati
 closed on conflicting identity evidence, and initially preserves `spotify_user_id` compatibility.
 No schema, OAuth, production-account, token, credential, or user-data change has been made.
 
-OAuth/profile retention, Google email exchange, public MCP/API compatibility, supported Spotify
-app modes and quota policy, episode/embed behavior, and Audio Features provider/default policy
-remain decision-blocked. Do not infer production entitlements or account state from mocked tests
-or public documentation.
+[Accepted ADR 0004](../decisions/0004-separate-provider-identities-and-minimize-profile-retention.md)
+separates the stable Google provider identity from Spotify identity and internal `users.id`. It
+prohibits email-only and single-user automatic linking, removes `user-read-email` only after every
+active user has an explicit stable provider link, stops ingesting Spotify email/country/product,
+and puts legacy-value deletion behind public-nullability, rollback, finite-cohort, and separately
+authorized contraction gates. `user-read-private` remains only while an accepted Search contract
+requires it. No implementation or data contraction has occurred.
+
+Public MCP/API compatibility, supported Spotify app modes and quota policy, playlist modification
+scope semantics, episode/embed behavior, and Audio Features provider/default policy remain
+decision-blocked. Implementing the accepted identity, OAuth, profile-retention, and contraction
+decisions remains plan-first. Do not infer production entitlements or account state from mocked
+tests or public documentation.
 
 ## Observed service layout
 

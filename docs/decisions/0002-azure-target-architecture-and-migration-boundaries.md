@@ -548,6 +548,10 @@ separately approved migration/rollback plan.
 
 ## Related decisions
 
+- [ADR 0004](0004-separate-provider-identities-and-minimize-profile-retention.md) resolves ADR
+  0002's deferred Google account-link and single-user-fallback policy: use a verified stable
+  provider subject, never email equality, and keep provider-token storage disabled.
+
 - [ADR 0001 - Use merge commits by default for pull requests](0001-pull-request-merge-method-policy.md)
 - SPM-20 supplies the dated estate baseline.
 - SPM-6 must provide MCP compatibility evidence before the Container Apps API/MCP release.

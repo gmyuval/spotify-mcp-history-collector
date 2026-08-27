@@ -99,8 +99,9 @@ Adopt the bounded staged additive migration.
   to silently joining accounts or duplicating user data.
 - Dormant or quarantined legacy rows may retain a null `account_id`; their retention and eventual
   disposition remain a separate privacy/data decision.
-- Profile retention, OAuth scopes, Google email exchange, and public MCP/API compatibility are not
-  resolved by this ADR.
+- Profile retention, OAuth scopes, and Google email exchange are resolved separately by
+  [ADR 0004](0004-separate-provider-identities-and-minimize-profile-retention.md). Public MCP/API
+  compatibility remains outside this ADR.
 
 ## Validation
 
@@ -137,5 +138,7 @@ identity surface.
 
 - [ADR 0002](0002-azure-target-architecture-and-migration-boundaries.md) requires contract-first
   staged replacement and keeps authentication, data migration, and public compatibility plan-first.
-- The SPM-5 audit's remaining OAuth/profile retention, public MCP/API, app-mode/quota, episode/embed,
-  and Audio Features choices require their own accepted decisions before implementation.
+- [ADR 0004](0004-separate-provider-identities-and-minimize-profile-retention.md) subsequently resolves
+  provider identity separation, Spotify profile retention, and the `user-read-email` target.
+- The SPM-5 audit's remaining public MCP/API, app-mode/quota, episode/embed, playlist-scope, and
+  Audio Features choices require their own accepted decisions before implementation.
