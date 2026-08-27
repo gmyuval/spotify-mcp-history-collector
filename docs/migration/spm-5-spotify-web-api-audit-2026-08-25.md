@@ -62,7 +62,7 @@ named.
 | Browser `GET accounts.spotify.com/authorize` | `services/api/src/app/auth/service.py`; code, redirect URI, state, eight scopes, optional dialog. | Grant shape remains current. Scope policy has decision blockers below. |
 | `POST accounts.spotify.com/api/token`, authorization-code grant | `auth/service.py`; access token, type, expiry, optional refresh token and scope. | Grant shape remains current. Generic HTTP error handling only. |
 | Same token endpoint, refresh grant | Independent API and collector implementations in `auth/tokens.py` and `collector/tokens.py`. | API persists rotated refresh token and scope; collector persists rotated refresh token but not returned scope. No quota-reason handling. |
-| `GET /me` | Direct auth call; persists `id`, display name, email, country, and product. | `account_id` is ignored. Email/country/product are unavailable to affected Development access. Identity migration is decision-blocked. |
+| `GET /me` | Direct auth call; persists `id`, display name, email, country, and product. | `account_id` is ignored. Email/country/product are unavailable to affected Development access. [ADR 0003](../decisions/0003-adopt-staged-account-id-migration.md) accepts a bounded additive identity migration; implementation remains plan-first. |
 | `GET /me/player/recently-played` | Polling and initial sync; limit 50 and cursor paging. | Current and compliant; no podcast episodes are returned. |
 | `GET /tracks?ids=` | Batch client method; no non-test production consumer found. | Removed for affected/new Development access; available to Extended and possibly postponed existing integrations. Do not remove until the supported-mode decision. |
 | `GET /artists?ids=` | Batch client method; no non-test production consumer found. | Same mode qualification as batch tracks. |
@@ -181,8 +181,8 @@ advertises 1-50 with default 10, and the handler accepts 50. RED observations re
 
 An attempted shared-client correction was deliberately removed before delivery because changing
 that client would change public MCP behavior indirectly. Resolve the shared and MCP contracts
-together through the next available ADR number after ADR 0002 sequencing is settled; do not create
-a competing ADR number on this isolated branch.
+together through a dedicated accepted public-compatibility ADR; ADR 0003 is limited to the
+`account_id` identity migration.
 
 ## Playlist audit
 
@@ -233,10 +233,13 @@ available. Spotify publishes no replacement or sunset date.
 No observed user is claimed to have changed `id`. The verified defect is reliance on a field the
 official contract says not to use for account linking.
 
-A safe migration can probably retain internal `users.id`, but still needs an accepted ADR covering
-an added/backfilled unique `account_id`, dual-key login transition, duplicate/conflict rules,
-reauthorization for rows that cannot be backfilled, deprecated profile-field retention, public
-`spotify_user_id` compatibility, fixtures, rollout, and rollback. No schema or user data was changed.
+[ADR 0003](../decisions/0003-adopt-staged-account-id-migration.md) accepts a bounded staged
+additive migration: preserve internal `users.id`, add a nullable unique `account_id`, claim exactly
+one unambiguous legacy row during reauthorization, fail closed on every conflict, and make
+`account_id` authoritative only after the complete initial active-user cohort passes a finite
+rollout gate. It preserves `spotify_user_id` storage and public fields pending separate retention
+and compatibility decisions. No schema, OAuth behavior, production account, or user data was
+changed by the audit or ADR.
 
 ## Delivered safe maintenance
 
@@ -247,9 +250,11 @@ reauthorization for rows that cannot be backfilled, deprecated profile-field ret
 - Current Development/Extended user-limit operator guidance, correction of internal import user ID,
   and documented audio-enrichment environment settings.
 
-## Decision-blocked work
+## Plan-first and decision-blocked work
 
-1. `account_id` schema/backfill/cutover, matching, reauthorization, retention, and API compatibility.
+1. Implementing ADR 0003's `account_id` expand/claim/authority-switch flow, including the finite
+   cohort plan, conflict recovery, migrations, monitoring, and rollback. Profile retention and
+   public API compatibility remain separate decisions.
 2. OAuth scope or profile-data storage changes, Google email exchange, and one-versus-both playlist
    modification scopes.
 3. Public MCP/API Search limits/defaults, deprecated-field shape, playlist warning text, episode
@@ -262,8 +267,9 @@ reauthorization for rows that cannot be backfilled, deprecated profile-field ret
 8. Mode-based removal of batch track/artist calls while Spotify's existing-Development guidance
    remains contradictory.
 
-These items need owner decisions and the applicable accepted ADR before implementation. ADR 0002
-is already reserved by the isolated SPM-4 branch, so SPM-5 must not allocate a conflicting number.
+Item 1 has an accepted identity decision but still needs a separately reviewed implementation and
+rollout plan. Items 2 through 8 need owner decisions and the applicable accepted ADR before
+implementation. The ADR index now assigns 0003 to the identity decision and reserves 0004 next.
 
 ## Validation boundary
 

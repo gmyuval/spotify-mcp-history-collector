@@ -1,9 +1,9 @@
 # Current repository state
 
-Last verified: 2026-08-27 (UTC), in `codex/spm-4-architecture-decision` against `origin/main`
-`137dd54f0a82b21759ce3e9bb506204314f202a8`. This verification describes the SPM-4 candidate
-before repository delivery; revalidate the live branch, pull request, and remote state before
-relying on it.
+Last verified: 2026-08-27 (UTC), in `codex/spm-5-spotify-api-audit` after merging `origin/main`
+`a88e52c3ab0d62c9540f4d89def9b54330ce57ee`. This verification describes the local SPM-5
+candidate before repository delivery; revalidate the live branch, pull request, and remote state
+before relying on it.
 
 This is volatile orientation, not a work queue, architecture decision, or deployment record. Linear
 team **SPM**, project **Spotify MCP modernization**, is authoritative for planned work, ownership,
@@ -31,6 +31,25 @@ permissions. The current small-cohort forecast is about USD 40 per month within 
 planning range and a USD 60 initial budget alert. These are binding target choices in
 [Accepted ADR 0002](../decisions/0002-azure-target-architecture-and-migration-boundaries.md),
 not authority to provision, deploy, migrate, or delete cloud resources.
+
+## Spotify Web API audit and identity posture
+
+SPM-5 inventories the Spotify endpoints, fields, scopes, retry behavior, quota modes, playlist
+semantics, Audio Features providers, and identity dependencies used by this repository. Its safe
+maintenance preserves public behavior while adding an internal non-retrying
+`QUOTA_EXCEEDED` subtype, malformed-`Retry-After` fallback, concrete Spotify-to-Soundcharts
+fallback coverage, and corrected operator/configuration guidance.
+
+[Accepted ADR 0003](../decisions/0003-adopt-staged-account-id-migration.md) selects a bounded
+additive migration from Spotify profile `id` linking to authoritative `account_id` linking. It
+preserves internal `users.id`, requires a finite all-active-cohort reauthorization gate, fails
+closed on conflicting identity evidence, and initially preserves `spotify_user_id` compatibility.
+No schema, OAuth, production-account, token, credential, or user-data change has been made.
+
+OAuth/profile retention, Google email exchange, public MCP/API compatibility, supported Spotify
+app modes and quota policy, episode/embed behavior, and Audio Features provider/default policy
+remain decision-blocked. Do not infer production entitlements or account state from mocked tests
+or public documentation.
 
 ## Observed service layout
 
