@@ -146,5 +146,9 @@ or privacy/security requirements demand a narrower grant model.
   scopes.
 - [ADR 0005](0005-support-spotify-development-mode-as-the-common-denominator.md) selects the
   Development common denominator and makes avoiding unnecessary quota use a release concern.
+- [ADR 0007](0007-keep-playlist-media-contract-track-only.md) keeps the supported playlist item and
+  mutation surface track-only.
+- [ADR 0008](0008-stage-retirement-of-undocumented-playlist-embed-scraping.md) governs the separate
+  transitional source used after official playlist-content access fails.
 - The dedicated public MCP/API compatibility decision continues to own outward tool/error behavior.
-  Episode/embed behavior and Audio Features provider/default policy remain separate owner decisions.
+  Audio Features provider/default policy remains a separate owner decision.

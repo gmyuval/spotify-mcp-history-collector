@@ -68,10 +68,19 @@ bundle for every initial user. Partial grants fail locally before a Spotify requ
 not proof of playlist ownership or other resource authority. This formalizes current behavior and
 does not authorize OAuth rollout or provider/account access.
 
-Public MCP/API compatibility, episode/embed behavior, and Audio Features provider/default policy
-remain decision-blocked. Implementing the accepted identity, OAuth, profile-retention,
-app-mode/quota, and contraction decisions remains plan-first. Do not infer production entitlements
-or account state from mocked tests or public documentation.
+[Accepted ADR 0007](../decisions/0007-keep-playlist-media-contract-track-only.md) keeps playlist
+reads, mutations, cache, and memory track-only. Unexpected episodes and future item types must
+preserve position as unsupported placeholders rather than crash, masquerade as tracks, or disappear.
+
+[Accepted ADR 0008](../decisions/0008-stage-retirement-of-undocumented-playlist-embed-scraping.md)
+classifies the private `__NEXT_DATA__` parser as transitional compatibility debt. Retirement
+requires a kill switch, privacy-safe aggregate evidence, a usable user-supplied URI/list import,
+and a later explicit owner gate. No embed, import, Azure, or production behavior has changed.
+
+Public MCP/API compatibility and Audio Features provider/default policy remain decision-blocked.
+Implementing the accepted identity, OAuth, profile-retention, app-mode/quota, playlist-media, and
+embed-retirement decisions remains plan-first. Do not infer production entitlements or account
+state from mocked tests or public documentation.
 
 ## Observed service layout
 

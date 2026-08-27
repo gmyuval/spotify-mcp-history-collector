@@ -21,9 +21,9 @@ publish a numeric quota, reset time, stable bucket grouping, or a guaranteed res
 Official 2026 material conflicts about which postponed legacy endpoints remain available to older
 Development integrations. The repository cannot safely treat that temporary access as a product
 contract. The SPM-5 audit found that the affected batch track and artist endpoints have no
-non-test production consumer. Other unresolved surfaces, including public Search behavior,
-playlist modification scopes, episode/embed behavior, and Audio Features, have independent
-compatibility or provider consequences and remain separately decision-gated.
+non-test production consumer. Other surfaces, including public Search behavior, playlist
+modification scopes, episode/embed behavior, and Audio Features, have independent compatibility or
+provider consequences and are not decided by the app-mode choice.
 
 The branch already classifies `reason=QUOTA_EXCEEDED` as a non-retrying internal subtype while
 preserving the existing outward rate-limit type. It does not yet coordinate the developer-wide
@@ -118,7 +118,8 @@ Select Development Mode as the common denominator.
 - Batch track and artist client code becomes retirement debt rather than a supported capability;
   its absence from production call paths makes that the YAGNI-aligned target.
 - Audio Features, episode/embed handling, playlist scopes, and public MCP/API compatibility are not
-  decided indirectly by an app-mode choice; playlist scopes are subsequently resolved by ADR 0006.
+  decided indirectly by an app-mode choice; playlist scopes are subsequently resolved by ADR 0006,
+  playlist media by ADR 0007, and staged embed retirement by ADR 0008.
 
 ## Validation
 
@@ -163,6 +164,9 @@ caching, coalescing, prioritization, and background deferral.
   identity separation, profile retention, and OAuth-scope contraction.
 - [ADR 0006](0006-bundle-both-playlist-modification-scopes-for-write-access.md) subsequently bundles
   both playlist-modification scopes for every write-enabled initial user.
+- [ADR 0007](0007-keep-playlist-media-contract-track-only.md) keeps playlist media track-only.
+- [ADR 0008](0008-stage-retirement-of-undocumented-playlist-embed-scraping.md) makes the unofficial
+  embed parser transitional compatibility debt with an explicit retirement gate.
 - The dedicated public MCP/API compatibility decision owns Search limits/defaults, outward quota
-  errors, and public warning text. Episode/embed behavior and Audio Features provider/default
-  policy remain separate owner decisions.
+  errors, and public warning text. Audio Features provider/default policy remains a separate owner
+  decision.

@@ -144,5 +144,8 @@ identity surface.
   the supported app-mode and internal quota-policy target.
 - [ADR 0006](0006-bundle-both-playlist-modification-scopes-for-write-access.md) subsequently resolves
   playlist modification-scope semantics for the initial product.
-- The SPM-5 audit's remaining public MCP/API, episode/embed, and Audio Features choices require
-  their own accepted decisions before implementation.
+- [ADR 0007](0007-keep-playlist-media-contract-track-only.md) and
+  [ADR 0008](0008-stage-retirement-of-undocumented-playlist-embed-scraping.md) subsequently resolve
+  the playlist media boundary and staged embed-retirement target.
+- The SPM-5 audit's remaining public MCP/API and Audio Features choices require their own accepted
+  decisions before implementation.

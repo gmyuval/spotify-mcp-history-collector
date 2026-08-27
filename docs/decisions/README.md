@@ -13,7 +13,9 @@ They do not grant implementation authority and do not replace Linear work tracki
 | 0004 | [Separate provider identities and minimize Spotify profile retention](0004-separate-provider-identities-and-minimize-profile-retention.md) | Accepted |
 | 0005 | [Support Spotify Development Mode as the common denominator](0005-support-spotify-development-mode-as-the-common-denominator.md) | Accepted |
 | 0006 | [Bundle both playlist modification scopes for write access](0006-bundle-both-playlist-modification-scopes-for-write-access.md) | Accepted |
+| 0007 | [Keep the playlist media contract track-only](0007-keep-playlist-media-contract-track-only.md) | Accepted |
+| 0008 | [Stage retirement of undocumented playlist embed scraping](0008-stage-retirement-of-undocumented-playlist-embed-scraping.md) | Accepted |
 
 ## Next number
 
-0007
+0009

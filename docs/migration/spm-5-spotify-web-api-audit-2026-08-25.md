@@ -261,6 +261,14 @@ artist methods as outside the target supported surface, and keeps Extended-only 
 access out of the product contract. Batch-method retirement and quota coordination remain reviewed
 implementation work; Audio Features remains a separate provider/default decision.
 
+[ADR 0007](../decisions/0007-keep-playlist-media-contract-track-only.md) accepts an explicit
+track-only media boundary: playlist requests do not opt into episodes, and unexpected episodes or
+future types preserve position as unsupported placeholders rather than becoming tracks or
+disappearing. [ADR 0008](../decisions/0008-stage-retirement-of-undocumented-playlist-embed-scraping.md)
+accepts staged retirement of the private embed parser after a kill switch, privacy-safe aggregate
+evidence, a usable user-supplied URI/list import, and a later explicit owner gate. Neither record
+changes current runtime behavior.
+
 ## Delivered safe maintenance
 
 - Non-retrying internal `QUOTA_EXCEEDED` classification that preserves the existing outward
@@ -276,15 +284,16 @@ This audit records measured gaps and decision boundaries; it is not a work queue
 the sole tracker for their disposition. ADR 0003 accepts the staged `account_id` identity target,
 ADR 0004 accepts provider-identity separation and minimized profile retention, ADR 0005 accepts the
 restricted Development common denominator and internal quota-policy target, and ADR 0006 accepts
-the complete playlist-write scope bundle. None authorizes implementation, rollout, public
-compatibility change, or data contraction.
+the complete playlist-write scope bundle. ADR 0007 accepts the track-only media boundary, and ADR
+0008 accepts staged embed retirement. None authorizes implementation, rollout, public compatibility
+change, provider/account access, or data contraction.
 
 No behavior change is authorized by this audit for public MCP/API defaults and shapes, app-mode or
-quota-policy implementation, playlist-scope implementation, episode or unofficial-embed handling,
-batch endpoint retirement, or Audio Features provider/default policy. The unresolved public,
-episode/embed, and Audio Features choices remain behind owner-approved decisions; all
-implementation remains behind the applicable plan-first gate recorded through Linear. The ADR
-index assigns 0006 to the accepted playlist-scope policy and reserves 0007 next.
+quota-policy implementation, playlist-scope or playlist-media implementation, unofficial-embed
+retirement, batch endpoint retirement, or Audio Features provider/default policy. The unresolved
+public MCP/API and Audio Features choices remain behind owner-approved decisions; all implementation
+remains behind the applicable plan-first gate recorded through Linear. The ADR index assigns 0007
+to the accepted track-only media policy, 0008 to staged embed retirement, and reserves 0009 next.
 
 ## Validation boundary
 
