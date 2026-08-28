@@ -72,6 +72,38 @@ Weekly cycles are owner-approved planning commitments, not an unbounded backlog.
 or swapping cycle scope requires owner-approved replanning. Record the agreed change in Linear;
 do not silently reshape the cycle because capacity or implementation order changed.
 
+### Throughput-based replenishment
+
+The owner-approved **throughput-based replenishment** procedure is standing authority for a
+deterministic pull-forward inside already-created SPM cycles when the current cycle has no open
+work and still has time remaining. It does not authorize creating cycles, changing product
+priority, bypassing a dependency or plan-first gate, or departing materially from the capacity
+model; those changes require a fresh owner decision.
+
+When this condition occurs, the root:
+
+1. Measures observed throughput from estimated points completed over elapsed cycle time, checks
+   the recent completed-cycle trend where available, and derives a conservative remaining capacity.
+   Treat the forecast as planning evidence, not a promise.
+   If elapsed cycle time is zero, do not divide by elapsed time: use a recent completed-cycle trend
+   when one exists. If no such trend exists, read the live active Linear scale and use its maximum
+   single-issue estimate as the conservative bootstrap capacity for the cycle.
+2. Reviews estimates only against comparable completed work. Throughput calibrates cycle capacity;
+   it does not by itself change an issue estimate. Retain the estimate and record that decision when
+   the evidence is insufficient, and keep every estimate inside the active Linear scale.
+3. Preserves unfinished carryover first, then pulls dependency-ready work from later cycles or the
+   backlog in dependency and approved-priority order. Do not pull work whose authority, acceptance
+   criteria, plan-first decision, or safe validation path is missing.
+4. Fills the current cycle to its forecast remaining capacity and fills every existing upcoming
+   cycle to the same evidence-based planning horizon. "Filled" means deliberately planned capacity,
+   not assigning the entire backlog or forcing blocked work into a cycle.
+5. Updates one Linear planning document per affected cycle with scope, point total, ordering,
+   dependencies, authority boundaries, and carryover rules. Read back every issue and document
+   mutation before treating the replenishment as complete.
+6. Re-derives the current session batch. When replenishment restores open work, always provide a
+   copyable next-session prompt, even if the current session continues; do not end merely because
+   the cycle was empty before replenishment.
+
 ## Multi-ticket sessions
 
 A repository session is a capacity-based **multi-ticket session**, not a single-issue container.

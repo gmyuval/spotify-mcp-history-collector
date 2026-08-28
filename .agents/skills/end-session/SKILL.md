@@ -125,6 +125,12 @@ blocked with its exact reason/owner; or not started with the eligibility change 
 Name the next eligible ticket. A ticket-local blocker is not a reason to wrap while independent
 eligible work remains; identify the user direction or batch-wide stop that ended the session.
 
+If the current cycle has no open work and time remains, apply the owner-approved replenishment
+procedure in `AGENTS.md` before ending the session. Recalculate capacity, replenish the current and
+existing upcoming cycles, update and read back the affected Linear issues and planning documents,
+and re-derive the eligible batch. When that creates open work, include a copyable next-session
+prompt and do not report that the repository has no next work.
+
 Read the resulting issue back after any write. Do not create a second issue queue or invent a
 follow-up during wind-down.
 

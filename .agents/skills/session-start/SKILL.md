@@ -62,6 +62,11 @@ read-only GitHub query for remote state.
 - Derive a transient batch from the current approved cycle. A ticket is eligible when acceptance
   criteria and authority are clear, dependencies are satisfied, applicable plan-first decisions
   are accepted, and validation can run safely.
+- If the current cycle has no open work and time remains, apply the owner-approved throughput-based
+  replenishment procedure in `AGENTS.md` before concluding that no eligible work exists. Calculate
+  remaining capacity, replenish the current and existing upcoming cycles, update their Linear
+  planning documents, and read back every mutation before deriving the batch. Prepare the required
+  copyable next-session prompt when replenishment restores open work, even if this session proceeds.
 - Select two or more eligible tickets when available, with no fixed maximum. Order them by
   dependency, then approved priority. If only one is eligible, record why the multi-ticket default
   cannot be met.
@@ -69,8 +74,8 @@ read-only GitHub query for remote state.
   delegates may share the checkout; concurrent writers require isolated worktrees with disjoint
   surfaces. Give each delegate exactly one ticket or bounded question.
 - Compare each selected ticket's acceptance criteria with current code/tests. Separate measured
-  observations from inference and conjecture. Never add, remove, or swap cycle scope from
-  session-start.
+  observations from inference and conjecture. Outside the explicitly authorized replenishment
+  condition, never add, remove, or swap cycle scope from session-start.
 
 Stop on conflicting canon, missing authority, an unclear public contract, a plan-first boundary
 without an accepted plan, unexpected test deletion, credentials/PII, or scope expansion.
