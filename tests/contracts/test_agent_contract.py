@@ -2570,7 +2570,7 @@ acceptance criteria, not substitutes for the root-supplied measured exits and sa
                 "standing authority",
                 "always provide a copyable next-session prompt",
                 "elapsed cycle time is zero",
-                "7 points",
+                "read the live active Linear scale",
                 "maximum single-issue estimate",
             ),
             "weekly-cycle replenishment contract",
