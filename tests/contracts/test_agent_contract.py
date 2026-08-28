@@ -35,6 +35,13 @@ class AgentContractTests(unittest.TestCase):
         missing = [term for term in terms if term.lower() not in lowered]
         self.assertFalse(missing, f"{context} is missing contract terms: {missing}")
 
+    def assert_terms_in_order(self, text: str, terms: tuple[str, ...], context: str) -> None:
+        normalized = " ".join(text.split()).lower()
+        positions = [normalized.find(term.lower()) for term in terms]
+        missing = [term for term, position in zip(terms, positions, strict=True) if position < 0]
+        self.assertFalse(missing, f"{context} is missing ordered terms: {missing}")
+        self.assertEqual(positions, sorted(positions), f"{context} has terms out of order: {terms}")
+
     def fixture(self, destination: Path) -> None:
         shutil.copytree(ROOT / ".agents" / "skills", destination / ".agents" / "skills")
         shutil.copytree(ROOT / ".claude" / "skills", destination / ".claude" / "skills")
@@ -2562,6 +2569,9 @@ acceptance criteria, not substitutes for the root-supplied measured exits and sa
                 "read back",
                 "standing authority",
                 "always provide a copyable next-session prompt",
+                "elapsed cycle time is zero",
+                "7 points",
+                "maximum single-issue estimate",
             ),
             "weekly-cycle replenishment contract",
         )
@@ -2596,6 +2606,55 @@ acceptance criteria, not substitutes for the root-supplied measured exits and sa
                 "read back",
             ),
             "end-session replenishment flow",
+        )
+        self.assert_terms_in_order(
+            agents,
+            (
+                "current cycle has no open work and still has time remaining",
+                "observed throughput",
+                "remaining capacity",
+                "every existing upcoming cycle",
+                "read back every issue and document mutation",
+                "re-derives the current session batch",
+                "always provide a copyable next-session prompt",
+            ),
+            "canonical replenishment ordering",
+        )
+        self.assert_terms_in_order(
+            protocol,
+            (
+                "current cycle has no open work and time remains",
+                "remaining capacity",
+                "dependency-ready work",
+                "read back their Linear planning evidence",
+                "re-derive the transient batch",
+                "provide the copyable next-session prompt",
+            ),
+            "orchestration replenishment ordering",
+        )
+        self.assert_terms_in_order(
+            session_start,
+            (
+                "current cycle has no open work and time remains",
+                "remaining capacity",
+                "replenish the current and existing upcoming cycles",
+                "read back every mutation",
+                "deriving the batch",
+                "prepare the required copyable next-session prompt",
+            ),
+            "session-start replenishment ordering",
+        )
+        self.assert_terms_in_order(
+            end_session,
+            (
+                "current cycle has no open work and time remains",
+                "recalculate capacity",
+                "replenish the current and existing upcoming cycles",
+                "read back the affected Linear issues and planning documents",
+                "re-derive the eligible batch",
+                "copyable next-session prompt",
+            ),
+            "end-session replenishment ordering",
         )
 
     def test_multi_ticket_sessions_are_capacity_based_and_issue_isolated(self) -> None:

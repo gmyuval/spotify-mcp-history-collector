@@ -85,6 +85,9 @@ When this condition occurs, the root:
 1. Measures observed throughput from estimated points completed over elapsed cycle time, checks
    the recent completed-cycle trend where available, and derives a conservative remaining capacity.
    Treat the forecast as planning evidence, not a promise.
+   If elapsed cycle time is zero, do not divide by elapsed time: use a recent completed-cycle trend
+   when one exists. If no such trend exists, use 7 points, the active scale's maximum single-issue
+   estimate, as the conservative bootstrap capacity for the cycle.
 2. Reviews estimates only against comparable completed work. Throughput calibrates cycle capacity;
    it does not by itself change an issue estimate. Retain the estimate and record that decision when
    the evidence is insufficient, and keep every estimate inside the active Linear scale.
