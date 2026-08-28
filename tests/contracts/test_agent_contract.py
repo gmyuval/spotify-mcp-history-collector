@@ -2545,6 +2545,59 @@ acceptance criteria, not substitutes for the root-supplied measured exits and sa
             "Linear planning contract",
         )
 
+    def test_early_cycle_completion_replenishes_current_and_upcoming_cycles(self) -> None:
+        agents = " ".join(self.read("AGENTS.md").split())
+        protocol = " ".join(self.read("docs/agent/orchestration.md").split())
+        session_start = " ".join(self.read(".agents/skills/session-start/SKILL.md").split())
+        end_session = " ".join(self.read(".agents/skills/end-session/SKILL.md").split())
+
+        self.assert_terms(
+            agents,
+            (
+                "throughput-based replenishment",
+                "observed throughput",
+                "remaining capacity",
+                "every existing upcoming cycle",
+                "comparable completed work",
+                "read back",
+                "standing authority",
+                "always provide a copyable next-session prompt",
+            ),
+            "weekly-cycle replenishment contract",
+        )
+        self.assert_terms(
+            protocol,
+            (
+                "current cycle has no open work",
+                "replenishment",
+                "dependency-ready",
+                "re-derive the transient batch",
+                "provide the copyable next-session prompt",
+            ),
+            "orchestration replenishment flow",
+        )
+        self.assert_terms(
+            session_start,
+            (
+                "current cycle has no open work",
+                "remaining capacity",
+                "upcoming cycles",
+                "read back",
+                "prepare the required copyable next-session prompt",
+            ),
+            "session-start replenishment flow",
+        )
+        self.assert_terms(
+            end_session,
+            (
+                "current cycle has no open work",
+                "replenishment",
+                "next-session prompt",
+                "read back",
+            ),
+            "end-session replenishment flow",
+        )
+
     def test_multi_ticket_sessions_are_capacity_based_and_issue_isolated(self) -> None:
         agents = self.read("AGENTS.md")
         protocol = self.read("docs/agent/orchestration.md")

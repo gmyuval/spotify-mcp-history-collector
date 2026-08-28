@@ -161,4 +161,10 @@ unblocked ticket may enter the transient batch only when it is already inside th
 adding or swapping cycle scope still requires owner-approved replanning.
 
 The root keeps Linear current but does not create a duplicate queue. Weekly cycle changes require
-owner-approved replanning before issues are added, removed, or swapped.
+owner-approved replanning before issues are added, removed, or swapped. The standing
+throughput-based replenishment procedure in `AGENTS.md` is such an approval for its deterministic
+case: when the current cycle has no open work and time remains, calculate remaining capacity from
+observed throughput, preserve carryover, and replenish it with dependency-ready work. Fill the
+existing upcoming cycles to the same planning horizon, update and read back their Linear planning
+evidence, then re-derive the transient batch and provide the copyable next-session prompt required
+by `AGENTS.md`. Any departure from that rule returns to an owner decision.
