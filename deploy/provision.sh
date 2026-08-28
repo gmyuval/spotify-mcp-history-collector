@@ -413,6 +413,7 @@ fi
 # Generate secrets locally
 TOKEN_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 ADMIN_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+INTERNAL_API_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
 OAUTH2_PROXY_COOKIE_SECRET=$(python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
 
 DATABASE_URL="postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${DB_PRIVATE_HOST}:${DB_PORT}/${DB_NAME}?ssl=require"
@@ -431,6 +432,7 @@ TOKEN_ENCRYPTION_KEY=${TOKEN_ENCRYPTION_KEY}
 
 ADMIN_AUTH_MODE=token
 ADMIN_TOKEN=${ADMIN_TOKEN}
+INTERNAL_API_KEY=${INTERNAL_API_KEY}
 
 CORS_ALLOWED_ORIGINS=https://${DOMAIN_NAME}
 
