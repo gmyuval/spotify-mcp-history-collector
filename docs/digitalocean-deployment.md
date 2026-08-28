@@ -6,45 +6,16 @@ Docker Compose, Caddy (automatic HTTPS), and GitHub Actions CI/CD.
 ## Architecture
 
 ```text
-                    Internet
-                       │
-                       ▼
-              ┌────────────────┐
-              │   Caddy :443   │  Automatic HTTPS (Let's Encrypt)
-              └───────┬────────┘
-                      │
-         ┌────────────┼────────────────┐
-         │            │                │
-         ▼            ▼                ▼
-   /healthz      /mcp/*          all other routes
-   (no auth)   (Bearer token)    (forward_auth)
-         │            │                │
-         ▼            │        ┌───────▼────────┐
-   ┌──────────┐       │        │ oauth2-proxy   │
-   │ API:8000 │       │        │ :4180          │
-   └──────────┘       │        │ (Google OAuth) │
-                      │        └───────┬────────┘
-                      │                │ authenticated
-         ┌────────────┴────────────────┘
-         ▼                     ▼
-  ┌──────────────┐     ┌──────────────┐
-  │  API :8000   │     │Frontend :8001│
-  │  (FastAPI)   │     │  (FastAPI)   │
-  └──────┬───────┘     └──────────────┘
-         │                     │
-         │ DATABASE_URL        │ API_BASE_URL
-         │ (VPC private)       │ (Docker network)
-         ▼                     │
-  ┌──────────────┐             │
-  │  DO Managed  │             │
-  │  PostgreSQL  │◄────────────┘ (via API)
-  └──────────────┘
-         ▲
-         │ DATABASE_URL
-  ┌──────┴───────┐
-  │  Collector   │
-  │  (worker)    │
-  └──────────────┘
+Internet → Caddy :443
+  ├─ open /healthz → API :8000
+  ├─ proxy-owned /oauth2/* → oauth2-proxy :4180
+  ├─ Caddy-auth bypass /mcp/*, /auth/*, /api/* → API :8000
+  ├─ Google-forward-authenticated /admin/* → Frontend :8001
+  ├─ open Explorer /, /login, /static/* → Explorer :8002
+  └─ Google-forward-authenticated Explorer catch-all → Explorer :8002
+
+API and Collector → DigitalOcean Managed PostgreSQL over DATABASE_URL
+Frontend and Explorer → API over the private Compose network
 ```
 
 **Route mapping (Caddy):**
@@ -52,12 +23,22 @@ Docker Compose, Caddy (automatic HTTPS), and GitHub Actions CI/CD.
 | Path | Backend | Auth |
 |------|---------|------|
 | `/healthz` | API | None |
-| `/oauth2/*` | oauth2-proxy | Google OAuth flow |
-| `/mcp/*` | API | Bearer token |
-| `/auth/*` | API | Google OAuth (forward_auth) |
-| `/admin/*` | API | Google OAuth (forward_auth) |
-| `/history/*` | API | Google OAuth (forward_auth) |
-| `/*` | Frontend | Google OAuth (forward_auth) |
+| `/oauth2/*` | oauth2-proxy | Proxy-owned login, callback, sign-out, and session-check behavior |
+| `/mcp/*` | API | No Caddy gate; application auth varies by MCP endpoint/version |
+| `/auth/login`, `/auth/callback` | API | No Caddy gate; open Spotify OAuth entry and callback |
+| `/auth/refresh` | API | No Caddy gate; validates a refresh token from the body or HttpOnly cookie |
+| `/auth/logout` | API | No Caddy gate; clears authentication cookies |
+| `/auth/exchange-google` | API | No Caddy gate; requires `X-Internal-API-Key` |
+| `/api/*` | API | No Caddy gate; JWT Bearer/access cookie or `smcp_` API token, enforced by API endpoints |
+| `/admin` | Redirect to `/admin/` | None; destination is protected |
+| `/admin/*` | Frontend | Google OAuth (`forward_auth`) |
+| `/`, `/login`, `/static/*` | Explorer | None |
+| All other paths, including `/history/*` | Explorer | Google OAuth (`forward_auth`) |
+
+The table describes Caddy's routing and authentication boundary. API handlers
+remain responsible for their own Bearer-token, JWT, internal-key, and OAuth
+flow requirements where the proxy intentionally does not apply Google
+`forward_auth`.
 
 ## Prerequisites
 
@@ -189,6 +170,7 @@ The provisioning script generates this automatically. Key values:
 | `SPOTIFY_REDIRECT_URI` | `https://{DOMAIN}/auth/callback` |
 | `TOKEN_ENCRYPTION_KEY` | Auto-generated (Fernet) |
 | `ADMIN_TOKEN` | Auto-generated (URL-safe random) |
+| `INTERNAL_API_KEY` | Auto-generated (URL-safe random; never printed) |
 | `CORS_ALLOWED_ORIGINS` | `https://{DOMAIN}` |
 | `OAUTH2_PROXY_COOKIE_SECRET` | Auto-generated (32-byte base64) |
 | `GOOGLE_OAUTH_CLIENT_ID` | Manual — from Google Cloud Console |
@@ -479,6 +461,16 @@ state. It verifies the allowlist's documented owner and modes and requires an
 oauth2-proxy `/ping` response through the production service network before
 reporting terminal health. It preserves the existing firewall handling,
 Compose build, migration order, and collector restart sequence.
+
+The workflow's health evidence is deliberately internal and bounded. It calls
+the API, Frontend, and Explorer `/healthz` handlers from their containers;
+those handlers report process availability and version only. It separately
+runs the API database-connectivity check, queries oauth2-proxy `/ping` from
+Caddy's service network, and records Compose service status. It does not probe
+the public Caddy endpoint and therefore does not establish public DNS, TLS
+certificate, external routing, Spotify connectivity, or complete dependency
+readiness. An operator may run the public `curl` below as separate evidence,
+but the deployment workflow does not produce or claim that evidence.
 
 Every production SSH action authenticates the offered host key against the
 `production` environment fingerprint. A missing or malformed secret fails

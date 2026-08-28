@@ -8,6 +8,11 @@ Owner evidence: constituent choices recorded during the owner decision sessions 
 and 2026-08-27 UTC; Yuval Moran accepted the cohesive decision with "Decision 4 A" on
 2026-08-27 UTC
 
+Amendment evidence: after confirming that live Linear assigns provider-account audit evidence to
+SPM-35 and reviewing the stale SPM-34 reference, Yuval Moran approved the correction with
+"Yes - please confirm Linear and correct ADR 0002" on 2026-08-28 UTC. This amendment corrects
+issue ownership only; it grants no provider access, cloud, deployment, or production authority.
+
 ## Context
 
 The current production system is a working DigitalOcean-hosted Docker Compose deployment. Its six
@@ -564,7 +569,7 @@ separately approved migration/rollback plan.
   upload-retention change.
 - SPM-26 owns production backup, restore, RPO, and RTO evidence.
 - SPM-30 preserves the separation between repository delivery and manual production deployment.
-- SPM-34 owns provider-account audit evidence without broadening this record's access authority.
+- SPM-35 owns provider-account audit evidence without broadening this record's access authority.
 - [OPS-54](https://linear.app/stratex/issue/OPS-54/define-the-neutral-organization-shared-acr-control-plane)
   owns the neutral shared-registry platform contract.
 - [OPS-55](https://linear.app/stratex/issue/OPS-55/rehome-the-agrisense-acr-and-reconcile-its-delivery-and-runtime)

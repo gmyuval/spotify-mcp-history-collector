@@ -18,12 +18,15 @@ def main() -> int:
 
     environment = os.environ.copy()
     environment["COMPOSE_DISABLE_ENV_FILE"] = "1"
-    environment["INTERNAL_API_KEY"] = "compose-validation-placeholder"
 
     failed = False
     for relative_path in COMPOSE_FILES:
+        command = [docker, "compose"]
+        if relative_path == "docker-compose.prod.yml":
+            command.extend(["--env-file", ".env.prod.example"])
+        command.extend(["-f", relative_path, "config", "--quiet"])
         completed = subprocess.run(
-            [docker, "compose", "-f", relative_path, "config", "--quiet"],
+            command,
             cwd=ROOT,
             env=environment,
             capture_output=True,
