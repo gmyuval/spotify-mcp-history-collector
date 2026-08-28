@@ -189,8 +189,7 @@ class PlaylistToolHandlers:
         except SpotifyRequestError as exc:
             if exc.status_code == 403:
                 logger.warning(
-                    "Spotify returned 403 for GET /playlists/%s, falling back to cached metadata",
-                    playlist_id,
+                    "Spotify returned 403 for playlist metadata; falling back to cached metadata",
                 )
             else:
                 raise
@@ -234,19 +233,17 @@ class PlaylistToolHandlers:
                         if _max_count > 1 and _uniform / len(_counts) >= 0.75:
                             _cache_ok = False
                             logger.warning(
-                                "Cache for %s looks like repeated pages (%d unique, %d total, "
+                                "Playlist cache looks like repeated pages (%d unique, %d total, "
                                 "max occurrence %d) — re-fetching",
-                                playlist_id,
                                 _unique_count,
                                 len(_cached_ids),
                                 _max_count,
                             )
                 if _cache_ok:
-                    logger.debug("Playlist cache hit for %s (snapshot matched)", playlist_id)
+                    logger.debug("Playlist cache hit (snapshot matched)")
                     return self._with_fidelity_metrics(cached_data)
                 logger.info(
-                    "Stale cache for %s: %d cached tracks vs %d total — re-fetching",
-                    playlist_id,
+                    "Stale playlist cache: %d cached tracks vs %d total — re-fetching",
                     len(cached_tracks),
                     cached_total,
                 )
@@ -301,10 +298,7 @@ class PlaylistToolHandlers:
             if exc.status_code != 403:
                 raise
             logger.warning(
-                "Spotify returned 403 for GET /playlists/%s/items (detail: %s) — "
-                "force-refreshing token and retrying once",
-                playlist_id,
-                exc.detail,
+                "Spotify returned 403 for playlist items; force-refreshing token and retrying once",
             )
             # Force-refresh the access token to pick up any new scopes from re-authorization,
             # then retry the items endpoint once before falling back to embed.
@@ -321,18 +315,14 @@ class PlaylistToolHandlers:
                         if metadata_retry_exc.status_code != 403:
                             raise
                 logger.info(
-                    "Token-refresh retry succeeded for playlist %s (%d tracks)",
-                    playlist_id,
+                    "Token-refresh retry succeeded for playlist items (%d tracks)",
                     len(tracks),
                 )
             except SpotifyRequestError as retry_exc:
                 if retry_exc.status_code != 403:
                     raise
                 logger.warning(
-                    "Spotify returned 403 after token refresh for GET /playlists/%s/items "
-                    "(detail: %s) — using tracks from metadata response",
-                    playlist_id,
-                    retry_exc.detail,
+                    "Spotify returned 403 for playlist items after token refresh; using tracks from metadata response",
                 )
                 # Fallback: use tracks already embedded in the GET /playlists/{id}
                 # response (up to 100). The separate /tracks endpoint is blocked in
@@ -341,51 +331,52 @@ class PlaylistToolHandlers:
                     tracks = _parse_track_items(pl.tracks.items)
                     tracks_source = "api_metadata"
                     logger.info(
-                        "Using %d tracks from metadata response for playlist %s (total reported: %s)",
+                        "Using %d tracks from playlist metadata response (total reported: %s)",
                         len(tracks),
-                        playlist_id,
                         pl.tracks.total,
                     )
                 else:
                     _need_embed = True
 
         if _need_embed:
-            try:
-                embed_items = await self._embed_client.fetch_playlist_tracks(playlist_id)
-                for embed_item in embed_items:
-                    if embed_item.track_id:
-                        tracks.append(
-                            {
-                                "id": embed_item.track_id,
-                                "name": embed_item.name,
-                                "artists": [{"name": a} for a in embed_item.artists],
-                                "duration_ms": embed_item.duration_ms,
-                            }
-                        )
-                    else:
-                        tracks.append(
-                            {
-                                "id": None,
-                                "name": embed_item.name or None,
-                                "artists": [{"name": a} for a in embed_item.artists],
-                                "duration_ms": embed_item.duration_ms,
-                                "unavailable": True,
-                            }
-                        )
-                tracks_source = "embed"
-                logger.info(
-                    "Embed fallback returned %d tracks for playlist %s",
-                    len(tracks),
-                    playlist_id,
-                )
-            except SpotifyEmbedError as embed_exc:
-                logger.warning(
-                    "Embed fallback also failed for playlist %s: %s",
-                    playlist_id,
-                    embed_exc,
-                )
+            # Cached, missing, or non-public visibility cannot authorize an
+            # undocumented outbound embed request. Require current metadata
+            # from this request to prove the playlist is public.
+            if pl is None or pl.public is not True:
                 tracks_restricted = True
                 tracks_source = "restricted"
+            else:
+                try:
+                    embed_items = await self._embed_client.fetch_playlist_tracks(playlist_id)
+                    for embed_item in embed_items:
+                        if embed_item.track_id:
+                            tracks.append(
+                                {
+                                    "id": embed_item.track_id,
+                                    "name": embed_item.name,
+                                    "artists": [{"name": a} for a in embed_item.artists],
+                                    "duration_ms": embed_item.duration_ms,
+                                }
+                            )
+                        else:
+                            tracks.append(
+                                {
+                                    "id": None,
+                                    "name": embed_item.name or None,
+                                    "artists": [{"name": a} for a in embed_item.artists],
+                                    "duration_ms": embed_item.duration_ms,
+                                    "unavailable": True,
+                                }
+                            )
+                    tracks_source = "embed"
+                    logger.info(
+                        "Embed fallback returned %d tracks",
+                        len(tracks),
+                    )
+                except SpotifyEmbedError:
+                    logger.warning("Embed fallback failed")
+                    tracks_restricted = True
+                    tracks_source = "restricted"
 
         # Determine if restricted playlist is private — embed only works for public playlists.
         # pl.public is bool | None; treat None as non-public (private or collaborative).

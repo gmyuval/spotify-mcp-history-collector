@@ -398,7 +398,9 @@ commit a second pip-compatible dependency authority.
   primary assistant boundary. Neither boundary may be silently versioned by infrastructure work.
 - Replace FastMCP private `_mcp_server` calls only under SPM-6 with public-library or locally owned
   adapter seams and contract tests. Preserve `/mcp/v1`, `/mcp/tools`, and `/mcp/call` until a
-  separately accepted compatibility decision says otherwise.
+  separately accepted compatibility decision says otherwise. ADR 0010 now freezes those paths as
+  v1 and selects isolated `/mcp/v2` and `/api/v2/mcp` boundaries for the corrected replacement;
+  implementation and retirement remain separately reviewed.
 - The current bearer-token MCP authentication is not a completed remote MCP OAuth design. Any
   OAuth discovery, authorization-server, client-registration, scope, or token-audience change is a
   separate plan-first authentication/public-contract decision.
@@ -547,6 +549,10 @@ Revisit does not authorize production mutation. Implement a superseding accepted
 separately approved migration/rollback plan.
 
 ## Related decisions
+
+- [ADR 0004](0004-separate-provider-identities-and-minimize-profile-retention.md) resolves ADR
+  0002's deferred Google account-link and single-user-fallback policy: use a verified stable
+  provider subject, never email equality, and keep provider-token storage disabled.
 
 - [ADR 0001 - Use merge commits by default for pull requests](0001-pull-request-merge-method-policy.md)
 - SPM-20 supplies the dated estate baseline.

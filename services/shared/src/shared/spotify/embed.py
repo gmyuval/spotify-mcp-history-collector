@@ -111,10 +111,9 @@ class SpotifyEmbedClient:
                 if attempt < self._max_retries:
                     delay = self._retry_base_delay * (2**attempt) + random.uniform(0, 0.5)
                     logger.warning(
-                        "Embed request failed (attempt %d/%d): %s — retrying in %.1fs",
+                        "Embed request failed (attempt %d/%d); retrying in %.1fs",
                         attempt + 1,
                         self._max_retries + 1,
-                        exc,
                         delay,
                     )
                     await asyncio.sleep(delay)
@@ -200,7 +199,7 @@ class SpotifyEmbedClient:
                 )
             )
 
-        logger.info("Extracted %d tracks from embed page for playlist %s", len(tracks), playlist_id)
+        logger.info("Extracted %d tracks from embed page", len(tracks))
         return tracks
 
     @staticmethod

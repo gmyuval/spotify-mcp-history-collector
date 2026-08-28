@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import math
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -25,6 +26,7 @@ from shared.spotify.constants import (
 )
 from shared.spotify.exceptions import (
     SpotifyAuthError,
+    SpotifyQuotaExceededError,
     SpotifyRateLimitError,
     SpotifyRequestError,
     SpotifyServerError,
@@ -124,11 +126,23 @@ class SpotifyClient:
 
             # 429 Rate Limited
             if response.status_code == 429:
+                try:
+                    error_reason = response.json().get("error", {}).get("reason")
+                except AttributeError, ValueError:
+                    error_reason = None
+                if error_reason == "QUOTA_EXCEEDED":
+                    raise SpotifyQuotaExceededError()
+
                 retry_after_header = response.headers.get("Retry-After")
+                delay = self._retry_base_delay * (2**attempt)
                 if retry_after_header:
-                    delay = float(retry_after_header)
-                else:
-                    delay = self._retry_base_delay * (2**attempt)
+                    try:
+                        retry_after = float(retry_after_header)
+                        if not math.isfinite(retry_after) or retry_after < 0:
+                            raise ValueError
+                        delay = retry_after
+                    except ValueError:
+                        logger.warning("Spotify returned an invalid Retry-After header; using exponential backoff")
                 last_retry_after = delay
                 if attempt < self._max_retries:
                     logger.warning(

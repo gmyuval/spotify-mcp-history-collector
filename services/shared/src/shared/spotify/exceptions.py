@@ -12,12 +12,24 @@ class SpotifyAuthError(SpotifyClientError):
 class SpotifyRateLimitError(SpotifyClientError):
     """Spotify returned 429 Too Many Requests and retries were exhausted."""
 
-    def __init__(self, retry_after: float | None = None) -> None:
+    def __init__(
+        self,
+        retry_after: float | None = None,
+        *,
+        detail: str = "Spotify rate limit exceeded",
+    ) -> None:
         self.retry_after = retry_after
-        msg = "Spotify rate limit exceeded"
+        msg = detail
         if retry_after is not None:
             msg += f" (retry-after: {retry_after}s)"
         super().__init__(msg)
+
+
+class SpotifyQuotaExceededError(SpotifyRateLimitError):
+    """Spotify exhausted the developer quota rather than a rolling rate limit."""
+
+    def __init__(self) -> None:
+        super().__init__(detail="Spotify developer quota exhausted")
 
 
 class SpotifyServerError(SpotifyClientError):

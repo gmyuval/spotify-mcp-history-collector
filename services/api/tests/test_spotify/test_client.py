@@ -2,6 +2,7 @@
 
 import json
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
@@ -10,6 +11,7 @@ import respx
 from shared.spotify.client import SpotifyClient
 from shared.spotify.exceptions import (
     SpotifyAuthError,
+    SpotifyQuotaExceededError,
     SpotifyRateLimitError,
     SpotifyRequestError,
     SpotifyServerError,
@@ -135,6 +137,49 @@ async def test_429_exhausted_raises_rate_limit_error() -> None:
     client = SpotifyClient("test-token", max_retries=1, retry_base_delay=0.0)
     with pytest.raises(SpotifyRateLimitError):
         await client.get_recently_played()
+
+
+@respx.mock
+async def test_quota_exhaustion_raises_without_retrying() -> None:
+    """A developer quota exhaustion is not retried as a rolling-window limit."""
+    route = respx.get("https://api.spotify.com/v1/me/player/recently-played").mock(
+        return_value=httpx.Response(
+            429,
+            json={"error": {"status": 429, "message": "Quota exhausted", "reason": "QUOTA_EXCEEDED"}},
+        )
+    )
+
+    client = SpotifyClient("test-token", max_retries=2, retry_base_delay=0.0)
+    with pytest.raises(SpotifyQuotaExceededError):
+        await client.get_recently_played()
+
+    assert route.call_count == 1
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "retry_after",
+    ["not-a-number", "-1", "nan", "inf", "-inf"],
+    ids=["malformed", "negative", "nan", "positive-infinity", "negative-infinity"],
+)
+async def test_invalid_retry_after_uses_backoff_fallback(retry_after: str) -> None:
+    """Malformed, negative, or non-finite Retry-After values use bounded backoff."""
+    respx.get("https://api.spotify.com/v1/me/player/recently-played").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": retry_after}),
+            httpx.Response(200, json=_recently_played_json(1)),
+        ]
+    )
+
+    client = SpotifyClient("test-token", max_retries=1, retry_base_delay=0.25)
+    with patch("shared.spotify.client.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        try:
+            result = await client.get_recently_played()
+        except ValueError as exc:
+            pytest.fail(f"invalid Retry-After escaped the Spotify client: {exc}")
+
+    assert len(result.items) == 1
+    mock_sleep.assert_awaited_once_with(0.25)
 
 
 @respx.mock

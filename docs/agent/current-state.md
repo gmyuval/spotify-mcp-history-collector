@@ -1,9 +1,9 @@
 # Current repository state
 
-Last verified: 2026-08-27 (UTC), in `codex/spm-4-architecture-decision` against `origin/main`
-`137dd54f0a82b21759ce3e9bb506204314f202a8`. This verification describes the SPM-4 candidate
-before repository delivery; revalidate the live branch, pull request, and remote state before
-relying on it.
+Last verified: 2026-08-27 (UTC), in `codex/spm-5-spotify-api-audit` after merging `origin/main`
+`a88e52c3ab0d62c9540f4d89def9b54330ce57ee`. This verification describes the local SPM-5
+candidate before repository delivery; revalidate the live branch, pull request, and remote state
+before relying on it.
 
 This is volatile orientation, not a work queue, architecture decision, or deployment record. Linear
 team **SPM**, project **Spotify MCP modernization**, is authoritative for planned work, ownership,
@@ -31,6 +31,78 @@ permissions. The current small-cohort forecast is about USD 40 per month within 
 planning range and a USD 60 initial budget alert. These are binding target choices in
 [Accepted ADR 0002](../decisions/0002-azure-target-architecture-and-migration-boundaries.md),
 not authority to provision, deploy, migrate, or delete cloud resources.
+
+## Spotify Web API audit and identity posture
+
+SPM-5 inventories the Spotify endpoints, fields, scopes, retry behavior, quota modes, playlist
+semantics, Audio Features providers, and identity dependencies used by this repository. Its safe
+maintenance preserves public behavior while adding an internal non-retrying
+`QUOTA_EXCEEDED` subtype, malformed-`Retry-After` fallback, concrete Spotify-to-Soundcharts
+fallback coverage, and corrected operator/configuration guidance.
+
+[Accepted ADR 0003](../decisions/0003-adopt-staged-account-id-migration.md) selects a bounded
+additive migration from Spotify profile `id` linking to authoritative `account_id` linking. It
+preserves internal `users.id`, requires a finite all-active-cohort reauthorization gate, reads both
+identity candidates before selection, fails closed on duplicate or cross-row evidence, and initially
+preserves `spotify_user_id` compatibility.
+No schema, OAuth, production-account, token, credential, or user-data change has been made.
+
+[Accepted ADR 0004](../decisions/0004-separate-provider-identities-and-minimize-profile-retention.md)
+separates the stable Google provider identity from Spotify identity and internal `users.id`. It
+prohibits email-only and single-user automatic linking, removes `user-read-email` only after every
+active user has an explicit stable provider link, stops ingesting Spotify email/country/product,
+and puts legacy-value deletion behind public-nullability, rollback, finite-cohort, and separately
+authorized contraction gates. `user-read-private` remains only while an accepted Search contract
+requires it. No implementation or data contraction has occurred.
+
+[Accepted ADR 0005](../decisions/0005-support-spotify-development-mode-as-the-common-denominator.md)
+selects current restricted Development Mode as the common denominator for at most five authenticated
+users total; an authenticating app owner consumes one of those slots. Extended
+installations run the same path; postponed legacy access and Extended-only endpoints are not product
+contracts. `QUOTA_EXCEEDED` remains non-retrying, while coordinated caching, coalescing, foreground
+priority, resumable background deferral, and sanitized budget-pressure observability are
+implementation gates. No dashboard/account access, mode change, or quota-policy implementation has
+occurred.
+
+[Accepted ADR 0006](../decisions/0006-bundle-both-playlist-modification-scopes-for-write-access.md)
+retains `playlist-modify-public` and `playlist-modify-private` as one complete write-capability
+bundle for every initial user. Partial grants fail locally before a Spotify request; the bundle is
+not proof of playlist ownership or other resource authority. This formalizes current behavior and
+does not authorize OAuth rollout or provider/account access.
+
+[Accepted ADR 0007](../decisions/0007-keep-playlist-media-contract-track-only.md) keeps playlist
+reads, mutations, cache, and memory track-only. Unexpected episodes and future item types must
+preserve position as unsupported placeholders rather than crash, masquerade as tracks, or disappear.
+
+[Accepted ADR 0008](../decisions/0008-stage-retirement-of-undocumented-playlist-embed-scraping.md)
+classifies the private `__NEXT_DATA__` parser as transitional compatibility debt. Retirement
+requires a kill switch, privacy-safe aggregate evidence, a usable user-supplied URI/list import,
+and a later explicit owner gate. This branch now requires current official metadata proving
+`public: true` before each embed request; cached, private, unknown, or failed visibility returns the
+restricted/manual-import path. No kill switch, replacement import, Azure, or production behavior
+has changed.
+
+[Accepted ADR 0009](../decisions/0009-use-soundcharts-as-the-default-audio-features-provider.md)
+selects Soundcharts as the sole default Audio Features provider and removes Spotify Audio Features
+from the supported provider chain. SPM-18 owns the stale-adapter correction, quota controls,
+provenance, and operational proof. The current runtime remains Spotify-first with an optional
+Soundcharts fallback until that separately reviewed implementation lands; no provider account,
+credentials, spend, real tracks, deployment, or production state were accessed or changed.
+
+[Accepted ADR 0010](../decisions/0010-version-the-public-mcp-api-contract-before-correction.md)
+freezes the current Action and native MCP contract as v1, selects explicit versioned v2 endpoints
+for corrected Search, structured errors, and playlist-fidelity semantics, and targets evidence-gated
+v1 retirement. It distinguishes JSON-RPC protocol errors from native tool-execution `isError`
+results, requires telemetry at all v1 authentication boundaries, and prohibits raw MCP arguments
+in ordinary logs. This branch removes the existing v1 raw-argument log; the runtime remains v1-only.
+V2 implementation, live-client migration, the
+30-day observation window with zero non-health v1 requests, and eventual v1 removal remain
+separately reviewed and authorized work.
+
+Implementing the accepted identity, OAuth, profile-retention, app-mode/quota, playlist-media, and
+embed-retirement decisions remains plan-first, as do v2 migration and operationalizing the
+Soundcharts policy.
+Do not infer production entitlements or account state from mocked tests or public documentation.
 
 ## Observed service layout
 
