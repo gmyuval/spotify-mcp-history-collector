@@ -2448,6 +2448,52 @@ acceptance criteria, not substitutes for the root-supplied measured exits and sa
         )
         self.assertNotIn("Project Overview", adapter)
 
+    def test_review_size_decomposition_and_decision_prompts_are_explicit(self) -> None:
+        agents = " ".join(self.read("AGENTS.md").split())
+        self.assert_terms(
+            agents,
+            (
+                "GitHub additions plus deletions",
+                "800 review-counted lines",
+                "600 review-counted lines",
+                "dependency lockfiles",
+                "explicitly classified as generated",
+                "pull-request body",
+                "when classification is ambiguous, count the file",
+                "one Linear issue should normally map to one pull request",
+                "create child issues before implementation",
+                "sum exactly to the original issue's estimate",
+                "set the parent estimate to zero",
+                "cycle-replanning gate",
+                "stop and present an owner decision",
+                "dedicated Linear project",
+                "native selectable prompt",
+                "benefits, drawbacks, risks, downstream effects",
+                "recommendation",
+                "Do not leave the decision only in narrative status text",
+                "Repeat every unresolved decision prompt",
+            ),
+            "review-size, decomposition, and owner-decision contract",
+        )
+
+        readme = " ".join(self.read("README.md").split())
+        self.assert_terms(
+            readme,
+            (
+                "AGENTS.md",
+                "GitHub additions plus deletions",
+                "800 review-counted lines",
+                "600 review-counted lines",
+                "lockfiles and explicitly generated files",
+                "child issues",
+                "sum exactly",
+                "parent estimate to zero",
+                "Linear project",
+                "presented conspicuously with selectable options",
+            ),
+            "human contributor review-size policy",
+        )
+
     def test_branch_and_pr_linkage_is_explicit(self) -> None:
         agents = self.read("AGENTS.md")
         self.assert_terms(
