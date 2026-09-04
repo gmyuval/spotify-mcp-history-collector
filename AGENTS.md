@@ -63,6 +63,37 @@ priority, cycle scope, acceptance criteria, or follow-up queues.
 - External writes and state changes remain limited to the authority granted by the user and the
   active harness. Delegation never widens that authority.
 
+## Reviewable pull requests and issue decomposition
+
+A pull request must contain at most **800 review-counted lines** and should ideally contain at most
+**600 review-counted lines**. Review-counted lines are GitHub additions plus deletions across the
+entire pull request, excluding dependency lockfiles and files explicitly classified as generated.
+Identify every excluded path and its classification in the pull-request body. Hand-authored source,
+tests, documentation, and configuration are never generated-file exclusions; when classification
+is ambiguous, count the file. Do not publish or merge an over-limit pull request: split it at a
+tested, independently reviewable boundary first.
+
+One Linear issue should normally map to one pull request. When an issue cannot be completed in one
+pull request within the size limit, create child issues before implementation so each child can be
+delivered by one compliant branch, worktree, commit series, and pull request. Preserve the original
+scope: the child estimates must sum exactly to the original issue's estimate, and set the parent
+estimate to zero. Preserve approved project, cycle, priority, dependency, and ordering intent; any
+change to cycle scope or other owner-approved planning remains subject to the cycle-replanning gate.
+
+If decomposition would create an unusually large number of child issues, stop and present an owner
+decision about creating a dedicated Linear project. Do not create the project implicitly merely
+because the issue is large.
+
+## Owner decision prompts
+
+Whenever work requires an owner decision, explain the issue in depth and present the relevant
+options with the benefits, drawbacks, risks, downstream effects, and a reasoned recommendation.
+Then use the active harness's native selectable prompt when it is available, with concise mutually
+exclusive selections and the recommended option first. Do not leave the decision only in narrative
+status text. If native selections are unavailable, say so and provide a clearly numbered fallback
+prompt with an explicit reply format. Repeat every unresolved decision prompt in the session
+handoff or final response until the owner answers it.
+
 ## Linear and weekly cycles
 
 Linear team **SPM** and the **Spotify MCP modernization** project are the sole planning system.
