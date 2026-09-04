@@ -309,7 +309,8 @@ In particular:
 - One Linear issue should normally produce one pull request. If the work cannot fit, create child
   issues whose estimates sum exactly to the original estimate, then set the parent estimate to zero.
   Preserve approved scope and planning; cycle replanning still requires owner approval.
-  Preserve approved project, cycle, priority, dependency, and ordering intent.
+  Preserve approved project, cycle, priority, dependency, and ordering intent; any change to cycle
+  scope or other owner-approved planning remains subject to the cycle-replanning gate.
 - If decomposition would produce an unusually large number of child issues, ask the owner whether
   the work should become a dedicated Linear project before creating one.
 - Decisions requiring the owner must be presented conspicuously with selectable options when the
