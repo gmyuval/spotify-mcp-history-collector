@@ -2449,21 +2449,21 @@ acceptance criteria, not substitutes for the root-supplied measured exits and sa
         self.assertNotIn("Project Overview", adapter)
 
     def test_review_size_decomposition_and_decision_prompts_are_explicit(self) -> None:
-        agents = " ".join(self.read("AGENTS.md").split())
+        agents = " ".join(self.read("AGENTS.md").replace("**", "").split())
         self.assert_terms(
             agents,
             (
-                "GitHub additions plus deletions",
-                "800 review-counted lines",
-                "600 review-counted lines",
-                "dependency lockfiles",
-                "explicitly classified as generated",
-                "pull-request body",
+                "A pull request must contain at most 800 review-counted lines",
+                "should ideally contain at most 600 review-counted lines",
+                "Review-counted lines are GitHub additions plus deletions across the entire pull request",
+                "excluding dependency lockfiles and files explicitly classified as generated",
+                "Identify every excluded path and its classification in the pull-request body",
+                "Hand-authored source, tests, documentation, and configuration are never generated-file exclusions",
                 "when classification is ambiguous, count the file",
+                "Do not publish or merge an over-limit pull request",
                 "one Linear issue should normally map to one pull request",
                 "create child issues before implementation",
-                "sum exactly to the original issue's estimate",
-                "set the parent estimate to zero",
+                "the child estimates must sum exactly to the original issue's estimate, and set the parent estimate to zero",
                 "cycle-replanning gate",
                 "stop and present an owner decision",
                 "dedicated Linear project",
@@ -2471,25 +2471,28 @@ acceptance criteria, not substitutes for the root-supplied measured exits and sa
                 "benefits, drawbacks, risks, downstream effects",
                 "recommendation",
                 "Do not leave the decision only in narrative status text",
+                "If native selections are unavailable, say so and provide a clearly numbered fallback prompt with an explicit reply format",
                 "Repeat every unresolved decision prompt",
             ),
             "review-size, decomposition, and owner-decision contract",
         )
 
-        readme = " ".join(self.read("README.md").split())
+        readme = " ".join(self.read("README.md").replace("**", "").split())
         self.assert_terms(
             readme,
             (
                 "AGENTS.md",
-                "GitHub additions plus deletions",
-                "800 review-counted lines",
-                "600 review-counted lines",
-                "lockfiles and explicitly generated files",
+                "A pull request may contain at most 800 review-counted lines",
+                "should ideally contain no more than 600 review-counted lines",
+                "Review-counted lines are GitHub additions plus deletions, excluding dependency lockfiles and explicitly generated files",
+                "ambiguous files count toward the limit",
                 "child issues",
                 "sum exactly",
                 "parent estimate to zero",
+                "cycle replanning still requires owner approval",
                 "Linear project",
-                "presented conspicuously with selectable options",
+                "Decisions requiring the owner must be presented conspicuously with selectable options when the active tool supports them",
+                "including benefits, drawbacks, risks, downstream effects, and a recommendation",
             ),
             "human contributor review-size policy",
         )
