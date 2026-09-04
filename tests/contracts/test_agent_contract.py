@@ -2448,6 +2448,58 @@ acceptance criteria, not substitutes for the root-supplied measured exits and sa
         )
         self.assertNotIn("Project Overview", adapter)
 
+    def test_review_size_decomposition_and_decision_prompts_are_explicit(self) -> None:
+        agents = " ".join(self.read("AGENTS.md").replace("**", "").split())
+        self.assert_terms(
+            agents,
+            (
+                "A pull request must contain at most 800 review-counted lines",
+                "should ideally contain at most 600 review-counted lines",
+                "Review-counted lines are GitHub additions plus deletions across the entire pull request",
+                "excluding dependency lockfiles and files explicitly classified as generated",
+                "Identify every excluded path and its classification in the pull-request body",
+                "Hand-authored source, tests, documentation, and configuration are never generated-file exclusions",
+                "when classification is ambiguous, count the file",
+                "Do not publish or merge an over-limit pull request",
+                "one Linear issue should normally map to one pull request",
+                "create child issues before implementation",
+                "the child estimates must sum exactly to the original issue's estimate, and set the parent estimate to zero",
+                "Preserve approved project, cycle, priority, dependency, and ordering intent; any change to cycle scope or other owner-approved planning remains subject to the cycle-replanning gate",
+                "stop and present an owner decision about creating a dedicated Linear project",
+                "Do not create the project implicitly merely because the issue is large",
+                "native selectable prompt",
+                "benefits, drawbacks, risks, downstream effects",
+                "recommendation",
+                "Do not leave the decision only in narrative status text",
+                "If native selections are unavailable, say so and provide a clearly numbered fallback prompt with an explicit reply format",
+                "Repeat every unresolved decision prompt",
+            ),
+            "review-size, decomposition, and owner-decision contract",
+        )
+
+        readme = " ".join(self.read("README.md").replace("**", "").split())
+        self.assert_terms(
+            readme,
+            (
+                "AGENTS.md",
+                "A pull request may contain at most 800 review-counted lines",
+                "should ideally contain no more than 600 review-counted lines",
+                "Review-counted lines are GitHub additions plus deletions, excluding dependency lockfiles and explicitly generated files",
+                "List all excluded lockfiles and explicitly generated files in the pull-request body",
+                "ambiguous files count toward the limit",
+                "One Linear issue should normally produce one pull request",
+                "child issues",
+                "sum exactly",
+                "parent estimate to zero",
+                "Preserve approved scope and planning; cycle replanning still requires owner approval",
+                "Preserve approved project, cycle, priority, dependency, and ordering intent; any change to cycle scope or other owner-approved planning remains subject to the cycle-replanning gate",
+                "If decomposition would produce an unusually large number of child issues, ask the owner whether the work should become a dedicated Linear project before creating one",
+                "Decisions requiring the owner must be presented conspicuously with selectable options when the active tool supports them",
+                "including benefits, drawbacks, risks, downstream effects, and a recommendation",
+            ),
+            "human contributor review-size policy",
+        )
+
     def test_branch_and_pr_linkage_is_explicit(self) -> None:
         agents = self.read("AGENTS.md")
         self.assert_terms(
