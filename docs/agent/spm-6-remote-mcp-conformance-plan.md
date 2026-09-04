@@ -178,13 +178,15 @@ MCPV2Failure
     code: stable snake_case string
     message: redacted human-safe string
     retryable: bool
-    retry_after_seconds: positive integer, only with valid provider evidence
+    retry_after_seconds: optional positive integer; omitted without valid provider evidence
 ```
 
 The error taxonomy must at least distinguish validation, authorization, playlist restriction or
 incompleteness, Spotify quota exhaustion, ordinary rate limiting, provider unavailability, and
 internal failure. Map `QUOTA_EXCEEDED` to non-retryable `spotify_quota_exhausted`; never invent a
-quota size, reset time, or retry delay. Do not expose exception class names.
+quota size, reset time, or retry delay. The JSON Schema excludes `null` for
+`retry_after_seconds`, and native/Action parity tests require the property to be absent without
+evidence. Do not expose exception class names.
 
 Serialize the complete structured envelope with compact UTF-8 JSON and enforce the separately
 accepted evidence-backed budget before either adapter sees it. The text fallback is the same safe
@@ -205,9 +207,10 @@ cannot truncate, upload an artifact, or invent a continuation mechanism in this 
   invalid-params, or method-not-found code as applicable; any `data.code` is stable and safe. Do not
   disguise these failures as successful tool calls.
 
-Every v2 tool advertises an output schema for its full success/failure structured envelope. The
-native handler validates the structured object against that schema before returning it. The Action
-response model is generated from the same locally owned contract definitions.
+Every v2 tool advertises one project-owned success/failure union schema for its full structured
+envelope. The native handler validates direct `CallToolResult` values before returning them because
+SDK 1.26.0 bypasses output-schema validation on that return path. Test valid, invalid, and missing
+`structuredContent` with both `isError` values. Generate the Action model from the same definitions.
 
 ### Principal injection
 
@@ -389,9 +392,13 @@ interface without introducing a second issue.
 
   Register listing through `Server.list_tools()`. Register calling through the locally owned pinned
   handler bridge required for ADR 0010's unknown-tool JSON-RPC error; do not describe that bridge as
-  a documented SDK API. Construct each `StreamableHTTPSessionManager` with the existing
-  JSON-response, stateless, and transport-security settings. Keep context injection in locally
-  owned middleware and always reset its token.
+  a documented SDK API. Construct both managers with JSON responses, stateless mode, and the exact
+  project-owned `_build_transport_security()` result: DNS-rebinding protection enabled, existing
+  localhost/CORS-derived `allowed_hosts`, and existing localhost/CORS-derived `allowed_origins`.
+  Do not broaden or narrow those values in SPM-6. Test absent and allowed `Origin` values plus a
+  disallowed `Origin` returning HTTP 403 on `/mcp/v1` and `/mcp/v2`. After shared Origin validation,
+  add the v2-only GET guard so invalid Origin remains 403 and absent/allowed Origin returns 405;
+  preserve frozen v1 GET behavior. Always reset the context-injection token.
 
 - [ ] **Step 3: Keep v1 and v2 translation separate**
 
@@ -459,10 +466,13 @@ interface without introducing a second issue.
 
 - [ ] **Step 1: Add SDK in-process and Streamable HTTP clients**
 
-  Use MCP `ClientSession` with the low-level server for protocol semantics and a loopback
-  ASGI server for full HTTP/auth/lifespan behavior. Bind only loopback on an ephemeral port; use
-  synthetic tokens and state. Assert stateless JSON response behavior and no advertised or implied
-  event-store, resumable-session, standalone-SSE, or notification contract.
+  Use MCP `ClientSession` with the low-level server and a loopback ASGI server for full
+  HTTP/auth/lifespan behavior. Bind only loopback on an ephemeral port with synthetic state. Require
+  POST clients to advertise both `application/json` and `text/event-stream` on both versions and
+  assert JSON responses. Freeze measured v1 GET behavior. For v2, after Origin validation, require a
+  project-owned no-SSE GET guard: absent/allowed Origin returns 405 and invalid Origin remains 403.
+  Require non-initialization POST with an invalid or unsupported `MCP-Protocol-Version` to return
+  HTTP 400 on both versions. Assert no resumable-session or notification contract.
 
 - [ ] **Step 2: Pin and add the Inspector smoke gate**
 
@@ -556,15 +566,13 @@ fresh, owner-visible authorization request naming the exact client, account/envi
 configuration mutation, credential handling, public endpoint, Spotify side-effect budget, rollback,
 and evidence retention before each live batch.
 
-When separately approved, measure—do not infer—initialize/version negotiation, advertised
-capabilities, discovery, representative read-only/validation/quota/restriction/write-confirmation
-flows, structured-result rendering, error rendering, reconnect, graceful shutdown, and rollback to
-v1 for each approved client. The expected transport result is successful JSON-only Streamable HTTP
-POST behavior plus the standards-defined GET/no-SSE behavior for the selected stateless profile.
-Record whether the client tolerates that profile; if it requires SSE, resumption, or notifications,
-stop for the transport amendment instead of treating SSE as required success evidence. Record
-current client and server versions. Keep OpenAI/ChatGPT, Claude variants, and Inspector evidence
-distinct. A result from one client never proves another.
+When separately approved, measure—do not infer—initialize/version negotiation, capabilities,
+discovery, representative read/error/write flows, rendering, reconnect, shutdown, and v1 rollback.
+Record POST `Accept` support for both required media types and JSON response behavior. Preserve the
+measured v1 GET contract. For v2, record absent/allowed-Origin no-SSE GET 405, invalid-Origin GET
+403, and non-initialization POST with an invalid or unsupported protocol version returning 400. If
+a client requires SSE, resumption, or notifications, stop for a transport amendment. Record current
+client/server versions and keep OpenAI/ChatGPT, Claude variants, and Inspector evidence distinct.
 
 Changing real client configuration, exercising a deployed edge, using production credentials or
 Spotify data, cutover, deployment, and starting v1 retirement each require their own explicit
