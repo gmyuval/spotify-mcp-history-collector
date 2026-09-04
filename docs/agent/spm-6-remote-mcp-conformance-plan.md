@@ -31,10 +31,15 @@ contracts; the repository-locked MCP SDK 1.26.0 API.
 ## Acceptance and authority boundary
 
 Owner acceptance of this document authorizes only the repository implementation described below.
-It does not authorize implementation from the plan PR itself. After acceptance, implementation
-uses sequential task-aligned SPM-6 branches, worktrees, commits, and pull requests under the
-repository lifecycle. Each pull request is one independently reviewable vertical slice with
-`Part of SPM-6`; do not accumulate all six tasks into one oversized implementation pull request.
+It does not authorize implementation from the plan PR itself. This PR records the accepted plan
+and performs no public MCP/API implementation or Linear decomposition. Before future implementation,
+decompose SPM-6 under the canonical `AGENTS.md` policy, preserving approved scope and planning
+intent, conserving the original estimate across children, and setting the parent estimate to zero.
+Assign each independently reviewable implementation PR one child issue and use that issue in its
+branch, worktree, commits, and PR linkage. The tasks below define technical sequencing; Linear owns
+delivery units and dependencies. A task may need more than one child issue to fit the review-size
+limit. Any required cycle-replanning or dedicated-project owner decision remains a separate gate;
+this plan PR does not authorize those tracker changes.
 
 This plan deliberately separates three stops:
 
@@ -91,8 +96,9 @@ implicitly:
 
 ## Global constraints
 
-- SPM-6 is the only primary issue. Do not mix SPM-7, SPM-9, SPM-10, SPM-14, infrastructure,
-  deployment, or v1-retirement work into its branch, commits, or pull request.
+- SPM-6 is this plan PR's only primary issue; future implementation PRs each name their assigned
+  child issue. Do not mix SPM-7, SPM-9, SPM-10, SPM-14, infrastructure, deployment, or v1-retirement
+  work into those branches, commits, or pull requests.
 - Capture and review the v1 fixtures before changing MCP production code. A fixture update after
   that baseline is a compatibility decision, not ordinary test maintenance.
 - Preserve these v1 boundaries exactly: `GET /mcp/tools`, `POST /mcp/call`, and native `/mcp/v1`.
@@ -261,15 +267,17 @@ real client configuration.
 
 ## Root-owned per-task commit protocol
 
-Each task uses a fresh branch and isolated worktree from the newly verified `origin/main` after the
-preceding dependent task is merged. One delegated writer may edit only that task's named files and
-stops with an unstaged evidence report. The root verifies the real diff and RED/GREEN evidence,
-stages only the task's named paths, commits the stated SPM-6 subject, packages the fixed-base diff,
-and dispatches independent review. A reviewer never writes in the writer checkout. One fix writer
-handles the complete finding set; any byte change expires the old review and gate evidence. Root
-publishes one task-aligned `Part of SPM-6` pull request and lands it before branching the next
-dependent task. If a slice ceases to be independently reviewable, split it again at a tested
-interface without introducing a second issue.
+Each child issue uses a fresh branch and isolated worktree from the newly verified `origin/main`
+after its blocking delivery units are merged. One delegated writer may edit only that child's
+in-scope files and stops with an unstaged evidence report. The root verifies the real diff and
+RED/GREEN evidence, stages only in-scope paths, uses the assigned child identifier in the commit
+subject, packages the fixed-base diff, and dispatches independent review. A reviewer never writes
+in the writer checkout. One fix writer handles the complete finding set; any byte change expires
+the old review and gate evidence. Root publishes one compliant PR for that child, using
+`Fixes SPM-<child>` only when all its criteria are satisfied, otherwise `Part of SPM-<child>`.
+If a slice ceases to fit the review-size limit, stop and decompose it at a tested interface under
+`AGENTS.md` before further implementation. The subjects below are templates: replace
+`SPM-<child>` with the actual assigned identifier, never the parent as a shortcut.
 
 ---
 
@@ -311,7 +319,7 @@ interface without introducing a second issue.
 
   Run the complete `test_mcp` suite plus focused v1 contracts with pinned uv 0.12.3. Record the
   exact base SHA and fixture hashes. Root reviews and commits:
-  `test(mcp): freeze v1 compatibility contract (SPM-6)`.
+  `test(mcp): freeze v1 compatibility contract (SPM-<child>)`.
 
 ### Task 2: Add the locally owned v2 contract and explicit tool metadata
 
@@ -365,7 +373,7 @@ interface without introducing a second issue.
 - [ ] **Step 6: Run focused/full MCP tests and stop for root review**
 
   Re-run all v1 fixtures to prove the internal extension is invisible to v1. Root reviews and
-  commits: `feat(mcp): define v2 invocation contract (SPM-6)`.
+  commits: `feat(mcp): define v2 invocation contract (SPM-<child>)`.
 
 ### Task 3: Replace the private FastMCP boundary and mount isolated native versions
 
@@ -395,10 +403,10 @@ interface without introducing a second issue.
   a documented SDK API. Construct both managers with JSON responses, stateless mode, and the exact
   project-owned `_build_transport_security()` result: DNS-rebinding protection enabled, existing
   localhost/CORS-derived `allowed_hosts`, and existing localhost/CORS-derived `allowed_origins`.
-  Do not broaden or narrow those values in SPM-6. Test absent and allowed `Origin` values plus a
-  disallowed `Origin` returning HTTP 403 on `/mcp/v1` and `/mcp/v2`. After shared Origin validation,
-  add the v2-only GET guard so invalid Origin remains 403 and absent/allowed Origin returns 405;
-  preserve frozen v1 GET behavior. Always reset the context-injection token.
+  Do not broaden or narrow them. On both mounts, test allowed `Host`, including an ephemeral
+  loopback port, and missing/unapproved `Host` returning HTTP 421. With an allowed Host, test absent/allowed `Origin`
+  and disallowed Origin returning 403 on both mounts. After shared Host/Origin validation, add the
+  v2-only GET guard; preserve frozen v1 GET behavior. Always reset the context-injection token.
 
 - [ ] **Step 3: Keep v1 and v2 translation separate**
 
@@ -415,7 +423,7 @@ interface without introducing a second issue.
 - [ ] **Step 5: Run v1/v2 native gates and stop for root review**
 
   Re-run the frozen v1 suite and dependency contract. Root reviews and commits:
-  `refactor(mcp): isolate native server boundary (SPM-6)`.
+  `refactor(mcp): isolate native server boundary (SPM-<child>)`.
 
 ### Task 4: Add the canonical v2 Action adapter
 
@@ -450,7 +458,7 @@ interface without introducing a second issue.
 
 - [ ] **Step 4: Re-run frozen v1 and stop for root review**
 
-  Root reviews and commits: `feat(mcp): expose isolated v2 action routes (SPM-6)`.
+  Root reviews and commits: `feat(mcp): expose isolated v2 action routes (SPM-<child>)`.
 
 ### Task 5: Complete deterministic client and protocol conformance
 
@@ -469,10 +477,12 @@ interface without introducing a second issue.
   Use MCP `ClientSession` with the low-level server and a loopback ASGI server for full
   HTTP/auth/lifespan behavior. Bind only loopback on an ephemeral port with synthetic state. Require
   POST clients to advertise both `application/json` and `text/event-stream` on both versions and
-  assert JSON responses. Freeze measured v1 GET behavior. For v2, after Origin validation, require a
-  project-owned no-SSE GET guard: absent/allowed Origin returns 405 and invalid Origin remains 403.
-  Require non-initialization POST with an invalid or unsupported `MCP-Protocol-Version` to return
-  HTTP 400 on both versions. Assert no resumable-session or notification contract.
+  assert JSON responses. Freeze measured v1 GET behavior. Validate Host before Origin on both
+  mounts: missing/unapproved Host returns 421. With an allowed Host, invalid Origin returns 403;
+  absent/allowed Origin reaches the v2-only no-SSE GET guard and returns 405. Require
+  non-initialization POST with otherwise-valid transport headers and an invalid or unsupported
+  `MCP-Protocol-Version` to return HTTP 400 on both versions. Assert no resumable-session or
+  notification contract.
 
 - [ ] **Step 2: Pin and add the Inspector smoke gate**
 
@@ -495,7 +505,7 @@ interface without introducing a second issue.
 
 - [ ] **Step 5: Run the full repository gate and stop for root review**
 
-  Root reviews and commits: `test(mcp): prove deterministic v2 conformance (SPM-6)`.
+  Root reviews and commits: `test(mcp): prove deterministic v2 conformance (SPM-<child>)`.
 
 ### Task 6: Add privacy-safe version observability and correct setup documentation
 
@@ -532,11 +542,11 @@ interface without introducing a second issue.
 
 - [ ] **Step 4: Re-run frozen v1 and stop for root review**
 
-  Root reviews and commits: `docs(mcp): document versioned conformance surface (SPM-6)`.
+  Root reviews and commits: `docs(mcp): document versioned conformance surface (SPM-<child>)`.
 
 ## Root-owned integration, review, and delivery
 
-For each Task 1-6 slice, and again after the final slice lands, the root:
+For each child-issue slice covering Tasks 1-6, and again after the final slice lands, the root:
 
 1. Reconciles every SPM-6 acceptance criterion and ADR 0010 validation row against the final diff.
    Confirm SPM-10 authentication design, Azure/deployment work, real-client mutation, production,
@@ -551,10 +561,11 @@ For each Task 1-6 slice, and again after the final slice lands, the root:
 4. Dispatches whole-slice spec and quality reviews from a fixed `origin/main...HEAD` range. Any
    byte change expires review evidence. One writer resolves the complete finding set in one review
    round, then root reruns exact-head gates and scoped re-review.
-5. Publishes that task's `codex/spm-6-...` branch and `SPM-6:` pull request only after plan
-   acceptance, using `Part of SPM-6`. Follow `coderabbit-review` and `gate-oracle`; merge only a
-   qualifying exact head under standing repository authority. Refresh `origin/main` before the
-   next task. No slice merge deploys or migrates a client.
+5. Publishes the assigned child's issue-linked branch and PR only after plan acceptance and the
+   required Linear decomposition. Apply canonical branch/title/linkage and review-size rules.
+   Follow `coderabbit-review` and `gate-oracle`; merge only a qualifying exact head under standing
+   repository authority. Refresh `origin/main` before the next dependent slice. No slice merge
+   deploys or migrates a client.
 6. Reads back GitHub, `origin/main`, worktrees, and Linear after every merge. Reconcile SPM-6 only
    to the state proven by the landed repository slices; do not use `Fixes SPM-6` or mark
    live-client, production, Azure, or retirement gates complete from deterministic evidence.
@@ -569,8 +580,10 @@ and evidence retention before each live batch.
 When separately approved, measure—do not infer—initialize/version negotiation, capabilities,
 discovery, representative read/error/write flows, rendering, reconnect, shutdown, and v1 rollback.
 Record POST `Accept` support for both required media types and JSON response behavior. Preserve the
-measured v1 GET contract. For v2, record absent/allowed-Origin no-SSE GET 405, invalid-Origin GET
-403, and non-initialization POST with an invalid or unsupported protocol version returning 400. If
+measured v1 GET contract. On both mounts, record missing/unapproved Host returning 421. With an
+allowed Host, record v2 absent/allowed-Origin no-SSE GET 405 and invalid-Origin GET 403. Record
+non-initialization POST with otherwise-valid transport headers and an invalid or unsupported
+protocol version returning 400 on both versions. If
 a client requires SSE, resumption, or notifications, stop for a transport amendment. Record current
 client/server versions and keep OpenAI/ChatGPT, Claude variants, and Inspector evidence distinct.
 
